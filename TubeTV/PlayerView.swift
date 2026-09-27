@@ -136,6 +136,8 @@ final class NativePlayerModel: ObservableObject {
     private var didPrepare = false
     private var cues: [CaptionCue] = []
     private var timeObserver: Any?
+    private var trackingObserver: Any?
+    private var trackingContext: YouTubeTrackingContext?
 
     init(
         source: PlaybackSource,
@@ -155,6 +157,10 @@ final class NativePlayerModel: ObservableObject {
         if let timeObserver {
             player.removeTimeObserver(timeObserver)
         }
+
+        if let trackingObserver {
+            player.removeTimeObserver(trackingObserver)
+        }
     }
 
     func prepareAndPlay() async {
@@ -173,6 +179,7 @@ final class NativePlayerModel: ObservableObject {
             isPreparing = false
             player.play()
             startCaptionLoadingIfNeeded()
+            startHistoryTrackingIfNeeded()
         } catch {
             if case let .adaptive(_, _, fallback?) = source {
                 player.replaceCurrentItem(with: AVPlayerItem(url: fallback))
@@ -180,6 +187,7 @@ final class NativePlayerModel: ObservableObject {
                 errorMessage = "Vyšší kvalita nešla spojit, přehrávám kompatibilní variantu."
                 player.play()
                 startCaptionLoadingIfNeeded()
+                startHistoryTrackingIfNeeded()
             } else {
                 isPreparing = false
                 errorMessage = error.localizedDescription
@@ -188,7 +196,66 @@ final class NativePlayerModel: ObservableObject {
     }
 
     func pause() {
+        sendHistoryProgress()
         player.pause()
+    }
+
+    private func startHistoryTrackingIfNeeded() {
+        guard let youtubeVideoID else { return }
+
+        Task {
+            guard await SmartTubeAuthService.shared.signedIn() else {
+                return
+            }
+
+            do {
+                let context = try await YouTubeTrackingService.shared.makeContext(
+                    videoID: youtubeVideoID
+                )
+
+                trackingContext = context
+                installTrackingObserver()
+            } catch {
+                // Tracking must never block or break playback.
+            }
+        }
+    }
+
+    private func installTrackingObserver() {
+        guard trackingObserver == nil,
+              trackingContext != nil else {
+            return
+        }
+
+        let interval = CMTime(seconds: 15, preferredTimescale: 600)
+
+        trackingObserver = player.addPeriodicTimeObserver(
+            forInterval: interval,
+            queue: .main
+        ) { [weak self] _ in
+            self?.sendHistoryProgress()
+        }
+    }
+
+    private func sendHistoryProgress() {
+        guard let context = trackingContext else { return }
+
+        let position = player.currentTime().seconds
+        let duration = player.currentItem?.duration.seconds ?? .nan
+
+        guard position.isFinite,
+              duration.isFinite,
+              duration > 0 else {
+            return
+        }
+
+        Task {
+            await YouTubeTrackingService.shared.update(
+                context: context,
+                position: position,
+                duration: duration
+            )
+        }
     }
 
     private func startCaptionLoadingIfNeeded() {
