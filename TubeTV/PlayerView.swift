@@ -528,6 +528,58 @@ final class NativePlayerModel: ObservableObject {
         }
     }
 
+    func seekFromRemote(
+        seconds delta: Double
+    ) async {
+        guard !isPreparing,
+              !isSwitchingQuality,
+              !isSwitchingAudio,
+              let item = player.currentItem else {
+            return
+        }
+
+        let currentSeconds =
+            player.currentTime().seconds
+
+        guard currentSeconds.isFinite else {
+            return
+        }
+
+        let duration =
+            try? await item.asset.load(
+                .duration
+            )
+        let durationSeconds =
+            duration?.seconds
+
+        var targetSeconds =
+            max(
+                0,
+                currentSeconds + delta
+            )
+
+        if let durationSeconds,
+           durationSeconds.isFinite,
+           durationSeconds > 0 {
+            targetSeconds =
+                min(
+                    targetSeconds,
+                    durationSeconds
+                )
+        }
+
+        let target = CMTime(
+            seconds: targetSeconds,
+            preferredTimescale: 600
+        )
+
+        await seek(to: target)
+
+        playbackLogger.notice(
+            "Remote seek delta=\(delta, privacy: .public) from=\(currentSeconds, privacy: .public) to=\(targetSeconds, privacy: .public)"
+        )
+    }
+
     func changeQuality(_ quality: String) async {
         guard let youtubeVideoID,
               !isSwitchingQuality,
@@ -1679,6 +1731,30 @@ struct NativePlayerView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: showSettings)
+        .onMoveCommand { direction in
+            guard !showSettings else {
+                return
+            }
+
+            switch direction {
+            case .left:
+                Task {
+                    await model.seekFromRemote(
+                        seconds: -10
+                    )
+                }
+
+            case .right:
+                Task {
+                    await model.seekFromRemote(
+                        seconds: 10
+                    )
+                }
+
+            default:
+                break
+            }
+        }
         .task {
             await model.prepareAndPlay()
         }
