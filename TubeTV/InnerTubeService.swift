@@ -204,6 +204,56 @@ actor InnerTubeService {
         )
     }
 
+    func searchPage(
+        _ query: String
+    ) async throws -> (
+        videos: [VideoItem],
+        continuationToken: String?
+    ) {
+        let trimmed =
+            query.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+
+        guard !trimmed.isEmpty else {
+            return ([], nil)
+        }
+
+        let root =
+            try await search(
+                query: trimmed,
+                continuation: nil
+            )
+
+        return (
+            Self.extractVideos(from: root),
+            Self.nextContinuationToken(
+                from: root
+            )
+        )
+    }
+
+    func continueSearch(
+        _ continuationToken: String
+    ) async throws -> (
+        videos: [VideoItem],
+        continuationToken: String?
+    ) {
+        let root =
+            try await search(
+                query: nil,
+                continuation:
+                    continuationToken
+            )
+
+        return (
+            Self.extractVideos(from: root),
+            Self.nextContinuationToken(
+                from: root
+            )
+        )
+    }
+
     func videos(for kind: AccountFeedKind) async throws -> [VideoItem] {
         let root = try await browse(kind.browseID)
         return Self.extractVideos(from: root)
@@ -1002,6 +1052,166 @@ actor InnerTubeService {
             Self.extractVideos(from: root),
             Self.nextContinuationToken(from: root)
         )
+    }
+
+    private func search(
+        query: String?,
+        continuation: String?
+    ) async throws -> Any {
+        let isSignedIn =
+            await SmartTubeAuthService.shared
+                .signedIn()
+        let authorization =
+            isSignedIn
+                ? try await SmartTubeAuthService.shared
+                    .authorizationHeader()
+                : nil
+        let bootstrap =
+            isSignedIn
+                ? try? await SmartTubeAuthService.shared
+                    .bootstrap()
+                : nil
+
+        var client: [String: Any] = [
+            "hl": L10n.currentLanguageCode,
+            "gl": "CZ",
+            "clientName":
+                SmartTubeAuthService.tvClientName,
+            "clientVersion":
+                SmartTubeAuthService.tvClientVersion
+        ]
+
+        let visitorData =
+            browseVisitorData
+            ?? bootstrap?.visitorData
+
+        if let visitorData,
+           !visitorData.isEmpty {
+            client["visitorData"] =
+                visitorData
+        }
+
+        var payload: [String: Any] = [
+            "context": [
+                "client": client
+            ]
+        ]
+
+        if let continuation,
+           !continuation.isEmpty {
+            payload["continuation"] =
+                continuation
+        } else if let query,
+                  !query.isEmpty {
+            payload["query"] = query
+        } else {
+            throw InnerTubeError.invalidResponse
+        }
+
+        guard let url = URL(
+            string:
+                "https://www.youtube.com/youtubei/v1/search"
+        ) else {
+            throw InnerTubeError.invalidResponse
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 25
+        request.setValue(
+            "application/json",
+            forHTTPHeaderField:
+                "Content-Type"
+        )
+        request.setValue(
+            SmartTubeAuthService.tvUserAgent,
+            forHTTPHeaderField:
+                "User-Agent"
+        )
+        request.setValue(
+            SmartTubeAuthService.tvReferer,
+            forHTTPHeaderField:
+                "Referer"
+        )
+        request.setValue(
+            "7",
+            forHTTPHeaderField:
+                "X-YouTube-Client-Name"
+        )
+        request.setValue(
+            SmartTubeAuthService.tvClientVersion,
+            forHTTPHeaderField:
+                "X-YouTube-Client-Version"
+        )
+
+        if let authorization {
+            request.setValue(
+                authorization,
+                forHTTPHeaderField:
+                    "Authorization"
+            )
+        }
+
+        if let visitorData,
+           !visitorData.isEmpty {
+            request.setValue(
+                visitorData,
+                forHTTPHeaderField:
+                    "X-Goog-Visitor-Id"
+            )
+        }
+
+        if isSignedIn,
+           let pageID =
+                await SmartTubeAuthService.shared
+                    .selectedPageID(),
+           !pageID.isEmpty {
+            request.setValue(
+                pageID,
+                forHTTPHeaderField:
+                    "X-Goog-Pageid"
+            )
+        }
+
+        request.httpBody =
+            try JSONSerialization.data(
+                withJSONObject: payload
+            )
+
+        let (data, response) =
+            try await URLSession.shared
+                .data(for: request)
+
+        guard let http =
+                response as? HTTPURLResponse,
+              (200..<300).contains(
+                http.statusCode
+              ),
+              let root =
+                try JSONSerialization
+                    .jsonObject(
+                        with: data
+                    ) as? [String: Any]
+        else {
+            throw InnerTubeError.invalidResponse
+        }
+
+        if let responseContext =
+                root["responseContext"]
+                    as? [String: Any],
+           let visitor =
+                responseContext[
+                    "visitorData"
+                ] as? String,
+           !visitor.isEmpty {
+            browseVisitorData = visitor
+        }
+
+        logger.notice(
+            "Search client=TV continuation=\(continuation != nil, privacy: .public) videos=\(Self.extractVideos(from: root).count, privacy: .public)"
+        )
+
+        return root
     }
 
     private func browse(

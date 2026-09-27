@@ -6,7 +6,10 @@ struct SearchView: View {
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @State private var query = ""
     @State private var results: [VideoItem] = []
+    @State private var continuationToken: String?
     @State private var isSearching = false
+    @State private var isLoadingMore = false
+    @State private var searchGeneration = UUID()
     @State private var errorMessage: String?
 
     init(
@@ -71,11 +74,45 @@ struct SearchView: View {
                         columns: [GridItem(.adaptive(minimum: 420), spacing: 28)],
                         spacing: 28
                     ) {
-                        ForEach(visibleResults) { video in
+                        ForEach(
+                            visibleResults.indices,
+                            id: \.self
+                        ) { index in
+                            let video =
+                                visibleResults[index]
+
                             NavigationLink(value: video) {
                                 VideoCard(video: video)
                             }
                             .buttonStyle(.card)
+                            .onAppear {
+                                guard !query.isEmpty,
+                                      index
+                                        >= max(
+                                            0,
+                                            results.count - 4
+                                        ) else {
+                                    return
+                                }
+
+                                let generation =
+                                    searchGeneration
+
+                                Task {
+                                    await loadMore(
+                                        generation:
+                                            generation
+                                    )
+                                }
+                            }
+                        }
+
+                        if isLoadingMore {
+                            ProgressView()
+                                .frame(
+                                    width: 420,
+                                    height: 236
+                                )
                         }
                     }
                 }
@@ -114,19 +151,107 @@ struct SearchView: View {
             return
         }
 
+        let generation = UUID()
+        searchGeneration = generation
         isSearching = true
+        isLoadingMore = false
+        continuationToken = nil
         errorMessage = nil
         defer { isSearching = false }
 
         do {
-            results = try await YouTubeService.shared.search(query: trimmed)
+            let page =
+                try await InnerTubeService.shared
+                    .searchPage(trimmed)
+
+            guard generation
+                    == searchGeneration else {
+                return
+            }
+
+            results = page.videos
+            continuationToken =
+                page.continuationToken
 
             if results.isEmpty {
-                errorMessage = L10n.text("youtube_no_videos", languageCode: appLanguage)
+                errorMessage = L10n.text(
+                    "youtube_no_videos",
+                    languageCode:
+                        appLanguage
+                )
             }
         } catch {
+            guard generation
+                    == searchGeneration else {
+                return
+            }
+
             results = []
-            errorMessage = error.localizedDescription
+            continuationToken = nil
+            errorMessage =
+                error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func loadMore(
+        generation: UUID
+    ) async {
+        guard generation
+                == searchGeneration,
+              !isSearching,
+              !isLoadingMore,
+              let token =
+                continuationToken,
+              !token.isEmpty else {
+            return
+        }
+
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+
+        do {
+            let page =
+                try await InnerTubeService.shared
+                    .continueSearch(
+                        token
+                    )
+
+            guard generation
+                    == searchGeneration else {
+                return
+            }
+
+            var seen = Set(
+                results.map(\.id)
+            )
+            let newVideos =
+                page.videos.filter {
+                    seen.insert(
+                        $0.id
+                    ).inserted
+                }
+
+            results.append(
+                contentsOf: newVideos
+            )
+
+            let nextToken =
+                page.continuationToken
+
+            continuationToken =
+                nextToken == token
+                    && newVideos.isEmpty
+                ? nil
+                : nextToken
+        } catch {
+            guard generation
+                    == searchGeneration else {
+                return
+            }
+
+            errorMessage =
+                error.localizedDescription
         }
     }
 }
