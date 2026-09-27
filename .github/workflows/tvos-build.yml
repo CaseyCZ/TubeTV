@@ -96,6 +96,10 @@ jobs:
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b
 
+          SIM_ARCH="$(xcrun simctl spawn "$UDID" uname -m)"
+          echo "simulator_arch=$SIM_ARCH"
+          echo "arch=$SIM_ARCH" >> "$GITHUB_OUTPUT"
+
       - name: Build TubeTV for booted simulator
         run: |
           set -o pipefail
@@ -106,6 +110,8 @@ jobs:
             -sdk appletvsimulator \
             -destination 'id=${{ steps.simulator.outputs.udid }}' \
             -derivedDataPath "$PWD/DerivedData" \
+            ARCHS='${{ steps.simulator.outputs.arch }}' \
+            ONLY_ACTIVE_ARCH=YES \
             CODE_SIGNING_ALLOWED=NO \
             build | tee simulator-build.log
 
