@@ -295,9 +295,11 @@ actor CaptionService {
             throw CaptionServiceError.invalidVideoID
         }
 
-        let watchURL = URL(
+        guard let watchURL = URL(
             string: "https://www.youtube.com/watch?v=\(videoID)&hl=\(L10n.currentLanguageCode)&gl=CZ"
-        )!
+        ) else {
+            throw CaptionServiceError.invalidCaptionURL
+        }
 
         var request = URLRequest(url: watchURL)
         request.timeoutInterval = 20
