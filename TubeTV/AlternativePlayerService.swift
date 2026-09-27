@@ -335,6 +335,18 @@ actor AlternativePlayerService {
                     )
                     return source
                 }
+            } catch let error as StreamResolverError {
+                if case .ipBlocked = error {
+                    logger.error(
+                        "IP blocked client=\(client.profile, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
+                    )
+                    throw error
+                }
+
+                lastError = error
+                logger.error(
+                    "Client failed client=\(client.profile, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
+                )
             } catch {
                 lastError = error
                 logger.error(
@@ -671,6 +683,15 @@ actor AlternativePlayerService {
             logger.notice(
                 "Unplayable client=\(client.profile, privacy: .public) status=\(status, privacy: .public) reason=\(reason, privacy: .public)"
             )
+
+            if let playabilityError =
+                StreamResolverError.playabilityError(
+                    status: status,
+                    reason: reason
+                ) {
+                throw playabilityError
+            }
+
             return nil
         }
 
@@ -710,6 +731,15 @@ actor AlternativePlayerService {
                 logger.notice(
                     "Unplayable client=\(client.profile, privacy: .public) status=\(status, privacy: .public) reason=\(reason, privacy: .public)"
                 )
+
+                if let playabilityError =
+                    StreamResolverError.playabilityError(
+                        status: status,
+                        reason: reason
+                    ) {
+                    throw playabilityError
+                }
+
                 return nil
             }
 
