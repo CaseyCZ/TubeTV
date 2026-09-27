@@ -1,14 +1,18 @@
 import SwiftUI
 
 enum AppSection: String, CaseIterable, Identifiable {
-    case home = "Domů"
-    case subscriptions = "Odběry"
-    case history = "Historie"
-    case playlists = "Playlisty"
-    case search = "Hledat"
-    case settings = "Nastavení"
+    case home
+    case subscriptions
+    case history
+    case playlists
+    case search
+    case settings
 
     var id: String { rawValue }
+
+    var titleKey: String {
+        rawValue
+    }
 
     var icon: String {
         switch self {
@@ -23,6 +27,8 @@ enum AppSection: String, CaseIterable, Identifiable {
 }
 
 struct RootView: View {
+    @AppStorage("appLanguage") private var appLanguage =
+        AppLanguage.english.rawValue
     @State private var selection: AppSection = .home
 
     var body: some View {
@@ -50,6 +56,7 @@ struct RootView: View {
         }
         .background(Color.black)
         .preferredColorScheme(.dark)
+        .id(appLanguage)
     }
 
     private var sidebar: some View {
@@ -62,10 +69,13 @@ struct RootView: View {
                 Button {
                     selection = item
                 } label: {
-                    Label(item.rawValue, systemImage: item.icon)
-                        .font(.title3.weight(.semibold))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 10)
+                    Label(
+                        L10n.text(item.titleKey, languageCode: appLanguage),
+                        systemImage: item.icon
+                    )
+                    .font(.title3.weight(.semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
                 }
             }
 
@@ -73,22 +83,5 @@ struct RootView: View {
         }
         .padding(30)
         .background(.ultraThinMaterial)
-    }
-}
-
-struct PlaceholderView: View {
-    let title: String
-    let icon: String
-
-    var body: some View {
-        VStack(spacing: 20) {
-            Image(systemName: icon)
-                .font(.system(size: 72))
-            Text(title)
-                .font(.largeTitle.bold())
-            Text("Tahle část přijde v další etapě.")
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
