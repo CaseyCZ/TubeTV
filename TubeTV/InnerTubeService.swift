@@ -1941,7 +1941,7 @@ actor InnerTubeService {
         path: String,
         payload: [String: Any],
         authorization: String,
-        bootstrap: SmartTubeAuthBootstrap
+        bootstrap: TVBootstrap
     ) async throws -> [String: Any] {
         guard let url = URL(
             string:
