@@ -37,6 +37,12 @@ struct YouTubeChannelPage: Identifiable, Hashable {
     let videos: [VideoItem]
 }
 
+enum YouTubeLikeStatus: String, Hashable {
+    case like = "LIKE"
+    case dislike = "DISLIKE"
+    case indifferent = "INDIFFERENT"
+}
+
 enum AccountFeedKind: String, CaseIterable, Identifiable {
     case subscriptions
     case history
@@ -378,6 +384,282 @@ actor InnerTubeService {
             Self.channelSubscriptionState(
                 from: root
             )
+        )
+    }
+
+    func videoLikeStatus(
+        _ videoID: String
+    ) async throws -> YouTubeLikeStatus {
+        guard !videoID.isEmpty else {
+            throw InnerTubeError.invalidResponse
+        }
+
+        let authorization =
+            try await SmartTubeAuthService.shared
+                .authorizationHeader()
+        let bootstrap =
+            try await SmartTubeAuthService.shared
+                .bootstrap()
+
+        var client: [String: Any] = [
+            "hl": L10n.currentLanguageCode,
+            "gl": "CZ",
+            "clientName":
+                SmartTubeAuthService
+                    .tvClientName,
+            "clientVersion":
+                SmartTubeAuthService
+                    .tvClientVersion
+        ]
+
+        if let visitorData =
+                bootstrap.visitorData,
+           !visitorData.isEmpty {
+            client["visitorData"] =
+                visitorData
+        }
+
+        let payload: [String: Any] = [
+            "context": [
+                "client": client
+            ],
+            "videoId": videoID
+        ]
+
+        guard let url = URL(
+            string:
+                "https://www.youtube.com/youtubei/v1/next"
+        ) else {
+            throw InnerTubeError.invalidResponse
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 25
+        request.setValue(
+            "application/json",
+            forHTTPHeaderField:
+                "Content-Type"
+        )
+        request.setValue(
+            SmartTubeAuthService.tvUserAgent,
+            forHTTPHeaderField:
+                "User-Agent"
+        )
+        request.setValue(
+            SmartTubeAuthService.tvReferer,
+            forHTTPHeaderField:
+                "Referer"
+        )
+        request.setValue(
+            authorization,
+            forHTTPHeaderField:
+                "Authorization"
+        )
+        request.setValue(
+            "7",
+            forHTTPHeaderField:
+                "X-YouTube-Client-Name"
+        )
+        request.setValue(
+            SmartTubeAuthService.tvClientVersion,
+            forHTTPHeaderField:
+                "X-YouTube-Client-Version"
+        )
+
+        if let visitorData =
+                bootstrap.visitorData,
+           !visitorData.isEmpty {
+            request.setValue(
+                visitorData,
+                forHTTPHeaderField:
+                    "X-Goog-Visitor-Id"
+            )
+        }
+
+        if let pageID =
+                await SmartTubeAuthService
+                    .shared
+                    .selectedPageID(),
+           !pageID.isEmpty {
+            request.setValue(
+                pageID,
+                forHTTPHeaderField:
+                    "X-Goog-Pageid"
+            )
+        }
+
+        request.httpBody =
+            try JSONSerialization.data(
+                withJSONObject: payload
+            )
+
+        let (data, response) =
+            try await URLSession.shared
+                .data(for: request)
+
+        guard let http =
+                response as? HTTPURLResponse,
+              (200..<300).contains(
+                http.statusCode
+              ),
+              let root =
+                try JSONSerialization
+                    .jsonObject(
+                        with: data
+                    ) as? [String: Any]
+        else {
+            throw InnerTubeError.invalidResponse
+        }
+
+        return Self.findVideoLikeStatus(
+            in: root
+        ) ?? .indifferent
+    }
+
+    func setVideoReaction(
+        videoID: String,
+        current: YouTubeLikeStatus,
+        target: YouTubeLikeStatus
+    ) async throws {
+        guard !videoID.isEmpty else {
+            throw InnerTubeError.invalidResponse
+        }
+
+        let action: String
+
+        switch target {
+        case .like:
+            action = "like"
+        case .dislike:
+            action = "dislike"
+        case .indifferent:
+            switch current {
+            case .like:
+                action = "removelike"
+            case .dislike:
+                action = "removedislike"
+            case .indifferent:
+                return
+            }
+        }
+
+        let authorization =
+            try await SmartTubeAuthService.shared
+                .authorizationHeader()
+        let bootstrap =
+            try await SmartTubeAuthService.shared
+                .bootstrap()
+
+        var client: [String: Any] = [
+            "hl": L10n.currentLanguageCode,
+            "gl": "CZ",
+            "clientName":
+                SmartTubeAuthService
+                    .tvClientName,
+            "clientVersion":
+                SmartTubeAuthService
+                    .tvClientVersion
+        ]
+
+        if let visitorData =
+                bootstrap.visitorData,
+           !visitorData.isEmpty {
+            client["visitorData"] =
+                visitorData
+        }
+
+        let payload: [String: Any] = [
+            "context": [
+                "client": client
+            ],
+            "target": [
+                "videoId": videoID
+            ]
+        ]
+
+        guard let url = URL(
+            string:
+                "https://www.youtube.com/youtubei/v1/like/\(action)"
+        ) else {
+            throw InnerTubeError.invalidResponse
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 25
+        request.setValue(
+            "application/json",
+            forHTTPHeaderField:
+                "Content-Type"
+        )
+        request.setValue(
+            SmartTubeAuthService.tvUserAgent,
+            forHTTPHeaderField:
+                "User-Agent"
+        )
+        request.setValue(
+            SmartTubeAuthService.tvReferer,
+            forHTTPHeaderField:
+                "Referer"
+        )
+        request.setValue(
+            authorization,
+            forHTTPHeaderField:
+                "Authorization"
+        )
+        request.setValue(
+            "7",
+            forHTTPHeaderField:
+                "X-YouTube-Client-Name"
+        )
+        request.setValue(
+            SmartTubeAuthService.tvClientVersion,
+            forHTTPHeaderField:
+                "X-YouTube-Client-Version"
+        )
+
+        if let visitorData =
+                bootstrap.visitorData,
+           !visitorData.isEmpty {
+            request.setValue(
+                visitorData,
+                forHTTPHeaderField:
+                    "X-Goog-Visitor-Id"
+            )
+        }
+
+        if let pageID =
+                await SmartTubeAuthService
+                    .shared
+                    .selectedPageID(),
+           !pageID.isEmpty {
+            request.setValue(
+                pageID,
+                forHTTPHeaderField:
+                    "X-Goog-Pageid"
+            )
+        }
+
+        request.httpBody =
+            try JSONSerialization.data(
+                withJSONObject: payload
+            )
+
+        let (_, response) =
+            try await URLSession.shared
+                .data(for: request)
+
+        guard let http =
+                response as? HTTPURLResponse,
+              (200..<300).contains(
+                http.statusCode
+              ) else {
+            throw InnerTubeError.invalidResponse
+        }
+
+        logger.notice(
+            "Reaction action=\(action, privacy: .public) video=\(videoID, privacy: .public) status=\(http.statusCode, privacy: .public)"
         )
     }
 
@@ -1524,6 +1806,69 @@ actor InnerTubeService {
                 collectDictionaries(from: value, into: &output)
             }
         }
+    }
+
+    private static func findVideoLikeStatus(
+        in node: Any
+    ) -> YouTubeLikeStatus? {
+        if let dictionary =
+                node as? [String: Any] {
+            if let renderer =
+                    dictionary[
+                        "videoMetadataRenderer"
+                    ] as? [String: Any] {
+                if let raw =
+                        renderer[
+                            "likeStatus"
+                        ] as? String,
+                   let status =
+                        YouTubeLikeStatus(
+                            rawValue: raw
+                        ) {
+                    return status
+                }
+
+                if let likeButton =
+                        renderer[
+                            "likeButton"
+                        ] as? [String: Any],
+                   let buttonRenderer =
+                        likeButton[
+                            "likeButtonRenderer"
+                        ] as? [String: Any],
+                   let raw =
+                        buttonRenderer[
+                            "likeStatus"
+                        ] as? String,
+                   let status =
+                        YouTubeLikeStatus(
+                            rawValue: raw
+                        ) {
+                    return status
+                }
+            }
+
+            for value in dictionary.values {
+                if let status =
+                    findVideoLikeStatus(
+                        in: value
+                    ) {
+                    return status
+                }
+            }
+        } else if let array =
+                    node as? [Any] {
+            for value in array {
+                if let status =
+                    findVideoLikeStatus(
+                        in: value
+                    ) {
+                    return status
+                }
+            }
+        }
+
+        return nil
     }
 
     private static func channelSubscriptionState(

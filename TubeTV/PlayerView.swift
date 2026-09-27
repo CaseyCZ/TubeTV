@@ -182,6 +182,8 @@ final class NativePlayerModel: ObservableObject {
     @Published private(set) var activeClientProfile: String?
     @Published private(set) var availableAudioTracks: [PlayerAudioTrackInfo] = []
     @Published private(set) var activeAudioTrackID: String?
+    @Published private(set) var likeStatus: YouTubeLikeStatus?
+    @Published private(set) var isUpdatingReaction = false
 
     private var currentSource: PlaybackSource
     private let youtubeVideoID: String?
@@ -308,6 +310,11 @@ final class NativePlayerModel: ObservableObject {
                 startHistoryTrackingIfNeeded()
                 loadCaptionOptions()
                 scheduleCISmokeVerificationIfNeeded()
+
+                Task {
+                    await loadLikeStatusIfNeeded()
+                }
+
                 return
             } catch {
                 lastError = error
@@ -478,6 +485,93 @@ final class NativePlayerModel: ObservableObject {
             return value
         }
         .joined(separator: " • ")
+    }
+
+    var supportsVideoReactions: Bool {
+        youtubeVideoID != nil
+    }
+
+    func toggleLike() async {
+        await updateReaction(
+            requested: .like
+        )
+    }
+
+    func toggleDislike() async {
+        await updateReaction(
+            requested: .dislike
+        )
+    }
+
+    private func loadLikeStatusIfNeeded() async {
+        guard let youtubeVideoID else {
+            likeStatus = nil
+            return
+        }
+
+        guard await SmartTubeAuthService.shared
+            .signedIn() else {
+            likeStatus = .indifferent
+            return
+        }
+
+        do {
+            likeStatus =
+                try await InnerTubeService.shared
+                    .videoLikeStatus(
+                        youtubeVideoID
+                    )
+        } catch {
+            playbackLogger.error(
+                "Like status load failed video=\(youtubeVideoID, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
+            )
+        }
+    }
+
+    private func updateReaction(
+        requested: YouTubeLikeStatus
+    ) async {
+        guard let youtubeVideoID,
+              !isUpdatingReaction else {
+            return
+        }
+
+        guard await SmartTubeAuthService.shared
+            .signedIn() else {
+            errorMessage =
+                L10n.text(
+                    "sign_in_hint"
+                )
+            return
+        }
+
+        let current =
+            likeStatus ?? .indifferent
+        let target: YouTubeLikeStatus =
+            current == requested
+                ? .indifferent
+                : requested
+
+        isUpdatingReaction = true
+        errorMessage = nil
+        defer {
+            isUpdatingReaction = false
+        }
+
+        do {
+            try await InnerTubeService.shared
+                .setVideoReaction(
+                    videoID:
+                        youtubeVideoID,
+                    current: current,
+                    target: target
+                )
+
+            likeStatus = target
+        } catch {
+            errorMessage =
+                error.localizedDescription
+        }
     }
 
     func pause() {
@@ -1913,6 +2007,46 @@ private struct PlayerSettingsOverlay: View {
 
     private var rootPage: some View {
         VStack(spacing: 14) {
+            if model.supportsVideoReactions {
+                HStack(spacing: 14) {
+                    reactionButton(
+                        title: L10n.text(
+                            "like",
+                            languageCode:
+                                appLanguage
+                        ),
+                        icon:
+                            model.likeStatus == .like
+                                ? "hand.thumbsup.fill"
+                                : "hand.thumbsup",
+                        selected:
+                            model.likeStatus == .like
+                    ) {
+                        Task {
+                            await model.toggleLike()
+                        }
+                    }
+
+                    reactionButton(
+                        title: L10n.text(
+                            "dislike",
+                            languageCode:
+                                appLanguage
+                        ),
+                        icon:
+                            model.likeStatus == .dislike
+                                ? "hand.thumbsdown.fill"
+                                : "hand.thumbsdown",
+                        selected:
+                            model.likeStatus == .dislike
+                    ) {
+                        Task {
+                            await model.toggleDislike()
+                        }
+                    }
+                }
+            }
+
             settingsButton(
                 title: L10n.text("quality", languageCode: appLanguage),
                 value: model.currentPlaybackDescription,
@@ -2165,6 +2299,37 @@ private struct PlayerSettingsOverlay: View {
             )
         }
         .disabled(model.isSwitchingQuality)
+    }
+
+    private func reactionButton(
+        title: String,
+        icon: String,
+        selected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+
+                Text(title)
+                    .font(.headline)
+
+                if selected {
+                    Image(
+                        systemName:
+                            "checkmark"
+                    )
+                }
+            }
+            .frame(
+                maxWidth: .infinity
+            )
+            .padding(.vertical, 8)
+        }
+        .buttonStyle(.bordered)
+        .disabled(
+            model.isUpdatingReaction
+        )
     }
 
     private func settingsButton(
