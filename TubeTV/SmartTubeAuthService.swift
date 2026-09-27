@@ -366,7 +366,7 @@ actor SmartTubeAuthService {
             "clientVersion": Self.tvClientVersion,
             "clientScreen": "WATCH",
             "userAgent": Self.tvUserAgent,
-            "acceptLanguage": "cs",
+            "acceptLanguage": L10n.currentLanguageCode,
             "acceptRegion": "CZ",
             "utcOffsetMinutes": offsetMinutes,
             "webpSupport": false,
