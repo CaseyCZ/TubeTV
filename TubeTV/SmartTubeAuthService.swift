@@ -98,19 +98,19 @@ enum SmartTubeAuthError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .tvPageUnavailable:
-            return "Nepodařilo se načíst YouTube TV."
+            return L10n.text("auth_tv_page_unavailable")
         case .clientScriptNotFound:
-            return "YouTube TV nevrátil přihlašovací skript."
+            return L10n.text("auth_client_script_not_found")
         case .credentialsNotFound:
-            return "Nepodařilo se zjistit aktuální YouTube TV přihlašovací údaje."
+            return L10n.text("auth_credentials_not_found")
         case .invalidResponse:
-            return "YouTube vrátil neplatnou odpověď."
+            return L10n.text("auth_invalid_response")
         case .denied:
-            return "Přihlášení bylo zamítnuto."
+            return L10n.text("auth_denied")
         case .expired:
-            return "Přihlašovací kód vypršel."
+            return L10n.text("auth_expired")
         case .notSignedIn:
-            return "Nejsi přihlášen k YouTube."
+            return L10n.text("auth_not_signed_in")
         case .oauth(let message):
             return message
         }
@@ -283,7 +283,7 @@ actor SmartTubeAuthService {
     func finishSignIn(_ authorization: TVDeviceAuthorization) async throws {
         let data = try await bootstrap()
         let deadline = Date().addingTimeInterval(TimeInterval(authorization.expiresIn))
-        let delay = max(authorization.interval, 3)
+        var delay = max(authorization.interval, 3)
 
         while Date() < deadline {
             try Task.checkCancellation()
@@ -319,6 +319,7 @@ actor SmartTubeAuthService {
             case "authorization_pending":
                 continue
             case "slow_down":
+                delay += 5
                 continue
             case "access_denied":
                 throw SmartTubeAuthError.denied
@@ -545,7 +546,7 @@ actor SmartTubeAuthService {
 
         guard let accessToken = token.accessToken else {
             throw SmartTubeAuthError.oauth(
-                token.errorDescription ?? token.error ?? "Obnovení přihlášení selhalo."
+                token.errorDescription ?? token.error ?? L10n.text("auth_refresh_failed")
             )
         }
 
