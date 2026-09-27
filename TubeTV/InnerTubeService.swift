@@ -83,10 +83,18 @@ actor InnerTubeService {
     private var browseVisitorData: String?
 
     func homeSections() async throws -> [YouTubeHomeSection] {
-        // SmartTube keeps Home as separate MediaGroup rows instead of
-        // flattening the whole browse response into one video list.
+        // SmartTube uses the TV Home browse id ("default") when signed in.
+        // Anonymous Home stays on WEB + FEwhat_to_watch.
+        let isSignedIn =
+            await SmartTubeAuthService.shared
+                .signedIn()
+        let homeBrowseID =
+            isSignedIn
+            ? "default"
+            : "FEwhat_to_watch"
+
         let root = try await browse(
-            "FEwhat_to_watch",
+            homeBrowseID,
             requireAuthentication: false,
             includeVisitorData: true
         )
