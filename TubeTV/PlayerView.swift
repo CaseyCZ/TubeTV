@@ -734,7 +734,8 @@ private struct PlayerSettingsOverlay: View {
                 Spacer()
             }
             .padding(30)
-            .frame(width: 620, maxHeight: .infinity)
+            .frame(width: 620)
+            .frame(maxHeight: .infinity)
             .background(.ultraThinMaterial)
         }
         .ignoresSafeArea()
