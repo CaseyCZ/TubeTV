@@ -38,15 +38,15 @@ enum CaptionServiceError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidVideoID:
-            return "Neplatné video ID pro titulky."
+            return L10n.text("caption_error_invalid_video")
         case .invalidResponse:
-            return "YouTube nevrátil platnou odpověď pro titulky."
+            return L10n.text("caption_error_invalid_response")
         case .captionDataNotFound:
-            return "Video nemá dostupné titulky."
+            return L10n.text("caption_error_not_found")
         case .invalidCaptionURL:
-            return "Nepodařilo se sestavit adresu titulků."
+            return L10n.text("caption_error_invalid_url")
         case .invalidCaptionPayload:
-            return "YouTube vrátil titulky v neznámém formátu."
+            return L10n.text("caption_error_invalid_payload")
         }
     }
 }
@@ -368,7 +368,7 @@ actor CaptionService {
 
         let originalName = Self.text(from: track["name"])
             ?? (track["languageCode"] as? String)
-            ?? "Titulky"
+            ?? L10n.text("captions")
 
         let translatedName = Locale(
             identifier: L10n.currentLanguageCode
