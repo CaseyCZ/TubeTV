@@ -69,13 +69,23 @@ struct RootView: View {
                 Button {
                     selection = item
                 } label: {
-                    Label(
-                        L10n.text(item.titleKey, languageCode: appLanguage),
-                        systemImage: item.icon
-                    )
+                    HStack(spacing: 18) {
+                        Image(systemName: item.icon)
+                            .frame(width: 40)
+
+                        Text(
+                            L10n.text(
+                                item.titleKey,
+                                languageCode: appLanguage
+                            )
+                        )
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .layoutPriority(1)
+
+                        Spacer(minLength: 0)
+                    }
                     .font(.title3.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 10)
                 }
