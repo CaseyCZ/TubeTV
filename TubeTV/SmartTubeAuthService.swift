@@ -198,9 +198,9 @@ actor SmartTubeAuthService {
         guard let rawClientURL = Self.firstMatch(
             in: html,
             patterns: [
-                #"id="base-js"s+src="(.*?)""#,
-                #".src = '(.*?m=base)'"#,
-                #".src = '(.*?)';s*..id = 'base-js'"#
+                #"id="base-js"\s+src="(.*?)""#,
+                #"\.src = '(.*?m=base)'"#,
+                #"\.src = '(.*?)';\s*.\.id = 'base-js'"#
             ],
             capture: 1
         ) else {
@@ -209,7 +209,7 @@ actor SmartTubeAuthService {
 
         let clientURLString = Self.absoluteYouTubeURL(
             from: rawClientURL
-                .replacingOccurrences(of: #"/"#, with: "/")
+                .replacingOccurrences(of: "\\/", with: "/")
                 .replacingOccurrences(of: #"\u0026"#, with: "&")
         )
 
@@ -421,8 +421,8 @@ actor SmartTubeAuthService {
         from script: String
     ) -> TVClientCredentials? {
         let pairPatterns = [
-            #"clientId:"([-w]+.apps.googleusercontent.com)",s*[$w]+:"([-w]+)""#,
-            #"clientId:s*"([-w]+.apps.googleusercontent.com)"s*,s*[$w]+:s*"([-w]+)""#
+            #"clientId:"([-\w]+\.apps\.googleusercontent\.com)",\s*[$\w]+:"([-\w]+)""#,
+            #"clientId:\s*"([-\w]+\.apps\.googleusercontent\.com)"\s*,\s*[$\w]+:\s*"([-\w]+)""#
         ]
 
         for pattern in pairPatterns {
