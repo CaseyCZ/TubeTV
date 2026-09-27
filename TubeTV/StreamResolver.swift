@@ -95,6 +95,59 @@ enum PlaybackSource: Hashable {
             return []
         }
     }
+
+    var activeAudioTrackID: String? {
+        switch self {
+        case .adaptiveWithHeaders(
+            _,
+            let audioURL,
+            _,
+            let headers
+        ):
+            return headers.audioTracks
+                .first(where: {
+                    $0.url == audioURL
+                })?
+                .id
+
+        case .direct,
+             .directWithHeaders,
+             .adaptive:
+            return nil
+        }
+    }
+
+    func replacingAudioTrack(
+        id: String
+    ) -> PlaybackSource? {
+        guard let track =
+                availableAudioTracks
+                    .first(where: {
+                        $0.id == id
+                    }) else {
+            return nil
+        }
+
+        switch self {
+        case .adaptiveWithHeaders(
+            let videoURL,
+            _,
+            let fallback,
+            let headers
+        ):
+            return .adaptiveWithHeaders(
+                video: videoURL,
+                audio: track.url,
+                fallback: fallback,
+                headers: headers
+            )
+
+        case .direct,
+             .directWithHeaders,
+             .adaptive:
+            return nil
+        }
+    }
 }
 
 enum StreamResolverError: LocalizedError {

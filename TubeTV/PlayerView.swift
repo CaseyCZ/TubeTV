@@ -177,9 +177,11 @@ final class NativePlayerModel: ObservableObject {
     @Published private(set) var playbackRate: Float = 1.0
     @Published private(set) var captionsAreEnabled: Bool
     @Published private(set) var isSwitchingQuality = false
+    @Published private(set) var isSwitchingAudio = false
     @Published private(set) var availableQualityHeights: [Int]
     @Published private(set) var activeClientProfile: String?
     @Published private(set) var availableAudioTracks: [PlayerAudioTrackInfo] = []
+    @Published private(set) var activeAudioTrackID: String?
 
     private var currentSource: PlaybackSource
     private let youtubeVideoID: String?
@@ -220,6 +222,8 @@ final class NativePlayerModel: ObservableObject {
             source.availableQualityHeights
         activeClientProfile =
             source.clientProfile
+        activeAudioTrackID =
+            source.activeAudioTrackID
         preferredCaptionLanguage = captionLanguage
         self.allowCaptionTranslation = allowCaptionTranslation
     }
@@ -545,12 +549,21 @@ final class NativePlayerModel: ObservableObject {
         )
 
         do {
-            let newSource =
+            let resolvedSource =
                 try await StreamResolver
                     .resolveYouTubeVideo(
                         videoID: youtubeVideoID,
                         preferredQuality: quality
                     )
+
+            let newSource =
+                activeAudioTrackID.flatMap {
+                    resolvedSource
+                        .replacingAudioTrack(
+                            id: $0
+                        )
+                }
+                ?? resolvedSource
 
             let newItem =
                 try await makePlayerItem(
@@ -615,6 +628,101 @@ final class NativePlayerModel: ObservableObject {
         }
 
         isSwitchingQuality = false
+    }
+
+    var canSwitchAudioTracks: Bool {
+        currentSource.activeAudioTrackID != nil
+            && currentSource
+                .availableAudioTracks
+                .count > 1
+    }
+
+    func changeAudio(
+        _ track: PlayerAudioTrackInfo
+    ) async {
+        guard !isSwitchingAudio,
+              !isSwitchingQuality,
+              track.id != activeAudioTrackID,
+              let newSource =
+                currentSource
+                    .replacingAudioTrack(
+                        id: track.id
+                    ) else {
+            return
+        }
+
+        let oldTime = player.currentTime()
+        let savedSeconds = oldTime.seconds
+        let wasPlaying =
+            player.timeControlStatus == .playing
+
+        isSwitchingAudio = true
+        errorMessage = nil
+        player.pause()
+
+        playbackLogger.notice(
+            "Audio switch start from=\(self.activeAudioTrackID ?? "none", privacy: .public) to=\(track.id, privacy: .public) saved=\(savedSeconds, privacy: .public)"
+        )
+
+        defer {
+            isSwitchingAudio = false
+        }
+
+        do {
+            let newItem =
+                try await makePlayerItem(
+                    from: newSource
+                )
+
+            currentSource = newSource
+            player.replaceCurrentItem(
+                with: newItem
+            )
+
+            try await waitUntilReadyToPlay(
+                newItem
+            )
+
+            if savedSeconds.isFinite,
+               savedSeconds > 0 {
+                await seek(to: oldTime)
+            }
+
+            await updateFormatInfo(
+                from: newItem
+            )
+            await loadAudioTracks(
+                from: newItem,
+                source: newSource
+            )
+
+            activeAudioTrackID =
+                newSource.activeAudioTrackID
+
+            let restoredSeconds =
+                player.currentTime().seconds
+
+            playbackLogger.notice(
+                "Audio switch ready track=\(track.id, privacy: .public) saved=\(savedSeconds, privacy: .public) restored=\(restoredSeconds, privacy: .public)"
+            )
+
+            if wasPlaying {
+                play()
+            } else {
+                player.pause()
+            }
+        } catch {
+            errorMessage =
+                "\(L10n.text("audio")): \(error.localizedDescription)"
+
+            playbackLogger.error(
+                "Audio switch failed track=\(track.id, privacy: .public) saved=\(savedSeconds, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
+            )
+
+            if wasPlaying {
+                play()
+            }
+        }
     }
 
     func disableCaptions() {
@@ -859,6 +967,9 @@ final class NativePlayerModel: ObservableObject {
             source.availableAudioTracks
 
         if !youtubeTracks.isEmpty {
+            activeAudioTrackID =
+                source.activeAudioTrackID
+
             availableAudioTracks =
                 youtubeTracks.map {
                     PlayerAudioTrackInfo(
@@ -1722,39 +1833,60 @@ private struct PlayerSettingsOverlay: View {
                 ForEach(
                     model.availableAudioTracks
                 ) { track in
-                    HStack {
-                        VStack(
-                            alignment: .leading,
-                            spacing: 4
-                        ) {
-                            Text(track.name)
-
-                            Text(
-                                track.languageCode
+                    Button {
+                        Task {
+                            await model.changeAudio(
+                                track
                             )
-                            .font(.caption)
-                            .foregroundStyle(
-                                .secondary
-                            )
+                            page = .root
                         }
+                    } label: {
+                        HStack {
+                            VStack(
+                                alignment: .leading,
+                                spacing: 4
+                            ) {
+                                Text(track.name)
 
-                        Spacer()
-
-                        if track.isOriginal {
-                            Text(
-                                L10n.text(
-                                    "original_audio",
-                                    languageCode:
-                                        appLanguage
+                                Text(
+                                    track.languageCode
                                 )
-                            )
-                            .font(.caption)
-                            .foregroundStyle(
-                                .secondary
-                            )
+                                .font(.caption)
+                                .foregroundStyle(
+                                    .secondary
+                                )
+                            }
+
+                            Spacer()
+
+                            if track.isOriginal {
+                                Text(
+                                    L10n.text(
+                                        "original_audio",
+                                        languageCode:
+                                            appLanguage
+                                    )
+                                )
+                                .font(.caption)
+                                .foregroundStyle(
+                                    .secondary
+                                )
+                            }
+
+                            if model.activeAudioTrackID
+                                == track.id {
+                                Image(
+                                    systemName:
+                                        "checkmark"
+                                )
+                            }
                         }
+                        .padding(.vertical, 8)
                     }
-                    .padding(.vertical, 8)
+                    .disabled(
+                        !model.canSwitchAudioTracks
+                        || model.isSwitchingAudio
+                    )
                 }
             }
         }
@@ -1861,6 +1993,16 @@ private struct PlayerSettingsOverlay: View {
     }
 
     private var audioSummary: String {
+        if let activeID =
+                model.activeAudioTrackID,
+           let active =
+                model.availableAudioTracks
+                    .first(where: {
+                        $0.id == activeID
+                    }) {
+            return active.name
+        }
+
         if let original =
                 model.availableAudioTracks
                     .first(where: {
