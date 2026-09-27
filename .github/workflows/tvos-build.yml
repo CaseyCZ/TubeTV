@@ -137,6 +137,34 @@ jobs:
 
           xcrun simctl list devices "$UDID"
 
+      - name: Test real YouTube video playback
+        run: |
+          set -euo pipefail
+
+          UDID='${{ steps.simulator.outputs.udid }}'
+
+          xcrun simctl terminate "$UDID" cz.caseycz.tubetv || true
+
+          SIMCTL_CHILD_TUBETV_CI_VIDEO_SMOKE=1 \
+          SIMCTL_CHILD_TUBETV_CI_VIDEO_ID=jNQXAC9IVRw \
+            xcrun simctl launch "$UDID" cz.caseycz.tubetv \
+            > video-smoke-launch.txt
+
+          sleep 18
+
+          xcrun simctl io "$UDID" screenshot tubetv-video-smoke.png
+
+          xcrun simctl spawn "$UDID" log show \
+            --style compact \
+            --last 3m \
+            --predicate 'subsystem == "cz.caseycz.tubetv" AND category == "CI"' \
+            > tubetv-video-smoke.log 2>&1 || true
+
+          cat tubetv-video-smoke.log
+
+          grep -q "TUBETV_VIDEO_RESOLVED" tubetv-video-smoke.log
+          grep -q "TUBETV_VIDEO_PLAYBACK_OK" tubetv-video-smoke.log
+
       - name: Upload simulator evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -148,6 +176,9 @@ jobs:
             tubetv-simulator.log
             simulator-launch.txt
             simulator-build.log
+            tubetv-video-smoke.png
+            tubetv-video-smoke.log
+            video-smoke-launch.txt
 
       - name: Shutdown simulator
         if: always()
