@@ -355,7 +355,8 @@ final class NativePlayerModel: ObservableObject {
             from: item
         )
         await loadAudioTracks(
-            from: item
+            from: item,
+            source: source
         )
         refreshAvailableQualityHeights(
             for: source
@@ -577,7 +578,8 @@ final class NativePlayerModel: ObservableObject {
                 from: newItem
             )
             await loadAudioTracks(
-                from: newItem
+                from: newItem,
+                source: newSource
             )
             refreshAvailableQualityHeights(
                 for: newSource
@@ -850,8 +852,31 @@ final class NativePlayerModel: ObservableObject {
     }
 
     private func loadAudioTracks(
-        from item: AVPlayerItem
+        from item: AVPlayerItem,
+        source: PlaybackSource
     ) async {
+        let youtubeTracks =
+            source.availableAudioTracks
+
+        if !youtubeTracks.isEmpty {
+            availableAudioTracks =
+                youtubeTracks.map {
+                    PlayerAudioTrackInfo(
+                        id: $0.id,
+                        name: $0.displayName,
+                        languageCode:
+                            $0.languageCode,
+                        isOriginal:
+                            $0.isOriginal
+                    )
+                }
+
+            playbackLogger.notice(
+                "YouTube audio tracks loaded count=\(youtubeTracks.count, privacy: .public) original=\(youtubeTracks.first(where: { $0.isOriginal })?.languageCode ?? "none", privacy: .public)"
+            )
+            return
+        }
+
         guard let group = try? await item.asset
             .loadMediaSelectionGroup(
                 for: .audible

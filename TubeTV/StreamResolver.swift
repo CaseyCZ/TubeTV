@@ -1,19 +1,31 @@
 import Foundation
 import YouTubeKit
 
+struct PlaybackAudioTrack: Hashable {
+    let id: String
+    let displayName: String
+    let languageCode: String
+    let isDefault: Bool
+    let isOriginal: Bool
+    let isAutoDubbed: Bool
+    let url: URL
+}
+
 struct PlaybackRequestHeaders: Hashable {
     let userAgent: String
     let referer: String?
     let origin: String?
     let clientProfile: String?
     let availableHeights: [Int]
+    let audioTracks: [PlaybackAudioTrack]
 
     init(
         userAgent: String,
         referer: String? = nil,
         origin: String? = nil,
         clientProfile: String? = nil,
-        availableHeights: [Int] = []
+        availableHeights: [Int] = [],
+        audioTracks: [PlaybackAudioTrack] = []
     ) {
         self.userAgent = userAgent
         self.referer = referer
@@ -22,6 +34,7 @@ struct PlaybackRequestHeaders: Hashable {
         self.availableHeights = Array(
             Set(availableHeights.filter { $0 > 0 })
         ).sorted(by: >)
+        self.audioTracks = audioTracks
     }
 
     var dictionary: [String: String] {
@@ -66,6 +79,17 @@ enum PlaybackSource: Hashable {
         case .directWithHeaders(_, let headers),
              .adaptiveWithHeaders(_, _, _, let headers):
             return headers.availableHeights
+
+        case .direct, .adaptive:
+            return []
+        }
+    }
+
+    var availableAudioTracks: [PlaybackAudioTrack] {
+        switch self {
+        case .directWithHeaders(_, let headers),
+             .adaptiveWithHeaders(_, _, _, let headers):
+            return headers.audioTracks
 
         case .direct, .adaptive:
             return []

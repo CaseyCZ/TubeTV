@@ -31,6 +31,10 @@ private struct InnerTubeFormat {
     let fps: Int?
     let bitrate: Int?
     let hasAudio: Bool
+    let audioTrackID: String?
+    let audioTrackDisplayName: String?
+    let audioIsDefault: Bool
+    let isAutoDubbed: Bool
     let isHDR: Bool
 
     var isVideo: Bool {
@@ -262,18 +266,24 @@ actor AuthenticatedPlayerService {
             )
         ).sorted(by: >)
 
-        let playbackHeaders = PlaybackRequestHeaders(
-            userAgent: playerUserAgent,
-            referer: "https://www.youtube.com/tv",
-            clientProfile: "TV_AUTH",
-            availableHeights: availableHeights
-        )
-
         let audios = adaptive
             .filter { $0.isAppleFriendlyAudio }
             .sorted {
                 ($0.bitrate ?? 0) > ($1.bitrate ?? 0)
             }
+
+        let audioTracks =
+            Self.playbackAudioTracks(
+                from: audios
+            )
+
+        let playbackHeaders = PlaybackRequestHeaders(
+            userAgent: playerUserAgent,
+            referer: "https://www.youtube.com/tv",
+            clientProfile: "TV_AUTH",
+            availableHeights: availableHeights,
+            audioTracks: audioTracks
+        )
 
         if let audio = audios.first {
             if let height = Self.requestedHeight(for: preferredQuality),
@@ -337,6 +347,9 @@ actor AuthenticatedPlayerService {
                 return nil
             }
 
+            let audioTrack =
+                item["audioTrack"] as? [String: Any]
+
             return InnerTubeFormat(
                 url: url,
                 mimeType: mimeType,
@@ -345,9 +358,82 @@ actor AuthenticatedPlayerService {
                 bitrate: item["bitrate"] as? Int,
                 hasAudio: item["audioQuality"] != nil
                     || item["audioChannels"] != nil,
+                audioTrackID:
+                    audioTrack?["id"] as? String,
+                audioTrackDisplayName:
+                    audioTrack?["displayName"] as? String,
+                audioIsDefault:
+                    audioTrack?["audioIsDefault"] as? Bool
+                    ?? false,
+                isAutoDubbed:
+                    audioTrack?["isAutoDubbed"] as? Bool
+                    ?? false,
                 isHDR: Self.isHDRFormat(item)
             )
         }
+    }
+
+    private static func playbackAudioTracks(
+        from formats: [InnerTubeFormat]
+    ) -> [PlaybackAudioTrack] {
+        var seen = Set<String>()
+        var tracks: [PlaybackAudioTrack] = []
+
+        for format in formats {
+            guard let trackID = format.audioTrackID,
+                  !trackID.isEmpty,
+                  seen.insert(trackID).inserted else {
+                continue
+            }
+
+            let parts = trackID.split(
+                separator: ".",
+                omittingEmptySubsequences: false
+            )
+            let languageCode =
+                parts.first.map(String.init)
+                ?? trackID
+
+            // Match SmartTube MediaServiceCore:
+            // the ".4" audio track is the original track.
+            let isOriginal =
+                parts.count == 2
+                    ? parts[1] == "4"
+                    : format.audioIsDefault
+
+            let displayName: String
+            if let rawName =
+                format.audioTrackDisplayName,
+               !rawName.isEmpty {
+                displayName = rawName
+            } else {
+                displayName =
+                    Locale(
+                        identifier:
+                            L10n.currentLanguageCode
+                    )
+                    .localizedString(
+                        forLanguageCode:
+                            languageCode
+                    )?
+                    .capitalized
+                    ?? languageCode
+            }
+
+            tracks.append(
+                PlaybackAudioTrack(
+                    id: trackID,
+                    displayName: displayName,
+                    languageCode: languageCode,
+                    isDefault: format.audioIsDefault,
+                    isOriginal: isOriginal,
+                    isAutoDubbed: format.isAutoDubbed,
+                    url: format.url
+                )
+            )
+        }
+
+        return tracks
     }
 
     private static func bestCombined(
