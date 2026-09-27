@@ -393,9 +393,29 @@ final class NativePlayerModel: ObservableObject {
             return false
         }
 
-        return activeCaptionLanguageCode
+        if activeCaptionLanguageCode
             .caseInsensitiveCompare(
                 preferredCaptionLanguage
+            ) == .orderedSame {
+            return true
+        }
+
+        let activeBase =
+            activeCaptionLanguageCode
+                .split(separator: "-")
+                .first
+                .map(String.init)
+                ?? activeCaptionLanguageCode
+        let preferredBase =
+            preferredCaptionLanguage
+                .split(separator: "-")
+                .first
+                .map(String.init)
+                ?? preferredCaptionLanguage
+
+        return activeBase
+            .caseInsensitiveCompare(
+                preferredBase
             ) == .orderedSame
     }
 
@@ -749,7 +769,9 @@ final class NativePlayerModel: ObservableObject {
                     try await CaptionService.shared.availableLanguages(
                         videoID: youtubeVideoID,
                         preferredLanguage:
-                            preferredCaptionLanguage
+                            preferredCaptionLanguage,
+                        allowTranslation:
+                            allowCaptionTranslation
                     )
             } catch {
                 captionOptions = []
