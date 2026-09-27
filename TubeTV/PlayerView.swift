@@ -874,8 +874,7 @@ final class NativePlayerModel: ObservableObject {
         let initialTracks =
             group.options.enumerated().map {
                 index,
-                option
-                -> PlayerAudioTrackInfo in
+                option in
 
                 let languageCode =
                     option.locale?.identifier
