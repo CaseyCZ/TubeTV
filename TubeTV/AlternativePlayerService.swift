@@ -644,6 +644,12 @@ actor AlternativePlayerService {
                 "hlsManifestUrl"
             ] as? String
 
+        let playbackHeaders = PlaybackRequestHeaders(
+            userAgent: client.userAgent,
+            referer: client.referer,
+            origin: client.origin
+        )
+
         logger.notice(
             "Formats client=\(client.name, privacy: .public) combined=\(combined.count, privacy: .public) adaptive=\(adaptive.count, privacy: .public) hls=\(hlsRaw != nil, privacy: .public) ads=\(adMetadata.containsAdvertisingMetadata, privacy: .public)"
         )
@@ -654,7 +660,10 @@ actor AlternativePlayerService {
            let hlsRaw,
            let hls = URL(string: hlsRaw),
            !adMetadata.containsAdvertisingMetadata {
-            return .direct(hls)
+            return .directWithHeaders(
+                hls,
+                playbackHeaders
+            )
         }
 
         let fallback = bestCombined(
@@ -689,10 +698,11 @@ actor AlternativePlayerService {
                             == height
                     }
                 ) {
-                return .adaptive(
+                return .adaptiveWithHeaders(
                     video: video.url,
                     audio: audio.url,
-                    fallback: fallback
+                    fallback: fallback,
+                    headers: playbackHeaders
                 )
             }
 
@@ -707,7 +717,10 @@ actor AlternativePlayerService {
         }
 
         if let fallback {
-            return .direct(fallback)
+            return .directWithHeaders(
+                fallback,
+                playbackHeaders
+            )
         }
 
         let hasDirectContent =
@@ -723,7 +736,10 @@ actor AlternativePlayerService {
            let hlsRaw,
            let hls =
                 URL(string: hlsRaw) {
-            return .direct(hls)
+            return .directWithHeaders(
+                hls,
+                playbackHeaders
+            )
         }
 
         return nil
