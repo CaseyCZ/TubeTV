@@ -1,9 +1,46 @@
 import Foundation
 import YouTubeKit
 
+struct PlaybackRequestHeaders: Hashable {
+    let userAgent: String
+    let referer: String?
+    let origin: String?
+
+    init(
+        userAgent: String,
+        referer: String? = nil,
+        origin: String? = nil
+    ) {
+        self.userAgent = userAgent
+        self.referer = referer
+        self.origin = origin
+    }
+
+    var dictionary: [String: String] {
+        var result = ["User-Agent": userAgent]
+
+        if let referer, !referer.isEmpty {
+            result["Referer"] = referer
+        }
+
+        if let origin, !origin.isEmpty {
+            result["Origin"] = origin
+        }
+
+        return result
+    }
+}
+
 enum PlaybackSource: Hashable {
     case direct(URL)
+    case directWithHeaders(URL, PlaybackRequestHeaders)
     case adaptive(video: URL, audio: URL, fallback: URL?)
+    case adaptiveWithHeaders(
+        video: URL,
+        audio: URL,
+        fallback: URL?,
+        headers: PlaybackRequestHeaders
+    )
 }
 
 enum StreamResolverError: LocalizedError {
