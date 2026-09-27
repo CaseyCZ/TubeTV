@@ -24,13 +24,7 @@ struct SearchView: View {
     }
 
     private var visibleResults: [YouTubeSearchResultItem] {
-        query.isEmpty
-            ? VideoItem.demo(
-                languageCode: appLanguage
-            ).map {
-                .video($0)
-            }
-            : results
+        results
     }
 
     var body: some View {
