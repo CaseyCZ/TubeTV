@@ -109,6 +109,10 @@ actor AuthenticatedPlayerService {
         let playerClientVersion = "5.20260901"
         let playerUserAgent =
             "Mozilla/5.0 (DirectFB; Linux x86_64) Cobalt/4.13031-qa (unlike Gecko) Starboard/1"
+        let playbackHeaders = PlaybackRequestHeaders(
+            userAgent: playerUserAgent,
+            referer: "https://www.youtube.com/tv"
+        )
 
         var client: [String: Any] = [
             "clientName": "TVHTML5",
@@ -241,25 +245,30 @@ actor AuthenticatedPlayerService {
         if let audio = audios.first {
             if let height = Self.requestedHeight(for: preferredQuality),
                let video = videos.first(where: { $0.height == height }) {
-                return .adaptive(
+                return .adaptiveWithHeaders(
                     video: video.url,
                     audio: audio.url,
-                    fallback: fallback
+                    fallback: fallback,
+                    headers: playbackHeaders
                 )
             }
 
             if preferredQuality == "Auto",
                let video = videos.first {
-                return .adaptive(
+                return .adaptiveWithHeaders(
                     video: video.url,
                     audio: audio.url,
-                    fallback: fallback
+                    fallback: fallback,
+                    headers: playbackHeaders
                 )
             }
         }
 
         if let fallback {
-            return .direct(fallback)
+            return .directWithHeaders(
+                fallback,
+                playbackHeaders
+            )
         }
 
         let hasDirectContentFormats =
@@ -271,7 +280,10 @@ actor AuthenticatedPlayerService {
         ),
         let hls = streaming["hlsManifestUrl"] as? String,
         let hlsURL = URL(string: hls) {
-            return .direct(hlsURL)
+            return .directWithHeaders(
+                hlsURL,
+                playbackHeaders
+            )
         }
 
         // Do not play ad placements or ad-bearing HLS fallbacks.
