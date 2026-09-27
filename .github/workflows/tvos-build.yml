@@ -11,10 +11,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Build TubeTV for tvOS Simulator
+  test:
+    name: Build and test TubeTV in tvOS Simulator
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
 
     steps:
       - name: Checkout
@@ -32,7 +32,7 @@ jobs:
             -project TubeTV.xcodeproj \
             -scheme TubeTV
 
-      - name: Build
+      - name: Build TubeTV
         run: |
           set -o pipefail
           xcodebuild \
@@ -41,18 +41,9 @@ jobs:
             -configuration Debug \
             -sdk appletvsimulator \
             -destination 'generic/platform=tvOS Simulator' \
+            -derivedDataPath "$PWD/DerivedData" \
             CODE_SIGNING_ALLOWED=NO \
-            build | tee xcodebuild.log
-
-  simulator:
-    name: Launch TubeTV in tvOS Simulator
-    needs: build
-    runs-on: macos-latest
-    timeout-minutes: 35
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+            build | tee simulator-build.log
 
       - name: Select and boot Apple TV simulator
         id: simulator
@@ -77,22 +68,15 @@ jobs:
           import json, sys
           data=json.load(sys.stdin)
           devices=data["devicetypes"]
-          preferred=[
-              d for d in devices
-              if d.get("name") == "Apple TV 4K (3rd generation)"
-          ]
+          preferred=[d for d in devices if d.get("name") == "Apple TV 4K (3rd generation)"]
           if not preferred:
-              preferred=[
-                  d for d in devices
-                  if d.get("name", "").startswith("Apple TV")
-              ]
+              preferred=[d for d in devices if d.get("name", "").startswith("Apple TV")]
           if not preferred:
               raise SystemExit("No Apple TV simulator device type")
           print(preferred[0]["identifier"])
           ')"
 
           UDID="$(xcrun simctl create "TubeTV CI" "$DEVICE_TYPE" "$RUNTIME")"
-
           echo "runtime=$RUNTIME" >> "$GITHUB_OUTPUT"
           echo "device_type=$DEVICE_TYPE" >> "$GITHUB_OUTPUT"
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
@@ -100,22 +84,7 @@ jobs:
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b
 
-
-      - name: Build TubeTV for booted simulator
-        run: |
-          set -o pipefail
-          xcodebuild \
-            -project TubeTV.xcodeproj \
-            -scheme TubeTV \
-            -configuration Debug \
-            -sdk appletvsimulator \
-            -destination 'generic/platform=tvOS Simulator' \
-            -derivedDataPath "$PWD/DerivedData" \
-            CODE_SIGNING_ALLOWED=NO \
-            build | tee simulator-build.log
-
       - name: Install and launch TubeTV
-        id: launch
         run: |
           set -euo pipefail
 
@@ -124,29 +93,21 @@ jobs:
 
           test -d "$APP_PATH"
           xcrun simctl install "$UDID" "$APP_PATH"
-
-          LAUNCH_OUTPUT="$(xcrun simctl launch "$UDID" cz.caseycz.tubetv)"
-          echo "$LAUNCH_OUTPUT"
-          echo "$LAUNCH_OUTPUT" > simulator-launch.txt
+          xcrun simctl launch "$UDID" cz.caseycz.tubetv | tee simulator-launch.txt
 
           sleep 12
-
           xcrun simctl io "$UDID" screenshot tubetv-simulator.png
-
           xcrun simctl spawn "$UDID" log show \
             --style compact \
             --last 2m \
             --predicate 'process == "TubeTV"' \
             > tubetv-simulator.log 2>&1 || true
 
-          xcrun simctl list devices "$UDID"
-
       - name: Probe real YouTube video playback
         run: |
           set -euo pipefail
 
           UDID='${{ steps.simulator.outputs.udid }}'
-
           xcrun simctl terminate "$UDID" cz.caseycz.tubetv || true
 
           SIMCTL_CHILD_TUBETV_CI_VIDEO_SMOKE=1 \
@@ -155,9 +116,7 @@ jobs:
             > video-smoke-launch.txt
 
           sleep 18
-
           xcrun simctl io "$UDID" screenshot tubetv-video-smoke.png
-
           xcrun simctl spawn "$UDID" log show \
             --style compact \
             --last 3m \
@@ -184,7 +143,6 @@ jobs:
           set -euo pipefail
 
           UDID='${{ steps.simulator.outputs.udid }}'
-
           xcrun simctl terminate "$UDID" cz.caseycz.tubetv || true
 
           SIMCTL_CHILD_TUBETV_CI_VIDEO_SMOKE=1 \
@@ -193,9 +151,7 @@ jobs:
             > direct-video-launch.txt
 
           sleep 16
-
           xcrun simctl io "$UDID" screenshot tubetv-direct-video.png
-
           xcrun simctl spawn "$UDID" log show \
             --style compact \
             --last 2m \
@@ -203,7 +159,6 @@ jobs:
             > tubetv-direct-video.log 2>&1 || true
 
           cat tubetv-direct-video.log
-
           grep -q "TUBETV_DIRECT_VIDEO_STARTED" tubetv-direct-video.log
           grep -q "TUBETV_VIDEO_PLAYBACK_OK" tubetv-direct-video.log
 
@@ -214,16 +169,16 @@ jobs:
           name: TubeTV-tvOS-Simulator
           if-no-files-found: warn
           path: |
+            simulator-build.log
+            simulator-launch.txt
             tubetv-simulator.png
             tubetv-simulator.log
-            simulator-launch.txt
-            simulator-build.log
+            video-smoke-launch.txt
             tubetv-video-smoke.png
             tubetv-video-smoke.log
-            video-smoke-launch.txt
+            direct-video-launch.txt
             tubetv-direct-video.png
             tubetv-direct-video.log
-            direct-video-launch.txt
 
       - name: Shutdown simulator
         if: always()
