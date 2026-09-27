@@ -106,16 +106,18 @@ actor AuthenticatedPlayerService {
         let cpn = Self.generateCPN()
         let offsetMinutes = TimeZone.current.secondsFromGMT() / 60
 
+        let playerClientVersion = "5.20260901"
+        let playerUserAgent =
+            "Mozilla/5.0 (DirectFB; Linux x86_64) Cobalt/4.13031-qa (unlike Gecko) Starboard/1"
+
         var client: [String: Any] = [
-            "clientName": SmartTubeAuthService.tvClientName,
-            "clientVersion": SmartTubeAuthService.tvClientVersion,
+            "clientName": "TVHTML5",
+            "clientVersion": playerClientVersion,
             "clientScreen": "WATCH",
-            "userAgent": SmartTubeAuthService.tvUserAgent,
+            "userAgent": playerUserAgent,
             "acceptLanguage": L10n.currentLanguageCode,
             "acceptRegion": "CZ",
-            "utcOffsetMinutes": offsetMinutes,
-            "platform": "TV",
-            "originalUrl": SmartTubeAuthService.tvReferer
+            "utcOffsetMinutes": offsetMinutes
         ]
 
         if let visitorData = bootstrap.visitorData,
@@ -134,7 +136,18 @@ actor AuthenticatedPlayerService {
             "videoId": videoID,
             "cpn": cpn,
             "racyCheckOk": true,
-            "contentCheckOk": true
+            "contentCheckOk": true,
+            "playbackContext": [
+                "contentPlaybackContext": [
+                    "html5Preference": "HTML5_PREF_WANTS",
+                    "lactMilliseconds": 60_000,
+                    "isInlinePlaybackNoAd": true
+                ],
+                "devicePlaybackCapabilities": [
+                    "supportsVp9Encoding": true,
+                    "supportXhr": false
+                ]
+            ]
         ]
 
         var request = URLRequest(
@@ -146,11 +159,11 @@ actor AuthenticatedPlayerService {
         request.timeoutInterval = 25
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(
-            SmartTubeAuthService.tvUserAgent,
+            playerUserAgent,
             forHTTPHeaderField: "User-Agent"
         )
         request.setValue(
-            SmartTubeAuthService.tvReferer,
+            "https://www.youtube.com/tv",
             forHTTPHeaderField: "Referer"
         )
         request.setValue(
@@ -159,7 +172,7 @@ actor AuthenticatedPlayerService {
         )
         request.setValue("7", forHTTPHeaderField: "X-Youtube-Client-Name")
         request.setValue(
-            SmartTubeAuthService.tvClientVersion,
+            playerClientVersion,
             forHTTPHeaderField: "X-Youtube-Client-Version"
         )
 
