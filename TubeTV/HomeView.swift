@@ -140,7 +140,7 @@ struct VideoCard: View {
                 }
 
                 if video.playbackURL != nil {
-                    Text(L10n.text("test", languageCode: appLanguage))
+                    Text(L10n.text("test"))
                         .font(.caption.bold())
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
