@@ -203,20 +203,38 @@ actor AuthenticatedPlayerService {
             throw AuthenticatedPlayerError.invalidResponse
         }
 
-        if let playability = root["playabilityStatus"] as? [String: Any],
-           let status = playability["status"] as? String,
-           status != "OK" {
-            let reason = playability["reason"] as? String ?? ""
-            throw AuthenticatedPlayerError.unplayable(reason)
-        }
+        let playability =
+            root["playabilityStatus"] as? [String: Any]
+        let status =
+            playability?["status"] as? String
+            ?? "UNKNOWN"
+        let reason =
+            playability?["reason"] as? String
+            ?? ""
 
         let adMetadata = AdFilteringPolicy.inspectPlayerResponse(root)
 
         guard let streaming = AdFilteringPolicy.contentStreamingData(
             from: root
         ) else {
+            if let playabilityError =
+                StreamResolverError.playabilityError(
+                    status: status,
+                    reason: reason
+                ) {
+                throw playabilityError
+            }
+
+            if status != "OK" {
+                throw AuthenticatedPlayerError.unplayable(reason)
+            }
+
             throw AuthenticatedPlayerError.noPlayableStream
         }
+
+        // SmartTubeIOS only treats non-OK playability as fatal when
+        // YouTube did not return usable streamingData. If content is
+        // present, continue and let the format checks decide.
 
         let combined = Self.formats(
             from: streaming["formats"]
