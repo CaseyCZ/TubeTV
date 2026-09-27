@@ -85,7 +85,7 @@ struct HomeView: View {
             .task {
                 await loadHome()
             }
-            .onChange(of: scenePhase) { newPhase in
+            .onChange(of: scenePhase) { _, newPhase in
                 guard newPhase == .active else {
                     return
                 }
