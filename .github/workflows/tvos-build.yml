@@ -1,0 +1,31 @@
+name: tvOS Build
+
+on:
+  push:
+    branches:
+      - Master
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build TubeTV for tvOS Simulator
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: |
+          xcodebuild -version
+          xcrun simctl list runtimes
+
+      - name: Resolve Swift packages
+        run: |
+          xcodebuild             -resolvePackageDependencies             -project TubeTV.xcodeproj             -scheme TubeTV
+
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild             -project TubeTV.xcodeproj             -scheme TubeTV             -configuration Debug             -sdk appletvsimulator             -destination 'generic/platform=tvOS Simulator'             CODE_SIGNING_ALLOWED=NO             build | tee xcodebuild.log
