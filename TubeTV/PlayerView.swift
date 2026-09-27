@@ -1,3 +1,4 @@
+import AVFoundation
 import AVKit
 import SwiftUI
 
@@ -7,7 +8,7 @@ struct VideoDetailView: View {
     @AppStorage("preferredQuality") private var preferredQuality = "Auto"
 
     @State private var showPlayer = false
-    @State private var resolvedURL: URL?
+    @State private var playbackSource: PlaybackSource?
     @State private var isResolving = false
     @State private var errorMessage: String?
 
@@ -72,8 +73,8 @@ struct VideoDetailView: View {
         }
         .padding(64)
         .fullScreenCover(isPresented: $showPlayer) {
-            if let resolvedURL {
-                NativePlayerView(url: resolvedURL)
+            if let playbackSource {
+                NativePlayerView(source: playbackSource)
             }
         }
     }
@@ -83,7 +84,7 @@ struct VideoDetailView: View {
         errorMessage = nil
 
         if let url = video.playbackURL {
-            resolvedURL = url
+            playbackSource = .direct(url)
             showPlayer = true
             return
         }
@@ -97,11 +98,10 @@ struct VideoDetailView: View {
         defer { isResolving = false }
 
         do {
-            let url = try await StreamResolver.resolveYouTubeVideo(
+            playbackSource = try await StreamResolver.resolveYouTubeVideo(
                 videoID: videoID,
                 preferredQuality: preferredQuality
             )
-            resolvedURL = url
             showPlayer = true
         } catch {
             errorMessage = error.localizedDescription
@@ -109,25 +109,141 @@ struct VideoDetailView: View {
     }
 }
 
+@MainActor
+final class NativePlayerModel: ObservableObject {
+    @Published private(set) var player = AVPlayer()
+    @Published private(set) var errorMessage: String?
+    @Published private(set) var isPreparing = true
+
+    private let source: PlaybackSource
+    private var didPrepare = false
+
+    init(source: PlaybackSource) {
+        self.source = source
+    }
+
+    func prepareAndPlay() async {
+        guard !didPrepare else {
+            player.play()
+            return
+        }
+
+        didPrepare = true
+        isPreparing = true
+        errorMessage = nil
+
+        do {
+            let item = try await makePlayerItem(from: source)
+            player.replaceCurrentItem(with: item)
+            isPreparing = false
+            player.play()
+        } catch {
+            if case let .adaptive(_, _, fallback?) = source {
+                player.replaceCurrentItem(with: AVPlayerItem(url: fallback))
+                isPreparing = false
+                errorMessage = "Vyšší kvalita nešla spojit, přehrávám kompatibilní variantu."
+                player.play()
+            } else {
+                isPreparing = false
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func pause() {
+        player.pause()
+    }
+
+    private func makePlayerItem(from source: PlaybackSource) async throws -> AVPlayerItem {
+        switch source {
+        case .direct(let url):
+            return AVPlayerItem(url: url)
+
+        case .adaptive(let videoURL, let audioURL, _):
+            let videoAsset = AVURLAsset(url: videoURL)
+            let audioAsset = AVURLAsset(url: audioURL)
+
+            async let loadedVideoTracks = videoAsset.loadTracks(withMediaType: .video)
+            async let loadedAudioTracks = audioAsset.loadTracks(withMediaType: .audio)
+            async let loadedVideoDuration = videoAsset.load(.duration)
+            async let loadedAudioDuration = audioAsset.load(.duration)
+
+            let videoTracks = try await loadedVideoTracks
+            let audioTracks = try await loadedAudioTracks
+            let videoDuration = try await loadedVideoDuration
+            let audioDuration = try await loadedAudioDuration
+
+            guard let sourceVideoTrack = videoTracks.first,
+                  let sourceAudioTrack = audioTracks.first else {
+                throw StreamResolverError.noPlayableStream
+            }
+
+            let duration = CMTimeCompare(videoDuration, audioDuration) <= 0
+                ? videoDuration
+                : audioDuration
+
+            let composition = AVMutableComposition()
+
+            guard let videoTrack = composition.addMutableTrack(
+                withMediaType: .video,
+                preferredTrackID: kCMPersistentTrackID_Invalid
+            ),
+            let audioTrack = composition.addMutableTrack(
+                withMediaType: .audio,
+                preferredTrackID: kCMPersistentTrackID_Invalid
+            ) else {
+                throw StreamResolverError.noPlayableStream
+            }
+
+            let range = CMTimeRange(start: .zero, duration: duration)
+            try videoTrack.insertTimeRange(range, of: sourceVideoTrack, at: .zero)
+            try audioTrack.insertTimeRange(range, of: sourceAudioTrack, at: .zero)
+
+            return AVPlayerItem(asset: composition)
+        }
+    }
+}
+
 struct NativePlayerView: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var player: AVPlayer
+    @StateObject private var model: NativePlayerModel
 
-    init(url: URL) {
-        _player = State(initialValue: AVPlayer(url: url))
+    init(source: PlaybackSource) {
+        _model = StateObject(wrappedValue: NativePlayerModel(source: source))
     }
 
     var body: some View {
-        VideoPlayer(player: player)
-            .ignoresSafeArea()
-            .onAppear {
-                player.play()
+        ZStack {
+            VideoPlayer(player: model.player)
+                .ignoresSafeArea()
+
+            if model.isPreparing {
+                ProgressView("Připravuji video…")
+                    .font(.title3)
             }
-            .onDisappear {
-                player.pause()
+
+            if let errorMessage = model.errorMessage {
+                VStack {
+                    Spacer()
+
+                    Text(errorMessage)
+                        .font(.headline)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 14)
+                        .background(.black.opacity(0.75))
+                        .clipShape(Capsule())
+                        .padding(.bottom, 54)
+                }
             }
-            .onExitCommand {
-                dismiss()
-            }
+        }
+        .task {
+            await model.prepareAndPlay()
+        }
+        .onDisappear {
+            model.pause()
+        }
+        .onExitCommand {
+            dismiss()
+        }
     }
 }
