@@ -30,6 +30,7 @@ struct RootView: View {
     @AppStorage("appLanguage") private var appLanguage =
         AppLanguage.english.rawValue
     @State private var selection: AppSection = .home
+    @State private var requestedSearchQuery: String?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -39,7 +40,11 @@ struct RootView: View {
             Group {
                 switch selection {
                 case .home:
-                    HomeView()
+                    HomeView { query in
+                        requestedSearchQuery =
+                            query
+                        selection = .search
+                    }
                 case .subscriptions:
                     AccountFeedView(kind: .subscriptions)
                 case .history:
@@ -47,7 +52,10 @@ struct RootView: View {
                 case .playlists:
                     PlaylistsView()
                 case .search:
-                    SearchView()
+                    SearchView(
+                        requestedQuery:
+                            requestedSearchQuery
+                    )
                 case .settings:
                     SettingsView()
                 }
@@ -67,6 +75,10 @@ struct RootView: View {
 
             ForEach(AppSection.allCases) { item in
                 Button {
+                    if item == .search {
+                        requestedSearchQuery = nil
+                    }
+
                     selection = item
                 } label: {
                     HStack(spacing: 18) {

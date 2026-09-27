@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct HomeView: View {
+    var onSearch: (String) -> Void = { _ in }
+
     private static let refreshInterval: TimeInterval =
         3 * 60 * 60
 
@@ -42,27 +44,42 @@ struct HomeView: View {
                         )
                     } else {
                         ForEach(sections) { section in
-                            VideoRow(
-                                title:
-                                    section.title.isEmpty
-                                    ? L10n.text(
-                                        "recommended",
-                                        languageCode: appLanguage
-                                    )
-                                    : section.title,
-                                videos: section.videos,
-                                isLoadingMore:
-                                    loadingSectionIDs
-                                        .contains(
-                                            section.id
+                            if !section.videos.isEmpty {
+                                VideoRow(
+                                    title:
+                                        section.title.isEmpty
+                                        ? L10n.text(
+                                            "recommended",
+                                            languageCode: appLanguage
                                         )
-                            ) {
-                                Task {
-                                    await loadMore(
-                                        sectionID:
-                                            section.id
-                                    )
+                                        : section.title,
+                                    videos: section.videos,
+                                    isLoadingMore:
+                                        loadingSectionIDs
+                                            .contains(
+                                                section.id
+                                            )
+                                ) {
+                                    Task {
+                                        await loadMore(
+                                            sectionID:
+                                                section.id
+                                        )
+                                    }
                                 }
+                            } else if !section.searchTiles.isEmpty {
+                                HomeSearchTileRow(
+                                    title:
+                                        section.title.isEmpty
+                                        ? L10n.text(
+                                            "search",
+                                            languageCode: appLanguage
+                                        )
+                                        : section.title,
+                                    tiles:
+                                        section.searchTiles,
+                                    onSearch: onSearch
+                                )
                             }
                         }
                     }
@@ -176,6 +193,7 @@ struct HomeView: View {
                             languageCode: appLanguage
                         ),
                         videos: videos,
+                        searchTiles: [],
                         continuationToken: nil
                     )
                 ]
@@ -315,6 +333,8 @@ struct HomeView: View {
                     videos:
                         sections[index].videos
                         + newVideos,
+                    searchTiles:
+                        sections[index].searchTiles,
                     continuationToken:
                         nextToken == token
                             && newVideos.isEmpty
@@ -324,6 +344,108 @@ struct HomeView: View {
         } catch {
             errorMessage =
                 error.localizedDescription
+        }
+    }
+}
+
+struct HomeSearchTileRow: View {
+    let title: String
+    let tiles: [YouTubeSearchTile]
+    let onSearch: (String) -> Void
+
+    var body: some View {
+        VStack(
+            alignment: .leading,
+            spacing: 20
+        ) {
+            Text(title)
+                .font(.title2.bold())
+
+            ScrollView(
+                .horizontal,
+                showsIndicators: false
+            ) {
+                LazyHStack(spacing: 28) {
+                    ForEach(tiles) { tile in
+                        Button {
+                            onSearch(tile.query)
+                        } label: {
+                            VStack(
+                                alignment: .leading,
+                                spacing: 10
+                            ) {
+                                ZStack {
+                                    RoundedRectangle(
+                                        cornerRadius: 18
+                                    )
+                                    .fill(
+                                        .white.opacity(
+                                            0.12
+                                        )
+                                    )
+
+                                    if let thumbnailURL =
+                                            tile.thumbnailURL {
+                                        AsyncImage(
+                                            url: thumbnailURL
+                                        ) { phase in
+                                            switch phase {
+                                            case .success(let image):
+                                                image
+                                                    .resizable()
+                                                    .scaledToFill()
+                                            case .failure:
+                                                Image(
+                                                    systemName:
+                                                        "magnifyingglass"
+                                                )
+                                                .font(
+                                                    .system(
+                                                        size: 58
+                                                    )
+                                                )
+                                            case .empty:
+                                                ProgressView()
+                                            @unknown default:
+                                                EmptyView()
+                                            }
+                                        }
+                                    } else {
+                                        Image(
+                                            systemName:
+                                                "magnifyingglass"
+                                        )
+                                        .font(
+                                            .system(
+                                                size: 58
+                                            )
+                                        )
+                                    }
+                                }
+                                .frame(
+                                    width: 320,
+                                    height: 180
+                                )
+                                .clipped()
+                                .clipShape(
+                                    RoundedRectangle(
+                                        cornerRadius: 18
+                                    )
+                                )
+
+                                Text(tile.title)
+                                    .font(.headline)
+                                    .lineLimit(2)
+                                    .frame(
+                                        width: 320,
+                                        alignment: .leading
+                                    )
+                            }
+                        }
+                        .buttonStyle(.card)
+                    }
+                }
+            }
         }
     }
 }

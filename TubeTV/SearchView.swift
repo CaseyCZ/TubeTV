@@ -1,11 +1,20 @@
 import SwiftUI
 
 struct SearchView: View {
+    let requestedQuery: String?
+
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @State private var query = ""
     @State private var results: [VideoItem] = []
     @State private var isSearching = false
     @State private var errorMessage: String?
+
+    init(
+        requestedQuery: String? = nil
+    ) {
+        self.requestedQuery =
+            requestedQuery
+    }
 
     private var directVideoID: String? {
         StreamResolver.videoID(from: query)
@@ -74,6 +83,25 @@ struct SearchView: View {
             .padding(48)
             .navigationDestination(for: VideoItem.self) { video in
                 VideoDetailView(video: video)
+            }
+            .task(id: requestedQuery) {
+                guard let requestedQuery else {
+                    return
+                }
+
+                let trimmed =
+                    requestedQuery
+                        .trimmingCharacters(
+                            in:
+                                .whitespacesAndNewlines
+                        )
+
+                guard !trimmed.isEmpty else {
+                    return
+                }
+
+                query = trimmed
+                await runSearch()
             }
         }
     }

@@ -8,10 +8,18 @@ struct YouTubePlaylistItem: Identifiable, Hashable {
     let thumbnailURL: URL?
 }
 
+struct YouTubeSearchTile: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let query: String
+    let thumbnailURL: URL?
+}
+
 struct YouTubeHomeSection: Identifiable, Hashable {
     let id: String
     let title: String
     let videos: [VideoItem]
+    let searchTiles: [YouTubeSearchTile]
     let continuationToken: String?
 }
 
@@ -551,8 +559,11 @@ actor InnerTubeService {
 
         for (index, shelf) in shelves.enumerated() {
             let videos = extractVideos(from: shelf)
+            let searchTiles =
+                extractSearchTiles(from: shelf)
 
-            guard !videos.isEmpty else {
+            guard !videos.isEmpty
+                    || !searchTiles.isEmpty else {
                 continue
             }
 
@@ -568,12 +579,18 @@ actor InnerTubeService {
                 )
                 ?? ""
 
+            let identity =
+                videos.first?.id
+                ?? searchTiles.first?.id
+                ?? "section"
+
             sections.append(
                 YouTubeHomeSection(
                     id:
-                        "home-\(index)-\(videos[0].id)",
+                        "home-\(index)-\(identity)",
                     title: title,
                     videos: videos,
+                    searchTiles: searchTiles,
                     continuationToken:
                         nextContinuationToken(
                             from: shelf
@@ -597,12 +614,94 @@ actor InnerTubeService {
                 id: "home-feed",
                 title: "",
                 videos: videos,
+                searchTiles: [],
                 continuationToken:
                     nextContinuationToken(
                         from: root
                     )
             )
         ]
+    }
+
+    private static func extractSearchTiles(
+        from root: Any
+    ) -> [YouTubeSearchTile] {
+        var dictionaries: [[String: Any]] = []
+        collectDictionaries(
+            from: root,
+            into: &dictionaries
+        )
+
+        var seen = Set<String>()
+        var result: [YouTubeSearchTile] = []
+
+        for dictionary in dictionaries {
+            guard let renderer =
+                    dictionary["tileRenderer"]
+                    as? [String: Any],
+                  renderer["contentType"]
+                    as? String
+                    == "TILE_CONTENT_TYPE_EDU",
+                  let query =
+                    searchQuery(from: renderer),
+                  !query.isEmpty,
+                  seen.insert(query).inserted else {
+                continue
+            }
+
+            let title =
+                metadataTexts(from: renderer)
+                    .first(where: {
+                        !$0.isEmpty
+                            && $0 != query
+                    })
+                ?? query
+
+            result.append(
+                YouTubeSearchTile(
+                    id: "search-\(query)",
+                    title: title,
+                    query: query,
+                    thumbnailURL:
+                        firstThumbnailURL(
+                            in: renderer
+                        )
+                )
+            )
+        }
+
+        return result
+    }
+
+    private static func searchQuery(
+        from node: Any
+    ) -> String? {
+        if let dictionary = node as? [String: Any] {
+            if let endpoint =
+                    dictionary["searchEndpoint"]
+                    as? [String: Any],
+               let query =
+                    endpoint["query"] as? String,
+               !query.isEmpty {
+                return query
+            }
+
+            for value in dictionary.values {
+                if let query =
+                        searchQuery(from: value) {
+                    return query
+                }
+            }
+        } else if let array = node as? [Any] {
+            for value in array {
+                if let query =
+                        searchQuery(from: value) {
+                    return query
+                }
+            }
+        }
+
+        return nil
     }
 
     private static func collectHomeShelfRenderers(
