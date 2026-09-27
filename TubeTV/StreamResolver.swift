@@ -29,6 +29,18 @@ enum StreamResolver {
             throw StreamResolverError.invalidVideoID
         }
 
+        if await SmartTubeAuthService.shared.signedIn() {
+            do {
+                return try await AuthenticatedPlayerService.shared.resolve(
+                    videoID: videoID,
+                    preferredQuality: preferredQuality
+                )
+            } catch {
+                // Keep SmartTube-style auth as the preferred path, but
+                // fall back to YouTubeKit so normal videos still play.
+            }
+        }
+
         let streams = try await YouTube(videoID: videoID).streams
 
         let combined = streams
