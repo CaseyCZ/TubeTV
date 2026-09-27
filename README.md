@@ -41,6 +41,9 @@ No XcodeGen or generated workspace is required.
 - Multiple YouTube / Brand Account profile selection via X-Goog-Pageid
 - Settings for automatic captions and translation
 - In-player settings panel for quality, subtitles and playback speed
+- Actual AVFoundation format inspection: resolution, FPS, SDR/HDR and codec
+- Apple TV HDR eligibility check through AVPlayer
+- VideoToolbox hardware codec checks for H.264, HEVC and AV1
 - Live quality switching while preserving the current playback position
 - Full YouTube subtitle language list with native tracks and automatic translations
 
