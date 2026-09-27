@@ -109,12 +109,6 @@ actor AuthenticatedPlayerService {
         let playerClientVersion = "5.20260901"
         let playerUserAgent =
             "Mozilla/5.0 (DirectFB; Linux x86_64) Cobalt/4.13031-qa (unlike Gecko) Starboard/1"
-        let playbackHeaders = PlaybackRequestHeaders(
-            userAgent: playerUserAgent,
-            referer: "https://www.youtube.com/tv",
-            clientProfile: "TV_AUTH"
-        )
-
         var client: [String: Any] = [
             "clientName": "TVHTML5",
             "clientVersion": playerClientVersion,
@@ -254,6 +248,26 @@ actor AuthenticatedPlayerService {
         let videos = adaptive
             .filter { $0.isAppleFriendlyVideo }
             .sorted(by: Self.videoSort)
+
+        let combinedVideoHeights = combined
+            .filter {
+                $0.mimeType.hasPrefix("video/mp4")
+            }
+            .compactMap { $0.height }
+
+        let availableHeights = Array(
+            Set(
+                combinedVideoHeights
+                + videos.compactMap { $0.height }
+            )
+        ).sorted(by: >)
+
+        let playbackHeaders = PlaybackRequestHeaders(
+            userAgent: playerUserAgent,
+            referer: "https://www.youtube.com/tv",
+            clientProfile: "TV_AUTH",
+            availableHeights: availableHeights
+        )
 
         let audios = adaptive
             .filter { $0.isAppleFriendlyAudio }
@@ -426,16 +440,11 @@ actor AuthenticatedPlayerService {
     }
 
     private static func requestedHeight(for preference: String) -> Int? {
-        switch preference {
-        case "1080p":
-            return 1080
-        case "1440p":
-            return 1440
-        case "2160p":
-            return 2160
-        default:
+        guard preference.hasSuffix("p") else {
             return nil
         }
+
+        return Int(preference.dropLast())
     }
 
     private static func generateCPN() -> String {
