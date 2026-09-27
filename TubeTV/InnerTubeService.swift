@@ -49,6 +49,11 @@ enum InnerTubeError: LocalizedError {
 actor InnerTubeService {
     static let shared = InnerTubeService()
 
+    func homeVideos() async throws -> [VideoItem] {
+        let root = try await browse("default")
+        return Self.extractVideos(from: root)
+    }
+
     func videos(for kind: AccountFeedKind) async throws -> [VideoItem] {
         let root = try await browse(kind.browseID)
         return Self.extractVideos(from: root)
