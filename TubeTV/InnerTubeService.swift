@@ -120,7 +120,7 @@ actor InnerTubeService {
             "clientVersion": SmartTubeAuthService.tvClientVersion,
             "clientScreen": "WATCH",
             "userAgent": SmartTubeAuthService.tvUserAgent,
-            "acceptLanguage": "cs",
+            "acceptLanguage": L10n.currentLanguageCode,
             "acceptRegion": "CZ",
             "utcOffsetMinutes": offsetMinutes,
             "webpSupport": false,
