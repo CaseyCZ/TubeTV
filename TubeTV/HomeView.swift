@@ -65,19 +65,20 @@ struct HomeView: View {
         defer { isLoading = false }
 
         do {
-            if await SmartTubeAuthService.shared.signedIn() {
-                do {
-                    videos = try await InnerTubeService.shared.homeVideos()
-                } catch {
-                    // Keep Home usable even if YouTube changes the signed TV feed.
-                    videos = try await YouTubeService.shared.home()
-                }
-            } else {
+            do {
+                // SmartTube uses the TV InnerTube Home for signed-in
+                // and anonymous browsing.
+                videos = try await InnerTubeService.shared.homeVideos()
+            } catch {
+                // Keep the public web parser only as a last-resort fallback.
                 videos = try await YouTubeService.shared.home()
             }
 
             if videos.isEmpty {
-                errorMessage = L10n.text("youtube_no_videos", languageCode: appLanguage)
+                errorMessage = L10n.text(
+                    "youtube_no_videos",
+                    languageCode: appLanguage
+                )
             }
         } catch {
             errorMessage = error.localizedDescription
