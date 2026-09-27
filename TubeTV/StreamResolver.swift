@@ -36,9 +36,17 @@ enum StreamResolver {
                     preferredQuality: preferredQuality
                 )
             } catch {
-                // Keep SmartTube-style auth as the preferred path, but
-                // fall back to YouTubeKit so normal videos still play.
+                // Continue with alternative ad-free player clients.
             }
+        }
+
+        do {
+            return try await AlternativePlayerService.shared.resolve(
+                videoID: videoID,
+                preferredQuality: preferredQuality
+            )
+        } catch {
+            // Final direct-stream fallback.
         }
 
         let streams = try await YouTube(videoID: videoID).streams
