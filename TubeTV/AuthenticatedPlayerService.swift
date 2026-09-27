@@ -563,7 +563,8 @@ actor AuthenticatedPlayerService {
 
         return String(
             (0..<16).map { _ in
-                alphabet.randomElement(using: &generator)!
+                alphabet.randomElement(using: &generator)
+                    ?? "A"
             }
         )
     }
