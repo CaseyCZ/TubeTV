@@ -6,7 +6,9 @@ struct ChannelView: View {
     let fallbackTitle: String
 
     @State private var page: YouTubeChannelPage?
+    @State private var continuationToken: String?
     @State private var isLoading = true
+    @State private var isLoadingMore = false
     @State private var errorMessage: String?
 
     var body: some View {
@@ -73,11 +75,37 @@ struct ChannelView: View {
                         columns: [GridItem(.adaptive(minimum: 420), spacing: 28)],
                         spacing: 28
                     ) {
-                        ForEach(videos) { video in
+                        ForEach(
+                            videos.indices,
+                            id: \.self
+                        ) { index in
+                            let video = videos[index]
+
                             NavigationLink(value: video) {
                                 VideoCard(video: video)
                             }
                             .buttonStyle(.card)
+                            .onAppear {
+                                let threshold =
+                                    max(
+                                        0,
+                                        videos.count - 4
+                                    )
+
+                                if index >= threshold {
+                                    Task {
+                                        await loadMore()
+                                    }
+                                }
+                            }
+                        }
+
+                        if isLoadingMore {
+                            ProgressView()
+                                .frame(
+                                    width: 420,
+                                    height: 236
+                                )
                         }
                     }
                 }
@@ -101,12 +129,30 @@ struct ChannelView: View {
         do {
             if await SmartTubeAuthService.shared.signedIn() {
                 do {
-                    page = try await InnerTubeService.shared.channel(channelID)
+                    let result =
+                        try await InnerTubeService.shared
+                            .channelPage(
+                                channelID
+                            )
+
+                    page = result.page
+                    continuationToken =
+                        result.continuationToken
                 } catch {
-                    page = try await YouTubeService.shared.channel(channelID)
+                    page =
+                        try await YouTubeService.shared
+                            .channel(
+                                channelID
+                            )
+                    continuationToken = nil
                 }
             } else {
-                page = try await YouTubeService.shared.channel(channelID)
+                page =
+                    try await YouTubeService.shared
+                        .channel(
+                            channelID
+                        )
+                continuationToken = nil
             }
 
             if page?.videos.isEmpty == true {
@@ -114,6 +160,57 @@ struct ChannelView: View {
             }
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func loadMore() async {
+        guard !isLoadingMore,
+              let token = continuationToken,
+              !token.isEmpty,
+              let currentPage = page else {
+            return
+        }
+
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+
+        do {
+            let result =
+                try await InnerTubeService.shared
+                    .continueChannelVideos(
+                        token
+                    )
+
+            var seen = Set(
+                currentPage.videos.map(\.id)
+            )
+            let newVideos =
+                result.videos.filter {
+                    seen.insert($0.id).inserted
+                }
+
+            page = YouTubeChannelPage(
+                id: currentPage.id,
+                title: currentPage.title,
+                description: currentPage.description,
+                avatarURL: currentPage.avatarURL,
+                videos:
+                    currentPage.videos
+                    + newVideos
+            )
+
+            let nextToken =
+                result.continuationToken
+
+            continuationToken =
+                nextToken == token
+                    && newVideos.isEmpty
+                ? nil
+                : nextToken
+        } catch {
+            errorMessage =
+                error.localizedDescription
         }
     }
 }

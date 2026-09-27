@@ -331,6 +331,17 @@ actor InnerTubeService {
     }
 
     func channel(_ channelID: String) async throws -> YouTubeChannelPage {
+        try await channelPage(
+            channelID
+        ).page
+    }
+
+    func channelPage(
+        _ channelID: String
+    ) async throws -> (
+        page: YouTubeChannelPage,
+        continuationToken: String?
+    ) {
         let root = try await browse(
             channelID,
             params: "EgZ2aWRlb3PyBgQKAjoA"
@@ -338,12 +349,32 @@ actor InnerTubeService {
 
         let metadata = Self.channelMetadata(from: root)
 
-        return YouTubeChannelPage(
-            id: channelID,
-            title: metadata.title ?? "YouTube channel",
-            description: metadata.description ?? "",
-            avatarURL: metadata.avatarURL,
-            videos: Self.extractVideos(from: root)
+        return (
+            YouTubeChannelPage(
+                id: channelID,
+                title: metadata.title ?? "YouTube channel",
+                description: metadata.description ?? "",
+                avatarURL: metadata.avatarURL,
+                videos: Self.extractVideos(from: root)
+            ),
+            Self.nextContinuationToken(from: root)
+        )
+    }
+
+    func continueChannelVideos(
+        _ continuationToken: String
+    ) async throws -> (
+        videos: [VideoItem],
+        continuationToken: String?
+    ) {
+        let root = try await browse(
+            nil,
+            continuation: continuationToken
+        )
+
+        return (
+            Self.extractVideos(from: root),
+            Self.nextContinuationToken(from: root)
         )
     }
 
