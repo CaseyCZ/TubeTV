@@ -16,6 +16,8 @@
 		A00000000000000000000107 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000007 /* SettingsView.swift */; };
 		A00000000000000000000108 /* YouTubeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000008 /* YouTubeService.swift */; };
 		A00000000000000000000109 /* CaptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000009 /* CaptionService.swift */; };
+		A00000000000000000000110 /* StreamResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000011 /* StreamResolver.swift */; };
+		A00000000000000000000111 /* YouTubeKit in Frameworks */ = {isa = PBXBuildFile; productRef = A00000000000000000000B01 /* YouTubeKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -29,6 +31,7 @@
 		A00000000000000000000008 /* YouTubeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/YouTubeService.swift; sourceTree = SOURCE_ROOT; };
 		A00000000000000000000009 /* CaptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/CaptionService.swift; sourceTree = SOURCE_ROOT; };
 		A00000000000000000000010 /* TubeTV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TubeTV.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A00000000000000000000011 /* StreamResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/StreamResolver.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -36,6 +39,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A00000000000000000000111 /* YouTubeKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -62,6 +66,7 @@
 				A00000000000000000000007 /* SettingsView.swift */,
 				A00000000000000000000008 /* YouTubeService.swift */,
 				A00000000000000000000009 /* CaptionService.swift */,
+				A00000000000000000000011 /* StreamResolver.swift */,
 			);
 			name = Sources;
 			sourceTree = "<group>";
@@ -90,6 +95,9 @@
 			dependencies = (
 			);
 			name = TubeTV;
+			packageProductDependencies = (
+				A00000000000000000000B01 /* YouTubeKit */,
+			);
 			productName = TubeTV;
 			productReference = A00000000000000000000010 /* TubeTV.app */;
 			productType = "com.apple.product-type.application";
@@ -119,6 +127,9 @@
 			);
 			mainGroup = A00000000000000000000301;
 			productRefGroup = A00000000000000000000303 /* Products */;
+			packageReferences = (
+				A00000000000000000000A01 /* XCRemoteSwiftPackageReference "YouTubeKit" */,
+			);
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -151,6 +162,7 @@
 				A00000000000000000000107 /* SettingsView.swift in Sources */,
 				A00000000000000000000108 /* YouTubeService.swift in Sources */,
 				A00000000000000000000109 /* CaptionService.swift in Sources */,
+				A00000000000000000000110 /* StreamResolver.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -228,6 +240,25 @@
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A00000000000000000000A01 /* XCRemoteSwiftPackageReference "YouTubeKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/alexeichhorn/YouTubeKit.git";
+			requirement = {
+				kind = exactVersion;
+				version = 0.4.8;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A00000000000000000000B01 /* YouTubeKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A00000000000000000000A01 /* XCRemoteSwiftPackageReference "YouTubeKit" */;
+			productName = YouTubeKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCConfigurationList section */
 		A00000000000000000000801 /* Build configuration list for PBXProject "TubeTV" */ = {
