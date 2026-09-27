@@ -59,6 +59,15 @@ actor InnerTubeService {
         return Self.extractPlaylists(from: root)
     }
 
+    func playlistVideos(_ playlistID: String) async throws -> [VideoItem] {
+        let browseID = playlistID.hasPrefix("VL")
+            ? playlistID
+            : "VL\(playlistID)"
+
+        let root = try await browse(browseID)
+        return Self.extractVideos(from: root)
+    }
+
     private func browse(_ browseID: String) async throws -> Any {
         guard await SmartTubeAuthService.shared.signedIn() else {
             throw InnerTubeError.notSignedIn
