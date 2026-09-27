@@ -8,6 +8,12 @@ struct YouTubePlaylistItem: Identifiable, Hashable {
     let thumbnailURL: URL?
 }
 
+struct YouTubeSubscribedChannel: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let thumbnailURL: URL?
+}
+
 struct YouTubeSearchTile: Identifiable, Hashable {
     let id: String
     let title: String
@@ -250,6 +256,16 @@ actor InnerTubeService {
         return (
             Self.extractVideos(from: root),
             Self.nextContinuationToken(from: root)
+        )
+    }
+
+    func subscribedChannels() async throws -> [YouTubeSubscribedChannel] {
+        let root = try await browse(
+            AccountFeedKind.subscriptions.browseID
+        )
+
+        return Self.extractSubscribedChannels(
+            from: root
         )
     }
 
@@ -1252,6 +1268,51 @@ actor InnerTubeService {
         }
 
         return nil
+    }
+
+    private static func extractSubscribedChannels(
+        from root: Any
+    ) -> [YouTubeSubscribedChannel] {
+        var candidates: [[String: Any]] = []
+        collectDictionaries(
+            from: root,
+            into: &candidates
+        )
+
+        var seen = Set<String>()
+        var result: [YouTubeSubscribedChannel] = []
+
+        for dictionary in candidates {
+            guard let renderer =
+                    dictionary["tabRenderer"]
+                    as? [String: Any],
+                  let channelID =
+                    findChannelID(in: renderer),
+                  channelID.hasPrefix("UC"),
+                  seen.insert(channelID).inserted else {
+                continue
+            }
+
+            let title =
+                firstText(
+                    in: renderer,
+                    keys: ["title"]
+                )
+                ?? "YouTube"
+
+            result.append(
+                YouTubeSubscribedChannel(
+                    id: channelID,
+                    title: title,
+                    thumbnailURL:
+                        firstThumbnailURL(
+                            in: renderer
+                        )
+                )
+            )
+        }
+
+        return result
     }
 
     private static func extractPlaylists(

@@ -588,3 +588,175 @@ struct PlaylistCard: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
+
+
+struct SubscribedChannelsView: View {
+    @AppStorage("appLanguage") private var appLanguage =
+        AppLanguage.english.rawValue
+
+    @State private var channels: [YouTubeSubscribedChannel] = []
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVStack(
+                    alignment: .leading,
+                    spacing: 28
+                ) {
+                    HStack {
+                        Label(
+                            L10n.text(
+                                "channels",
+                                languageCode: appLanguage
+                            ),
+                            systemImage: "rectangle.stack.person.crop.fill"
+                        )
+                        .font(.largeTitle.bold())
+
+                        Spacer()
+
+                        if isLoading {
+                            ProgressView()
+                        }
+                    }
+
+                    if let errorMessage {
+                        VStack(
+                            alignment: .leading,
+                            spacing: 14
+                        ) {
+                            Label(
+                                errorMessage,
+                                systemImage:
+                                    "exclamationmark.triangle.fill"
+                            )
+                            .foregroundStyle(.red)
+
+                            Text(
+                                L10n.text(
+                                    "sign_in_hint",
+                                    languageCode: appLanguage
+                                )
+                            )
+                            .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    LazyVGrid(
+                        columns: [
+                            GridItem(
+                                .adaptive(
+                                    minimum: 260
+                                ),
+                                spacing: 28
+                            )
+                        ],
+                        spacing: 28
+                    ) {
+                        ForEach(channels) { channel in
+                            NavigationLink {
+                                ChannelView(
+                                    channelID: channel.id,
+                                    fallbackTitle:
+                                        channel.title
+                                )
+                            } label: {
+                                VStack(
+                                    spacing: 14
+                                ) {
+                                    Group {
+                                        if let url =
+                                                channel.thumbnailURL {
+                                            AsyncImage(
+                                                url: url
+                                            ) { phase in
+                                                switch phase {
+                                                case .success(
+                                                    let image
+                                                ):
+                                                    image
+                                                        .resizable()
+                                                        .scaledToFill()
+                                                case .empty:
+                                                    ProgressView()
+                                                default:
+                                                    Image(
+                                                        systemName:
+                                                            "person.crop.circle.fill"
+                                                    )
+                                                    .resizable()
+                                                    .scaledToFit()
+                                                    .foregroundStyle(
+                                                        .secondary
+                                                    )
+                                                }
+                                            }
+                                        } else {
+                                            Image(
+                                                systemName:
+                                                    "person.crop.circle.fill"
+                                            )
+                                            .resizable()
+                                            .scaledToFit()
+                                            .foregroundStyle(
+                                                .secondary
+                                            )
+                                        }
+                                    }
+                                    .frame(
+                                        width: 210,
+                                        height: 210
+                                    )
+                                    .clipShape(Circle())
+
+                                    Text(channel.title)
+                                        .font(.headline)
+                                        .lineLimit(2)
+                                        .multilineTextAlignment(
+                                            .center
+                                        )
+                                        .frame(
+                                            width: 240
+                                        )
+                                }
+                                .padding(16)
+                            }
+                            .buttonStyle(.card)
+                        }
+                    }
+                }
+                .padding(48)
+            }
+            .task {
+                await load()
+            }
+        }
+    }
+
+    @MainActor
+    private func load() async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            channels =
+                try await InnerTubeService.shared
+                    .subscribedChannels()
+
+            if channels.isEmpty {
+                errorMessage =
+                    L10n.text(
+                        "youtube_no_channels",
+                        languageCode: appLanguage
+                    )
+            }
+        } catch {
+            channels = []
+            errorMessage =
+                error.localizedDescription
+        }
+    }
+}

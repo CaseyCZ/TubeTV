@@ -3,6 +3,7 @@ import SwiftUI
 enum AppSection: String, CaseIterable, Identifiable {
     case home
     case subscriptions
+    case channels
     case history
     case playlists
     case search
@@ -18,6 +19,8 @@ enum AppSection: String, CaseIterable, Identifiable {
         switch self {
         case .home: return "house.fill"
         case .subscriptions: return "person.2.fill"
+        case .channels:
+            return "rectangle.stack.person.crop.fill"
         case .history: return "clock.arrow.circlepath"
         case .playlists: return "rectangle.stack.fill"
         case .search: return "magnifyingglass"
@@ -47,6 +50,8 @@ struct RootView: View {
                     }
                 case .subscriptions:
                     AccountFeedView(kind: .subscriptions)
+                case .channels:
+                    SubscribedChannelsView()
                 case .history:
                     AccountFeedView(kind: .history)
                 case .playlists:
