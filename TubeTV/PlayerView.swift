@@ -631,10 +631,15 @@ final class NativePlayerModel: ObservableObject {
     }
 
     var canSwitchAudioTracks: Bool {
-        currentSource.activeAudioTrackID != nil
-            && currentSource
+        if currentSource.activeAudioTrackID != nil {
+            return currentSource
                 .availableAudioTracks
                 .count > 1
+        }
+
+        return activeAudioTrackID?
+            .hasPrefix("native:") == true
+            && availableAudioTracks.count > 1
     }
 
     func changeAudio(
@@ -642,8 +647,18 @@ final class NativePlayerModel: ObservableObject {
     ) async {
         guard !isSwitchingAudio,
               !isSwitchingQuality,
-              track.id != activeAudioTrackID,
-              let newSource =
+              track.id != activeAudioTrackID else {
+            return
+        }
+
+        if track.id.hasPrefix("native:") {
+            await changeNativeAudio(
+                track
+            )
+            return
+        }
+
+        guard let newSource =
                 currentSource
                     .replacingAudioTrack(
                         id: track.id
@@ -723,6 +738,43 @@ final class NativePlayerModel: ObservableObject {
                 play()
             }
         }
+    }
+
+    private func changeNativeAudio(
+        _ track: PlayerAudioTrackInfo
+    ) async {
+        guard let item = player.currentItem,
+              let group = try? await item.asset
+                .loadMediaSelectionGroup(
+                    for: .audible
+                ),
+              let rawIndex = track.id
+                .split(separator: ":")
+                .last,
+              let index = Int(rawIndex),
+              group.options.indices
+                .contains(index) else {
+            return
+        }
+
+        isSwitchingAudio = true
+        errorMessage = nil
+
+        let option = group.options[index]
+
+        player.appliesMediaSelectionCriteriaAutomatically =
+            false
+        item.select(
+            option,
+            in: group
+        )
+        activeAudioTrackID = track.id
+
+        playbackLogger.notice(
+            "Native audio switch track=\(track.id, privacy: .public) language=\(track.languageCode, privacy: .public)"
+        )
+
+        isSwitchingAudio = false
     }
 
     func disableCaptions() {
@@ -966,7 +1018,8 @@ final class NativePlayerModel: ObservableObject {
         let youtubeTracks =
             source.availableAudioTracks
 
-        if !youtubeTracks.isEmpty {
+        if source.activeAudioTrackID != nil,
+           !youtubeTracks.isEmpty {
             activeAudioTrackID =
                 source.activeAudioTrackID
 
@@ -996,6 +1049,30 @@ final class NativePlayerModel: ObservableObject {
             availableAudioTracks = []
             return
         }
+
+        let selectedOption =
+            item.currentMediaSelection
+                .selectedMediaOption(
+                    in: group
+                )
+
+        let selectedIndex =
+            selectedOption.flatMap {
+                selected in
+                group.options.firstIndex(
+                    where: {
+                        $0 === selected
+                    }
+                )
+            }
+            ?? group.defaultOption.flatMap {
+                defaultOption in
+                group.options.firstIndex(
+                    where: {
+                        $0 === defaultOption
+                    }
+                )
+            }
 
         let mainOptions = group.options.filter {
             $0.hasMediaCharacteristic(
@@ -1059,7 +1136,7 @@ final class NativePlayerModel: ObservableObject {
 
                 return PlayerAudioTrackInfo(
                     id:
-                        "\(languageCode)-\(index)",
+                        "native:\(index)",
                     name: localizedName,
                     languageCode:
                         languageCode,
@@ -1119,9 +1196,13 @@ final class NativePlayerModel: ObservableObject {
         }
 
         availableAudioTracks = tracks
+        activeAudioTrackID =
+            selectedIndex.map {
+                "native:\($0)"
+            }
 
         playbackLogger.notice(
-            "Audio tracks loaded count=\(tracks.count, privacy: .public) original=\(tracks.first(where: { $0.isOriginal })?.languageCode ?? "none", privacy: .public)"
+            "Audio tracks loaded count=\(tracks.count, privacy: .public) selected=\(self.activeAudioTrackID ?? "none", privacy: .public) original=\(tracks.first(where: { $0.isOriginal })?.languageCode ?? "none", privacy: .public)"
         )
     }
 
