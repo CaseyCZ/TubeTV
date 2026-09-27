@@ -1,0 +1,308 @@
+name: Prepare TubeTV tvOS Icon
+
+on:
+  push:
+    branches:
+      - Master
+    paths:
+      - ".github/tubetv-icon-source.png"
+      - ".github/workflows/prepare-tvos-icon.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  prepare-icon:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Generate tvOS app icon assets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SOURCE=".github/tubetv-icon-source.png"
+          CATALOG="TubeTV/Assets.xcassets"
+          BRAND="$CATALOG/AppIcon.brandassets"
+          SMALL="$BRAND/App Icon - Small.imagestack"
+          LARGE="$BRAND/App Icon - Large.imagestack"
+
+          rm -rf "$CATALOG"
+          mkdir -p \
+            "$SMALL/Back.imagestacklayer/Content.imageset" \
+            "$SMALL/Front.imagestacklayer/Content.imageset" \
+            "$LARGE/Back.imagestacklayer/Content.imageset" \
+            "$LARGE/Front.imagestacklayer/Content.imageset"
+
+          cp "$SOURCE" "$SMALL/Back.imagestacklayer/Content.imageset/icon-back.png"
+          sips -z 480 800 "$SOURCE" --out "$SMALL/Back.imagestacklayer/Content.imageset/icon-back@2x.png" >/dev/null
+          sips -z 768 1280 "$SOURCE" --out "$LARGE/Back.imagestacklayer/Content.imageset/icon-back.png" >/dev/null
+
+          python3 <<'PY'
+          import binascii
+          import struct
+          import zlib
+          from pathlib import Path
+
+          def chunk(kind, payload):
+              return (
+                  struct.pack(">I", len(payload))
+                  + kind
+                  + payload
+                  + struct.pack(">I", binascii.crc32(kind + payload) & 0xFFFFFFFF)
+              )
+
+          def transparent_png(path, width, height):
+              signature = b"\x89PNG\r\n\x1a\n"
+              ihdr = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+              row = b"\x00" + (b"\x00\x00\x00\x00" * width)
+              raw = row * height
+              data = (
+                  signature
+                  + chunk(b"IHDR", ihdr)
+                  + chunk(b"IDAT", zlib.compress(raw, 9))
+                  + chunk(b"IEND", b"")
+              )
+              Path(path).write_bytes(data)
+
+          root = Path("TubeTV/Assets.xcassets/AppIcon.brandassets")
+          transparent_png(root / "App Icon - Small.imagestack/Front.imagestacklayer/Content.imageset/icon-front.png", 400, 240)
+          transparent_png(root / "App Icon - Small.imagestack/Front.imagestacklayer/Content.imageset/icon-front@2x.png", 800, 480)
+          transparent_png(root / "App Icon - Large.imagestack/Front.imagestacklayer/Content.imageset/icon-front.png", 1280, 768)
+          PY
+
+          cat > "$CATALOG/Contents.json" <<'JSON'
+          {
+            "info" : {
+              "author" : "xcode",
+              "version" : 1
+            }
+          }
+          JSON
+
+          cat > "$BRAND/Contents.json" <<'JSON'
+          {
+            "assets" : [
+              {
+                "size" : "1280x768",
+                "idiom" : "tv",
+                "filename" : "App Icon - Large.imagestack",
+                "role" : "primary-app-icon"
+              },
+              {
+                "size" : "400x240",
+                "idiom" : "tv",
+                "filename" : "App Icon - Small.imagestack",
+                "role" : "primary-app-icon"
+              }
+            ],
+            "info" : {
+              "author" : "xcode",
+              "version" : 1
+            }
+          }
+          JSON
+
+          cat > "$SMALL/Contents.json" <<'JSON'
+          {
+            "layers" : [
+              {
+                "filename" : "Front.imagestacklayer"
+              },
+              {
+                "filename" : "Back.imagestacklayer"
+              }
+            ],
+            "info" : {
+              "author" : "xcode",
+              "version" : 1
+            },
+            "properties" : {
+              "canvasSize" : {
+                "width" : 400,
+                "height" : 240
+              }
+            }
+          }
+          JSON
+
+          cat > "$LARGE/Contents.json" <<'JSON'
+          {
+            "layers" : [
+              {
+                "filename" : "Front.imagestacklayer"
+              },
+              {
+                "filename" : "Back.imagestacklayer"
+              }
+            ],
+            "info" : {
+              "author" : "xcode",
+              "version" : 1
+            },
+            "properties" : {
+              "canvasSize" : {
+                "width" : 1280,
+                "height" : 768
+              }
+            }
+          }
+          JSON
+
+          for LAYER in \
+            "$SMALL/Back.imagestacklayer" \
+            "$SMALL/Front.imagestacklayer" \
+            "$LARGE/Back.imagestacklayer" \
+            "$LARGE/Front.imagestacklayer"; do
+            cat > "$LAYER/Contents.json" <<'JSON'
+          {
+            "info" : {
+              "author" : "xcode",
+              "version" : 1
+            }
+          }
+          JSON
+          done
+
+          cat > "$SMALL/Back.imagestacklayer/Content.imageset/Contents.json" <<'JSON'
+          {
+            "images" : [
+              {
+                "filename" : "icon-back.png",
+                "idiom" : "universal",
+                "scale" : "1x"
+              },
+              {
+                "filename" : "icon-back@2x.png",
+                "idiom" : "universal",
+                "scale" : "2x"
+              }
+            ],
+            "info" : {
+              "author" : "xcode",
+              "version" : 1
+            }
+          }
+          JSON
+
+          cat > "$SMALL/Front.imagestacklayer/Content.imageset/Contents.json" <<'JSON'
+          {
+            "images" : [
+              {
+                "filename" : "icon-front.png",
+                "idiom" : "universal",
+                "scale" : "1x"
+              },
+              {
+                "filename" : "icon-front@2x.png",
+                "idiom" : "universal",
+                "scale" : "2x"
+              }
+            ],
+            "info" : {
+              "author" : "xcode",
+              "version" : 1
+            }
+          }
+          JSON
+
+          cat > "$LARGE/Back.imagestacklayer/Content.imageset/Contents.json" <<'JSON'
+          {
+            "images" : [
+              {
+                "filename" : "icon-back.png",
+                "idiom" : "universal",
+                "scale" : "1x"
+              }
+            ],
+            "info" : {
+              "author" : "xcode",
+              "version" : 1
+            }
+          }
+          JSON
+
+          cat > "$LARGE/Front.imagestacklayer/Content.imageset/Contents.json" <<'JSON'
+          {
+            "images" : [
+              {
+                "filename" : "icon-front.png",
+                "idiom" : "universal",
+                "scale" : "1x"
+              }
+            ],
+            "info" : {
+              "author" : "xcode",
+              "version" : 1
+            }
+          }
+          JSON
+
+      - name: Add asset catalog to Xcode project
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path("TubeTV.xcodeproj/project.pbxproj")
+          s = path.read_text()
+
+          build_file = '\t\tA00000000000000000000122 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000022 /* Assets.xcassets */; };\n'
+          file_ref = '\t\tA00000000000000000000022 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = TubeTV/Assets.xcassets; sourceTree = SOURCE_ROOT; };\n'
+
+          if "A00000000000000000000122 /* Assets.xcassets in Resources */" not in s:
+              s = s.replace(
+                  "/* End PBXBuildFile section */",
+                  build_file + "/* End PBXBuildFile section */",
+                  1,
+              )
+
+          if "A00000000000000000000022 /* Assets.xcassets */" not in s:
+              s = s.replace(
+                  "/* End PBXFileReference section */",
+                  file_ref + "/* End PBXFileReference section */",
+                  1,
+              )
+
+          group_marker = "\t\t\t\tA00000000000000000000302 /* Sources */,\n"
+          asset_group = "\t\t\t\tA00000000000000000000022 /* Assets.xcassets */,\n"
+          if asset_group not in s:
+              if group_marker not in s:
+                  raise SystemExit("Main project group marker not found")
+              s = s.replace(group_marker, group_marker + asset_group, 1)
+
+          resources_marker = "\t\t\tfiles = (\n\t\t\t);\n\t\t\trunOnlyForDeploymentPostprocessing = 0;\n\t\t};\n/* End PBXResourcesBuildPhase section */"
+          resources_with_asset = "\t\t\tfiles = (\n\t\t\t\tA00000000000000000000122 /* Assets.xcassets in Resources */,\n\t\t\t);\n\t\t\trunOnlyForDeploymentPostprocessing = 0;\n\t\t};\n/* End PBXResourcesBuildPhase section */"
+          if "A00000000000000000000122 /* Assets.xcassets in Resources */," not in s:
+              if resources_marker not in s:
+                  raise SystemExit("Resources build phase marker not found")
+              s = s.replace(resources_marker, resources_with_asset, 1)
+
+          target_config_anchor = "\t\t\tbuildSettings = {\n\t\t\t\tCODE_SIGN_STYLE = Automatic;"
+          replacement = "\t\t\tbuildSettings = {\n\t\t\t\tASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;\n\t\t\t\tCODE_SIGN_STYLE = Automatic;"
+          count = s.count(target_config_anchor)
+          if "ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;" not in s:
+              if count != 2:
+                  raise SystemExit(f"Expected 2 target build configurations, found {count}")
+              s = s.replace(target_config_anchor, replacement)
+
+          path.write_text(s)
+          PY
+
+      - name: Commit generated tvOS icon
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add TubeTV/Assets.xcassets TubeTV.xcodeproj/project.pbxproj
+          if git diff --cached --quiet; then
+            echo "No icon changes to commit."
+            exit 0
+          fi
+          git commit -m "Add tvOS app icon assets"
+          git push origin HEAD:Master
