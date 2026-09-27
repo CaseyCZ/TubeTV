@@ -1749,14 +1749,8 @@ actor InnerTubeService {
             }
 
             let title =
-                firstText(
-                    in: shelf,
-                    keys: [
-                        "title",
-                        "headline",
-                        "header",
-                        "primaryText"
-                    ]
+                homeShelfTitle(
+                    from: shelf
                 )
                 ?? ""
 
@@ -1802,6 +1796,52 @@ actor InnerTubeService {
                     )
             )
         ]
+    }
+
+    private static func homeShelfTitle(
+        from shelf: [String: Any]
+    ) -> String? {
+        if let title =
+                text(
+                    from: shelf["title"] as Any
+                ),
+           !title.isEmpty {
+            return title
+        }
+
+        if let headerTitle =
+                nested(
+                    shelf,
+                    path: [
+                        "headerRenderer",
+                        "shelfHeaderRenderer",
+                        "title"
+                    ]
+                ),
+           let title =
+                text(from: headerTitle),
+           !title.isEmpty {
+            return title
+        }
+
+        if let avatarTitle =
+                nested(
+                    shelf,
+                    path: [
+                        "headerRenderer",
+                        "shelfHeaderRenderer",
+                        "avatarLockup",
+                        "avatarLockupRenderer",
+                        "title"
+                    ]
+                ),
+           let title =
+                text(from: avatarTitle),
+           !title.isEmpty {
+            return title
+        }
+
+        return nil
     }
 
     private static func extractSearchTiles(
