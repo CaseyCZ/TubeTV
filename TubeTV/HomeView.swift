@@ -1,11 +1,16 @@
 import SwiftUI
 
 struct HomeView: View {
+    private static let refreshInterval: TimeInterval =
+        3 * 60 * 60
+
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @State private var sections: [YouTubeHomeSection] = []
     @State private var loadingSectionIDs = Set<String>()
     @State private var isLoading = true
     @State private var errorMessage: String?
+    @State private var lastLoadedAt: Date?
 
     var body: some View {
         NavigationStack {
@@ -67,12 +72,39 @@ struct HomeView: View {
             .task {
                 await loadHome()
             }
+            .onChange(of: scenePhase) { newPhase in
+                guard newPhase == .active else {
+                    return
+                }
+
+                Task {
+                    await refreshHomeIfStale()
+                }
+            }
         }
     }
 
     @MainActor
-    private func loadHome() async {
-        guard sections.isEmpty else { return }
+    private func refreshHomeIfStale() async {
+        guard let lastLoadedAt else {
+            await loadHome()
+            return
+        }
+
+        guard Date()
+                .timeIntervalSince(lastLoadedAt)
+                >= Self.refreshInterval else {
+            return
+        }
+
+        await loadHome(force: true)
+    }
+
+    @MainActor
+    private func loadHome(
+        force: Bool = false
+    ) async {
+        guard force || sections.isEmpty else { return }
 
         isLoading = true
         errorMessage = nil
@@ -108,6 +140,8 @@ struct HomeView: View {
                     "youtube_no_videos",
                     languageCode: appLanguage
                 )
+            } else {
+                lastLoadedAt = Date()
             }
         } catch {
             errorMessage = error.localizedDescription
