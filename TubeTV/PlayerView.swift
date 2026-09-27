@@ -145,6 +145,7 @@ final class NativePlayerModel: ObservableObject {
     @Published private(set) var captionStatus: String?
     @Published private(set) var captionOptions: [CaptionLanguageOption] = []
     @Published private(set) var activeQuality: String
+    @Published private(set) var formatInfo: PlaybackFormatInfo?
     @Published private(set) var playbackRate: Float = 1.0
     @Published private(set) var captionsAreEnabled: Bool
     @Published private(set) var isSwitchingQuality = false
@@ -199,6 +200,7 @@ final class NativePlayerModel: ObservableObject {
         do {
             let item = try await makePlayerItem(from: currentSource)
             player.replaceCurrentItem(with: item)
+            await updateFormatInfo(from: item)
             isPreparing = false
             play()
             startCaptionLoadingIfNeeded()
@@ -206,8 +208,10 @@ final class NativePlayerModel: ObservableObject {
             loadCaptionOptions()
         } catch {
             if case let .adaptive(_, _, fallback?) = currentSource {
-                player.replaceCurrentItem(with: AVPlayerItem(url: fallback))
+                let fallbackItem = AVPlayerItem(url: fallback)
+                player.replaceCurrentItem(with: fallbackItem)
                 currentSource = .direct(fallback)
+                await updateFormatInfo(from: fallbackItem)
                 isPreparing = false
                 errorMessage =
                     "Vyšší kvalita nešla spojit, přehrávám kompatibilní variantu."
@@ -262,6 +266,7 @@ final class NativePlayerModel: ObservableObject {
             let newItem = try await makePlayerItem(from: newSource)
             currentSource = newSource
             player.replaceCurrentItem(with: newItem)
+            await updateFormatInfo(from: newItem)
 
             await seek(to: oldTime)
             activeQuality = quality
@@ -481,6 +486,14 @@ final class NativePlayerModel: ObservableObject {
         }
 
         return nil
+    }
+
+    private func updateFormatInfo(
+        from item: AVPlayerItem
+    ) async {
+        formatInfo = await PlaybackFormatInspector.inspect(
+            asset: item.asset
+        )
     }
 
     private func seek(to time: CMTime) async {
@@ -758,9 +771,12 @@ private struct PlayerSettingsOverlay: View {
         VStack(spacing: 14) {
             settingsButton(
                 title: "Kvalita",
-                value: model.activeQuality == "Auto"
-                    ? "Automaticky"
-                    : model.activeQuality,
+                value: model.formatInfo?.displayName
+                    ?? (
+                        model.activeQuality == "Auto"
+                            ? "Automaticky"
+                            : model.activeQuality
+                    ),
                 icon: "4k.tv"
             ) {
                 page = .quality
@@ -793,6 +809,23 @@ private struct PlayerSettingsOverlay: View {
                 qualityButton("1080p", label: "1080p")
                 qualityButton("1440p", label: "1440p")
                 qualityButton("2160p", label: "4K / 2160p")
+
+                if let format = model.formatInfo {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Aktuálně přehráváno")
+                            .font(.headline)
+
+                        Text(format.displayName)
+                            .foregroundStyle(.secondary)
+
+                        if format.width > 0 && format.height > 0 {
+                            Text("\(format.width) × \(format.height)")
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 18)
+                }
             }
         }
     }
