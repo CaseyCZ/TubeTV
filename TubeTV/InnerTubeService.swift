@@ -202,6 +202,8 @@ actor InnerTubeService {
                 ]
             ) ?? "YouTube"
 
+            let channelID = findChannelID(in: dictionary)
+
             let duration = firstText(
                 in: dictionary,
                 keys: ["lengthText", "durationText"]
@@ -233,7 +235,8 @@ actor InnerTubeService {
                     channel: channel,
                     subtitle: subtitle,
                     thumbnailURL: thumbnailURL,
-                    youtubeVideoID: videoID
+                    youtubeVideoID: videoID,
+                    channelID: channelID
                 )
             )
 
@@ -311,6 +314,34 @@ actor InnerTubeService {
                 collectDictionaries(from: value, into: &output)
             }
         }
+    }
+
+    private static func findChannelID(in node: Any) -> String? {
+        if let dictionary = node as? [String: Any] {
+            if let browseID = dictionary["browseId"] as? String,
+               browseID.hasPrefix("UC") {
+                return browseID
+            }
+
+            if let channelID = dictionary["channelId"] as? String,
+               channelID.hasPrefix("UC") {
+                return channelID
+            }
+
+            for value in dictionary.values {
+                if let found = findChannelID(in: value) {
+                    return found
+                }
+            }
+        } else if let array = node as? [Any] {
+            for value in array {
+                if let found = findChannelID(in: value) {
+                    return found
+                }
+            }
+        }
+
+        return nil
     }
 
     private static func firstString(
