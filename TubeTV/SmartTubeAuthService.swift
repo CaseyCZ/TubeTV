@@ -32,9 +32,17 @@ struct TVDeviceAuthorization: Decodable, Hashable {
 
         deviceCode = try container.decode(String.self, forKey: .deviceCode)
         userCode = try container.decode(String.self, forKey: .userCode)
-        verificationURL =
-            try container.decodeIfPresent(String.self, forKey: .verificationURL)
-            ?? container.decodeIfPresent(String.self, forKey: .verificationURI)
+        let verificationURL = try container.decodeIfPresent(
+            String.self,
+            forKey: .verificationURL
+        )
+        let verificationURI = try container.decodeIfPresent(
+            String.self,
+            forKey: .verificationURI
+        )
+        self.verificationURL =
+            verificationURL
+            ?? verificationURI
             ?? "https://youtube.com/activate"
         expiresIn = try container.decodeIfPresent(Int.self, forKey: .expiresIn) ?? 600
         interval = try container.decodeIfPresent(Int.self, forKey: .interval) ?? 3
