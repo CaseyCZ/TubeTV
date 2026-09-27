@@ -2875,6 +2875,14 @@ actor InnerTubeService {
         return nil
     }
 
+    private static func text(from value: Any?) -> String? {
+        guard let value else {
+            return nil
+        }
+
+        return text(from: value)
+    }
+
     private static func text(from value: Any) -> String? {
         if let string = value as? String {
             return string
