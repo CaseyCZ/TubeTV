@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct AccountFeedView: View {
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     let kind: AccountFeedKind
 
     @State private var videos: [VideoItem] = []
@@ -12,7 +13,7 @@ struct AccountFeedView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 28) {
                     HStack {
-                        Label(kind.rawValue, systemImage: kind.icon)
+                        Label(L10n.text(kind.titleKey, languageCode: appLanguage), systemImage: kind.icon)
                             .font(.largeTitle.bold())
 
                         Spacer()
@@ -30,7 +31,7 @@ struct AccountFeedView: View {
                             )
                             .foregroundStyle(.red)
 
-                            Text("Přihlášení najdeš v Nastavení → Účet.")
+                            Text(L10n.text("sign_in_hint", languageCode: appLanguage))
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -68,7 +69,7 @@ struct AccountFeedView: View {
             videos = try await InnerTubeService.shared.videos(for: kind)
 
             if videos.isEmpty {
-                errorMessage = "YouTube nevrátil žádná videa."
+                errorMessage = L10n.text("youtube_no_videos", languageCode: appLanguage)
             }
         } catch {
             videos = []
@@ -78,6 +79,7 @@ struct AccountFeedView: View {
 }
 
 struct PlaylistsView: View {
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @State private var playlists: [YouTubePlaylistItem] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
@@ -87,7 +89,7 @@ struct PlaylistsView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 28) {
                     HStack {
-                        Label("Playlisty", systemImage: "rectangle.stack.fill")
+                        Label(L10n.text("playlists", languageCode: appLanguage), systemImage: "rectangle.stack.fill")
                             .font(.largeTitle.bold())
 
                         Spacer()
@@ -105,7 +107,7 @@ struct PlaylistsView: View {
                             )
                             .foregroundStyle(.red)
 
-                            Text("Přihlášení najdeš v Nastavení → Účet.")
+                            Text(L10n.text("sign_in_hint", languageCode: appLanguage))
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -142,7 +144,7 @@ struct PlaylistsView: View {
             playlists = try await InnerTubeService.shared.playlists()
 
             if playlists.isEmpty {
-                errorMessage = "YouTube nevrátil žádné playlisty."
+                errorMessage = L10n.text("youtube_no_playlists", languageCode: appLanguage)
             }
         } catch {
             playlists = []
@@ -152,6 +154,7 @@ struct PlaylistsView: View {
 }
 
 struct PlaylistDetailView: View {
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     let playlist: YouTubePlaylistItem
 
     @State private var videos: [VideoItem] = []
@@ -170,7 +173,7 @@ struct PlaylistDetailView: View {
                 }
 
                 if isLoading {
-                    ProgressView("Načítám playlist…")
+                    ProgressView(L10n.text("loading_playlist", languageCode: appLanguage))
                 }
 
                 if let errorMessage {
@@ -213,7 +216,7 @@ struct PlaylistDetailView: View {
             videos = try await InnerTubeService.shared.playlistVideos(playlist.id)
 
             if videos.isEmpty {
-                errorMessage = "Playlist neobsahuje žádná dostupná videa."
+                errorMessage = L10n.text("playlist_empty", languageCode: appLanguage)
             }
         } catch {
             videos = []
