@@ -171,6 +171,10 @@ enum L10n {
             "signed_out": "YouTube účet byl odhlášen.",
             "profile_error": "Profily",
             "subtitles_preferred_status": "Titulky",
+            "no_playback_source": "Toto video zatím nemá zdroj pro přehrávání.",
+            "adaptive_fallback": "Vyšší kvalita nešla spojit, přehrávám kompatibilní variantu.",
+            "quality_change_error": "Změna kvality",
+            "loading_languages": "Načítám dostupné jazyky…",
             "test": "TEST"
         ],
         "de": [
