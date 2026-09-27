@@ -5,6 +5,8 @@ import SwiftUI
 struct VideoDetailView: View {
     let video: VideoItem
 
+    @AppStorage("appLanguage") private var appLanguage =
+        AppLanguage.english.rawValue
     @AppStorage("preferredQuality") private var preferredQuality = "Auto"
     @AppStorage("preferredCaptionLanguage") private var preferredCaptionLanguage = "cs"
     @AppStorage("autoEnableCaptions") private var autoEnableCaptions = true
@@ -55,16 +57,18 @@ struct VideoDetailView: View {
                     if isResolving {
                         HStack(spacing: 12) {
                             ProgressView()
-                            Text("Hledám stream…")
+                            Text(L10n.text("loading_stream", languageCode: appLanguage))
                         }
                     } else {
-                        Label("Přehrát", systemImage: "play.fill")
+                        Label(L10n.text("play", languageCode: appLanguage), systemImage: "play.fill")
                     }
                 }
                 .disabled(!canPlay || isResolving)
 
                 Label(
-                    autoEnableCaptions ? "Titulky: Čeština" : "Titulky: vypnuto",
+                    autoEnableCaptions
+                        ? "\(L10n.text("captions", languageCode: appLanguage)): Čeština"
+                        : "\(L10n.text("captions", languageCode: appLanguage)): \(L10n.text("captions_off", languageCode: appLanguage))",
                     systemImage: "captions.bubble.fill"
                 )
                 .foregroundStyle(.secondary)
@@ -73,8 +77,8 @@ struct VideoDetailView: View {
             if video.youtubeVideoID != nil {
                 Label(
                     preferredQuality == "Auto"
-                        ? "Kvalita: automaticky"
-                        : "Preferovaná kvalita: \(preferredQuality)",
+                        ? "\(L10n.text("quality", languageCode: appLanguage)): \(L10n.text("automatic", languageCode: appLanguage))"
+                        : "\(L10n.text("preferred_quality", languageCode: appLanguage)): \(preferredQuality)",
                     systemImage: "4k.tv"
                 )
                 .foregroundStyle(.secondary)
@@ -117,7 +121,10 @@ struct VideoDetailView: View {
         }
 
         guard let videoID = video.youtubeVideoID else {
-            errorMessage = "Toto video zatím nemá zdroj pro přehrávání."
+            errorMessage = L10n.text(
+                "no_playback_source",
+                languageCode: appLanguage
+            )
             return
         }
 
@@ -213,8 +220,7 @@ final class NativePlayerModel: ObservableObject {
                 currentSource = .direct(fallback)
                 await updateFormatInfo(from: fallbackItem)
                 isPreparing = false
-                errorMessage =
-                    "Vyšší kvalita nešla spojit, přehrávám kompatibilní variantu."
+                errorMessage = L10n.text("adaptive_fallback")
                 play()
                 startCaptionLoadingIfNeeded()
                 startHistoryTrackingIfNeeded()
@@ -275,7 +281,8 @@ final class NativePlayerModel: ObservableObject {
                 play()
             }
         } catch {
-            errorMessage = "Změna kvality: \(error.localizedDescription)"
+            errorMessage =
+                "\(L10n.text("quality_change_error")): \(error.localizedDescription)"
 
             if wasPlaying {
                 play()
@@ -289,14 +296,14 @@ final class NativePlayerModel: ObservableObject {
         captionsAreEnabled = false
         cues = []
         currentCaption = ""
-        captionStatus = "Vypnuto"
+        captionStatus = L10n.text("captions_off")
     }
 
     func enablePreferredCaptions() {
         guard let youtubeVideoID else { return }
 
         captionsAreEnabled = true
-        captionStatus = "Načítám titulky…"
+        captionStatus = L10n.text("loading_captions")
 
         Task {
             await loadCaptions(
@@ -338,7 +345,7 @@ final class NativePlayerModel: ObservableObject {
             guard let result else {
                 cues = []
                 currentCaption = ""
-                captionStatus = "Titulky nejsou dostupné"
+                captionStatus = L10n.text("captions_unavailable")
                 return
             }
 
@@ -417,7 +424,7 @@ final class NativePlayerModel: ObservableObject {
             return
         }
 
-        captionStatus = "Načítám české titulky…"
+        captionStatus = L10n.text("loading_czech_captions")
 
         Task {
             await loadCaptions(
@@ -586,6 +593,8 @@ private enum PlayerSettingsPage {
 
 struct NativePlayerView: View {
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("appLanguage") private var appLanguage =
+        AppLanguage.english.rawValue
     @StateObject private var model: NativePlayerModel
 
     @State private var showSettings = false
@@ -619,8 +628,8 @@ struct NativePlayerView: View {
             if model.isPreparing || model.isSwitchingQuality {
                 ProgressView(
                     model.isSwitchingQuality
-                        ? "Měním kvalitu…"
-                        : "Připravuji video…"
+                        ? L10n.text("switching_quality", languageCode: appLanguage)
+                        : L10n.text("preparing_video", languageCode: appLanguage)
                 )
                 .font(.title3)
             }
@@ -701,6 +710,8 @@ struct NativePlayerView: View {
 }
 
 private struct PlayerSettingsOverlay: View {
+    @AppStorage("appLanguage") private var appLanguage =
+        AppLanguage.english.rawValue
     @ObservedObject var model: NativePlayerModel
     @Binding var page: PlayerSettingsPage
     @Binding var isPresented: Bool
@@ -757,24 +768,24 @@ private struct PlayerSettingsOverlay: View {
     private var title: String {
         switch page {
         case .root:
-            return "Přehrávání"
+            return L10n.text("playing", languageCode: appLanguage)
         case .quality:
-            return "Kvalita"
+            return L10n.text("quality", languageCode: appLanguage)
         case .captions:
-            return "Titulky"
+            return L10n.text("captions", languageCode: appLanguage)
         case .speed:
-            return "Rychlost"
+            return L10n.text("speed", languageCode: appLanguage)
         }
     }
 
     private var rootPage: some View {
         VStack(spacing: 14) {
             settingsButton(
-                title: "Kvalita",
+                title: L10n.text("quality", languageCode: appLanguage),
                 value: model.formatInfo?.displayName
                     ?? (
                         model.activeQuality == "Auto"
-                            ? "Automaticky"
+                            ? L10n.text("automatic", languageCode: appLanguage)
                             : model.activeQuality
                     ),
                 icon: "4k.tv"
@@ -783,17 +794,17 @@ private struct PlayerSettingsOverlay: View {
             }
 
             settingsButton(
-                title: "Titulky",
+                title: L10n.text("captions", languageCode: appLanguage),
                 value: model.captionsAreEnabled
-                    ? (model.captionStatus ?? "Zapnuto")
-                    : "Vypnuto",
+                    ? (model.captionStatus ?? L10n.text("captions_on", languageCode: appLanguage))
+                     : L10n.text("captions_off", languageCode: appLanguage),
                 icon: "captions.bubble.fill"
             ) {
                 page = .captions
             }
 
             settingsButton(
-                title: "Rychlost",
+                title: L10n.text("speed", languageCode: appLanguage),
                 value: rateLabel(model.playbackRate),
                 icon: "speedometer"
             ) {
@@ -805,14 +816,14 @@ private struct PlayerSettingsOverlay: View {
     private var qualityPage: some View {
         ScrollView {
             VStack(spacing: 12) {
-                qualityButton("Auto", label: "Automaticky")
+                qualityButton("Auto", label: L10n.text("automatic", languageCode: appLanguage))
                 qualityButton("1080p", label: "1080p")
                 qualityButton("1440p", label: "1440p")
                 qualityButton("2160p", label: "4K / 2160p")
 
                 if let format = model.formatInfo {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Aktuálně přehráváno")
+                        Text(L10n.text("current_playback", languageCode: appLanguage))
                             .font(.headline)
 
                         Text(format.displayName)
@@ -838,7 +849,7 @@ private struct PlayerSettingsOverlay: View {
                     page = .root
                 } label: {
                     optionRow(
-                        "Vypnuto",
+                        L10n.text("captions_off", languageCode: appLanguage),
                         selected: !model.captionsAreEnabled
                     )
                 }
@@ -848,7 +859,7 @@ private struct PlayerSettingsOverlay: View {
                     page = .root
                 } label: {
                     optionRow(
-                        "Čeština – automaticky",
+                        L10n.text("czech_automatic", languageCode: appLanguage),
                         selected:
                             model.captionsAreEnabled
                             && (model.captionStatus ?? "")
@@ -857,7 +868,7 @@ private struct PlayerSettingsOverlay: View {
                 }
 
                 if model.captionOptions.isEmpty {
-                    Text("Načítám dostupné jazyky…")
+                    Text(L10n.text("loading_languages", languageCode: appLanguage))
                         .foregroundStyle(.secondary)
                         .padding(.vertical, 18)
                 } else {
@@ -968,7 +979,7 @@ private struct PlayerSettingsOverlay: View {
 
     private func rateLabel(_ rate: Float) -> String {
         if abs(rate - 1.0) < 0.001 {
-            return "Normální"
+            return L10n.text("normal_speed", languageCode: appLanguage)
         }
 
         return String(format: "%.2gx", rate)
