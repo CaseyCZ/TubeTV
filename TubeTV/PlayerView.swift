@@ -195,6 +195,10 @@ final class NativePlayerModel: ObservableObject {
     private var trackingContext: YouTubeTrackingContext?
     private var ciSmokeVerificationScheduled = false
     private var failedClientProfiles = Set<String>()
+    private var remoteSeekDirection = 0
+    private var remoteSeekIncrementSeconds = 10.0
+    private var remoteSeekAccelerationStartedAt: Date?
+    private var remoteSeekLastEventAt: Date?
 
     private let playbackLogger = Logger(
         subsystem: "cz.caseycz.tubetv",
@@ -526,6 +530,38 @@ final class NativePlayerModel: ObservableObject {
         if player.timeControlStatus == .playing {
             player.playImmediately(atRate: rate)
         }
+    }
+
+    func remoteSeekDelta(
+        forward: Bool
+    ) -> Double {
+        let now = Date()
+        let direction = forward ? 1 : -1
+        let didRelease =
+            remoteSeekLastEventAt.map {
+                now.timeIntervalSince($0) > 0.5
+            } ?? true
+
+        if remoteSeekDirection != direction
+            || didRelease {
+            remoteSeekDirection = direction
+            remoteSeekIncrementSeconds = 10
+            remoteSeekAccelerationStartedAt =
+                now
+        } else if let startedAt =
+                    remoteSeekAccelerationStartedAt,
+                  now.timeIntervalSince(
+                    startedAt
+                  ) >= 1 {
+            remoteSeekIncrementSeconds *= 1.5
+            remoteSeekAccelerationStartedAt =
+                now
+        }
+
+        remoteSeekLastEventAt = now
+
+        return Double(direction)
+            * remoteSeekIncrementSeconds
     }
 
     func seekFromRemote(
@@ -1738,16 +1774,24 @@ struct NativePlayerView: View {
 
             switch direction {
             case .left:
+                let delta =
+                    model.remoteSeekDelta(
+                        forward: false
+                    )
                 Task {
                     await model.seekFromRemote(
-                        seconds: -10
+                        seconds: delta
                     )
                 }
 
             case .right:
+                let delta =
+                    model.remoteSeekDelta(
+                        forward: true
+                    )
                 Task {
                     await model.seekFromRemote(
-                        seconds: 10
+                        seconds: delta
                     )
                 }
 
