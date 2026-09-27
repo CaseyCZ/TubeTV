@@ -547,12 +547,17 @@ actor SmartTubeAuthService {
 
         let response = try await postJSON(
             URL(string: "https://www.youtube.com/o/oauth2/token")!,
-            payload: payload
+            payload: payload,
+            allowErrorResponse: true
         )
 
         let token = try JSONDecoder().decode(TVTokenResponse.self, from: response)
 
         guard let accessToken = token.accessToken else {
+            if token.error == "invalid_grant" {
+                signOut()
+            }
+
             throw SmartTubeAuthError.oauth(
                 token.errorDescription ?? token.error ?? L10n.text("auth_refresh_failed")
             )
