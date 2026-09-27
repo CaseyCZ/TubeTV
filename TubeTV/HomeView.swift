@@ -37,50 +37,43 @@ struct HomeView: View {
                             .foregroundStyle(.red)
                     }
 
-                    if sections.isEmpty && !isLoading {
-                        VideoRow(
-                            title: "TubeTV",
-                            videos: VideoItem.demo(languageCode: appLanguage)
-                        )
-                    } else {
-                        ForEach(sections) { section in
-                            if !section.videos.isEmpty {
-                                VideoRow(
-                                    title:
-                                        section.title.isEmpty
-                                        ? L10n.text(
-                                            "recommended",
-                                            languageCode: appLanguage
+                    ForEach(sections) { section in
+                        if !section.videos.isEmpty {
+                            VideoRow(
+                                title:
+                                    section.title.isEmpty
+                                    ? L10n.text(
+                                        "recommended",
+                                        languageCode: appLanguage
+                                    )
+                                    : section.title,
+                                videos: section.videos,
+                                isLoadingMore:
+                                    loadingSectionIDs
+                                        .contains(
+                                            section.id
                                         )
-                                        : section.title,
-                                    videos: section.videos,
-                                    isLoadingMore:
-                                        loadingSectionIDs
-                                            .contains(
-                                                section.id
-                                            )
-                                ) {
-                                    Task {
-                                        await loadMore(
-                                            sectionID:
-                                                section.id
-                                        )
-                                    }
+                            ) {
+                                Task {
+                                    await loadMore(
+                                        sectionID:
+                                            section.id
+                                    )
                                 }
-                            } else if !section.searchTiles.isEmpty {
-                                HomeSearchTileRow(
-                                    title:
-                                        section.title.isEmpty
-                                        ? L10n.text(
-                                            "search",
-                                            languageCode: appLanguage
-                                        )
-                                        : section.title,
-                                    tiles:
-                                        section.searchTiles,
-                                    onSearch: onSearch
-                                )
                             }
+                        } else if !section.searchTiles.isEmpty {
+                            HomeSearchTileRow(
+                                title:
+                                    section.title.isEmpty
+                                    ? L10n.text(
+                                        "search",
+                                        languageCode: appLanguage
+                                    )
+                                    : section.title,
+                                tiles:
+                                    section.searchTiles,
+                                onSearch: onSearch
+                            )
                         }
                     }
                 }
@@ -200,7 +193,10 @@ struct HomeView: View {
                 homeContinuationToken = nil
             }
 
-            if sections.allSatisfy({ $0.videos.isEmpty }) {
+            if sections.allSatisfy({
+                $0.videos.isEmpty
+                    && $0.searchTiles.isEmpty
+            }) {
                 errorMessage = L10n.text(
                     "youtube_no_videos",
                     languageCode: appLanguage
