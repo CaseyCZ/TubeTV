@@ -157,6 +157,7 @@ final class NativePlayerModel: ObservableObject {
     @Published private(set) var playbackRate: Float = 1.0
     @Published private(set) var captionsAreEnabled: Bool
     @Published private(set) var isSwitchingQuality = false
+    @Published private(set) var availableQualityHeights: [Int]
 
     private var currentSource: PlaybackSource
     private let youtubeVideoID: String?
@@ -193,6 +194,8 @@ final class NativePlayerModel: ObservableObject {
         self.youtubeVideoID = youtubeVideoID
         activeQuality = initialQuality
         captionsAreEnabled = captionsEnabled
+        availableQualityHeights =
+            source.availableQualityHeights
         preferredCaptionLanguage = captionLanguage
         self.allowCaptionTranslation = allowCaptionTranslation
     }
@@ -325,6 +328,9 @@ final class NativePlayerModel: ObservableObject {
         await updateFormatInfo(
             from: item
         )
+        refreshAvailableQualityHeights(
+            for: source
+        )
     }
 
     private func waitUntilReadyToPlay(
@@ -451,6 +457,9 @@ final class NativePlayerModel: ObservableObject {
             currentSource = newSource
             player.replaceCurrentItem(with: newItem)
             await updateFormatInfo(from: newItem)
+            refreshAvailableQualityHeights(
+                for: newSource
+            )
 
             await seek(to: oldTime)
             activeQuality = quality
@@ -684,6 +693,198 @@ final class NativePlayerModel: ObservableObject {
         formatInfo = await PlaybackFormatInspector.inspect(
             asset: item.asset
         )
+    }
+
+    private func refreshAvailableQualityHeights(
+        for source: PlaybackSource
+    ) {
+        var initial = Set(
+            source.availableQualityHeights
+        )
+
+        if let height = formatInfo?.height,
+           height > 0 {
+            initial.insert(height)
+        }
+
+        availableQualityHeights =
+            initial.sorted(by: >)
+
+        guard let request =
+                hlsManifestRequest(
+                    for: source
+                ) else {
+            return
+        }
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            let manifestHeights =
+                await self.fetchHLSHeights(
+                    request: request
+                )
+
+            guard !manifestHeights.isEmpty
+            else {
+                return
+            }
+
+            let responseHeights = Set(
+                source.availableQualityHeights
+            )
+            var filtered: Set<Int>
+
+            if responseHeights.isEmpty {
+                filtered = manifestHeights
+            } else {
+                filtered = Set(
+                    responseHeights.filter {
+                        manifestHeights.contains($0)
+                    }
+                )
+            }
+
+            if let currentHeight =
+                    self.formatInfo?.height,
+               manifestHeights.contains(
+                currentHeight
+               ) {
+                filtered.insert(
+                    currentHeight
+                )
+            }
+
+            self.availableQualityHeights =
+                filtered.sorted(by: >)
+
+            self.playbackLogger.notice(
+                "Quality tiers profile=\(source.clientProfile ?? "UNTAGGED", privacy: .public) heights=\(self.availableQualityHeights.description, privacy: .public)"
+            )
+        }
+    }
+
+    private func hlsManifestRequest(
+        for source: PlaybackSource
+    ) -> URLRequest? {
+        let url: URL
+        let headers: PlaybackRequestHeaders?
+
+        switch source {
+        case .direct(let directURL):
+            url = directURL
+            headers = nil
+
+        case .directWithHeaders(
+            let directURL,
+            let requestHeaders
+        ):
+            url = directURL
+            headers = requestHeaders
+
+        case .adaptive, .adaptiveWithHeaders:
+            return nil
+        }
+
+        let raw = url.absoluteString.lowercased()
+
+        guard url.pathExtension.lowercased()
+                == "m3u8"
+                || raw.contains("hls_playlist")
+                || raw.contains("/manifest/")
+        else {
+            return nil
+        }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 8
+
+        if let headers {
+            for (field, value)
+                in headers.dictionary {
+                request.setValue(
+                    value,
+                    forHTTPHeaderField: field
+                )
+            }
+        }
+
+        return request
+    }
+
+    private func fetchHLSHeights(
+        request: URLRequest
+    ) async -> Set<Int> {
+        do {
+            let (data, response) =
+                try await URLSession.shared
+                    .data(for: request)
+
+            guard let http =
+                    response as? HTTPURLResponse,
+                  (200..<300).contains(
+                    http.statusCode
+                  ),
+                  let text = String(
+                    data: data,
+                    encoding: .utf8
+                  ) else {
+                return []
+            }
+
+            return Self.parseHLSHeights(
+                text
+            )
+        } catch {
+            return []
+        }
+    }
+
+    private static func parseHLSHeights(
+        _ manifest: String
+    ) -> Set<Int> {
+        let pattern =
+            #"RESOLUTION=\d+x(\d+)"#
+
+        guard let regex =
+                try? NSRegularExpression(
+                    pattern: pattern,
+                    options: [.caseInsensitive]
+                ) else {
+            return []
+        }
+
+        let range = NSRange(
+            manifest.startIndex...,
+            in: manifest
+        )
+
+        var heights = Set<Int>()
+
+        for match in regex.matches(
+            in: manifest,
+            range: range
+        ) {
+            guard match.numberOfRanges > 1,
+                  let heightRange =
+                    Range(
+                        match.range(at: 1),
+                        in: manifest
+                    ),
+                  let height =
+                    Int(
+                        manifest[
+                            heightRange
+                        ]
+                    ),
+                  height > 0 else {
+                continue
+            }
+
+            heights.insert(height)
+        }
+
+        return heights
     }
 
     private func seek(to time: CMTime) async {
@@ -1093,10 +1294,25 @@ private struct PlayerSettingsOverlay: View {
     private var qualityPage: some View {
         ScrollView {
             VStack(spacing: 12) {
-                qualityButton("Auto", label: L10n.text("automatic", languageCode: appLanguage))
-                qualityButton("1080p", label: "1080p")
-                qualityButton("1440p", label: "1440p")
-                qualityButton("2160p", label: "4K / 2160p")
+                qualityButton(
+                    "Auto",
+                    label: L10n.text(
+                        "automatic",
+                        languageCode: appLanguage
+                    )
+                )
+
+                ForEach(
+                    model.availableQualityHeights,
+                    id: \.self
+                ) { height in
+                    qualityButton(
+                        "\(height)p",
+                        label: qualityLabel(
+                            for: height
+                        )
+                    )
+                }
 
                 if let format = model.formatInfo {
                     VStack(alignment: .leading, spacing: 6) {
@@ -1189,6 +1405,20 @@ private struct PlayerSettingsOverlay: View {
                 }
             }
         }
+    }
+
+    private func qualityLabel(
+        for height: Int
+    ) -> String {
+        if height >= 4320 {
+            return "8K / \(height)p"
+        }
+
+        if height >= 2160 {
+            return "4K / \(height)p"
+        }
+
+        return "\(height)p"
     }
 
     private func qualityButton(
