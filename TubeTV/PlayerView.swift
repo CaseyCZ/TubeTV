@@ -184,6 +184,10 @@ final class NativePlayerModel: ObservableObject {
     @Published private(set) var activeAudioTrackID: String?
     @Published private(set) var likeStatus: YouTubeLikeStatus?
     @Published private(set) var isUpdatingReaction = false
+    @Published private(set) var playlistMemberships:
+        [YouTubePlaylistMembership] = []
+    @Published private(set) var isLoadingPlaylists = false
+    @Published private(set) var updatingPlaylistID: String?
 
     private var currentSource: PlaybackSource
     private let youtubeVideoID: String?
@@ -489,6 +493,100 @@ final class NativePlayerModel: ObservableObject {
 
     var supportsVideoReactions: Bool {
         youtubeVideoID != nil
+    }
+
+    var supportsPlaylistActions: Bool {
+        youtubeVideoID != nil
+    }
+
+    func loadPlaylistMemberships() async {
+        guard let youtubeVideoID,
+              !isLoadingPlaylists else {
+            return
+        }
+
+        guard await SmartTubeAuthService.shared
+            .signedIn() else {
+            errorMessage =
+                L10n.text(
+                    "sign_in_hint"
+                )
+            playlistMemberships = []
+            return
+        }
+
+        isLoadingPlaylists = true
+        errorMessage = nil
+        defer {
+            isLoadingPlaylists = false
+        }
+
+        do {
+            playlistMemberships =
+                try await InnerTubeService.shared
+                    .playlistMemberships(
+                        for: youtubeVideoID
+                    )
+        } catch {
+            playlistMemberships = []
+            errorMessage =
+                error.localizedDescription
+        }
+    }
+
+    func togglePlaylistMembership(
+        _ membership: YouTubePlaylistMembership
+    ) async {
+        guard let youtubeVideoID,
+              updatingPlaylistID == nil else {
+            return
+        }
+
+        guard await SmartTubeAuthService.shared
+            .signedIn() else {
+            errorMessage =
+                L10n.text(
+                    "sign_in_hint"
+                )
+            return
+        }
+
+        updatingPlaylistID = membership.id
+        errorMessage = nil
+        defer {
+            updatingPlaylistID = nil
+        }
+
+        let shouldAdd =
+            !membership.isSelected
+
+        do {
+            try await InnerTubeService.shared
+                .setPlaylistMembership(
+                    videoID: youtubeVideoID,
+                    playlistID: membership.id,
+                    add: shouldAdd
+                )
+
+            if let index =
+                    playlistMemberships
+                        .firstIndex(
+                            where: {
+                                $0.id
+                                    == membership.id
+                            }
+                        ) {
+                playlistMemberships[index] =
+                    YouTubePlaylistMembership(
+                        id: membership.id,
+                        title: membership.title,
+                        isSelected: shouldAdd
+                    )
+            }
+        } catch {
+            errorMessage =
+                error.localizedDescription
+        }
     }
 
     func toggleLike() async {
@@ -1780,6 +1878,7 @@ private enum PlayerSettingsPage {
     case captions
     case audio
     case speed
+    case playlists
 }
 
 struct NativePlayerView: View {
@@ -1978,6 +2077,8 @@ private struct PlayerSettingsOverlay: View {
                     audioPage
                 case .speed:
                     speedPage
+                case .playlists:
+                    playlistsPage
                 }
 
                 Spacer()
@@ -2002,6 +2103,11 @@ private struct PlayerSettingsOverlay: View {
             return L10n.text("audio", languageCode: appLanguage)
         case .speed:
             return L10n.text("speed", languageCode: appLanguage)
+        case .playlists:
+            return L10n.text(
+                "save_to_playlist",
+                languageCode: appLanguage
+            )
         }
     }
 
@@ -2075,6 +2181,29 @@ private struct PlayerSettingsOverlay: View {
                     icon: "speaker.wave.2.fill"
                 ) {
                     page = .audio
+                }
+            }
+
+            if model.supportsPlaylistActions {
+                settingsButton(
+                    title: L10n.text(
+                        "save_to_playlist",
+                        languageCode:
+                            appLanguage
+                    ),
+                    value: L10n.text(
+                        "manage_playlists",
+                        languageCode:
+                            appLanguage
+                    ),
+                    icon: "text.badge.plus"
+                ) {
+                    page = .playlists
+
+                    Task {
+                        await model
+                            .loadPlaylistMemberships()
+                    }
                 }
             }
 
@@ -2262,6 +2391,59 @@ private struct PlayerSettingsOverlay: View {
                             selected:
                                 abs(model.playbackRate - Float(value))
                                 < 0.001
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private var playlistsPage: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                if model.isLoadingPlaylists {
+                    ProgressView(
+                        L10n.text(
+                            "loading_playlists",
+                            languageCode:
+                                appLanguage
+                        )
+                    )
+                    .padding(.vertical, 18)
+                } else if model
+                    .playlistMemberships
+                    .isEmpty {
+                    Text(
+                        L10n.text(
+                            "youtube_no_playlists",
+                            languageCode:
+                                appLanguage
+                        )
+                    )
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 18)
+                } else {
+                    ForEach(
+                        model.playlistMemberships
+                    ) { playlist in
+                        Button {
+                            Task {
+                                await model
+                                    .togglePlaylistMembership(
+                                        playlist
+                                    )
+                            }
+                        } label: {
+                            optionRow(
+                                playlist.title,
+                                selected:
+                                    playlist
+                                        .isSelected
+                            )
+                        }
+                        .disabled(
+                            model.updatingPlaylistID
+                                != nil
                         )
                     }
                 }

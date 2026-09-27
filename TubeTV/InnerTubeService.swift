@@ -14,6 +14,12 @@ struct YouTubeSubscribedChannel: Identifiable, Hashable {
     let thumbnailURL: URL?
 }
 
+struct YouTubePlaylistMembership: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let isSelected: Bool
+}
+
 struct YouTubeSearchTile: Identifiable, Hashable {
     let id: String
     let title: String
@@ -384,6 +390,129 @@ actor InnerTubeService {
             Self.channelSubscriptionState(
                 from: root
             )
+        )
+    }
+
+    func playlistMemberships(
+        for videoID: String
+    ) async throws -> [YouTubePlaylistMembership] {
+        guard !videoID.isEmpty else {
+            throw InnerTubeError.invalidResponse
+        }
+
+        let authorization =
+            try await SmartTubeAuthService.shared
+                .authorizationHeader()
+        let bootstrap =
+            try await SmartTubeAuthService.shared
+                .bootstrap()
+
+        var client: [String: Any] = [
+            "hl": L10n.currentLanguageCode,
+            "gl": "CZ",
+            "clientName":
+                SmartTubeAuthService
+                    .tvClientName,
+            "clientVersion":
+                SmartTubeAuthService
+                    .tvClientVersion
+        ]
+
+        if let visitorData =
+                bootstrap.visitorData,
+           !visitorData.isEmpty {
+            client["visitorData"] =
+                visitorData
+        }
+
+        let payload: [String: Any] = [
+            "context": [
+                "client": client
+            ],
+            "videoIds": [videoID]
+        ]
+
+        let root =
+            try await signedTVPost(
+                path:
+                    "playlist/get_add_to_playlist",
+                payload: payload,
+                authorization:
+                    authorization,
+                bootstrap:
+                    bootstrap
+            )
+
+        return Self.extractPlaylistMemberships(
+            from: root
+        )
+    }
+
+    func setPlaylistMembership(
+        videoID: String,
+        playlistID: String,
+        add: Bool
+    ) async throws {
+        guard !videoID.isEmpty,
+              !playlistID.isEmpty else {
+            throw InnerTubeError.invalidResponse
+        }
+
+        let authorization =
+            try await SmartTubeAuthService.shared
+                .authorizationHeader()
+        let bootstrap =
+            try await SmartTubeAuthService.shared
+                .bootstrap()
+
+        var client: [String: Any] = [
+            "hl": L10n.currentLanguageCode,
+            "gl": "CZ",
+            "clientName":
+                SmartTubeAuthService
+                    .tvClientName,
+            "clientVersion":
+                SmartTubeAuthService
+                    .tvClientVersion
+        ]
+
+        if let visitorData =
+                bootstrap.visitorData,
+           !visitorData.isEmpty {
+            client["visitorData"] =
+                visitorData
+        }
+
+        let action: [String: Any] =
+            add
+                ? [
+                    "addedVideoId": videoID,
+                    "action":
+                        "ACTION_ADD_VIDEO"
+                ]
+                : [
+                    "removedVideoId": videoID,
+                    "action":
+                        "ACTION_REMOVE_VIDEO_BY_VIDEO_ID"
+                ]
+
+        let payload: [String: Any] = [
+            "context": [
+                "client": client
+            ],
+            "playlistId": playlistID,
+            "actions": [action]
+        ]
+
+        _ = try await signedTVPost(
+            path: "browse/edit_playlist",
+            payload: payload,
+            authorization: authorization,
+            bootstrap: bootstrap
+        )
+
+        logger.notice(
+            "Playlist membership add=\(add, privacy: .public) playlist=\(playlistID, privacy: .public) video=\(videoID, privacy: .public)"
         )
     }
 
@@ -1806,6 +1935,164 @@ actor InnerTubeService {
                 collectDictionaries(from: value, into: &output)
             }
         }
+    }
+
+    private func signedTVPost(
+        path: String,
+        payload: [String: Any],
+        authorization: String,
+        bootstrap: SmartTubeAuthBootstrap
+    ) async throws -> [String: Any] {
+        guard let url = URL(
+            string:
+                "https://www.youtube.com/youtubei/v1/\(path)"
+        ) else {
+            throw InnerTubeError.invalidResponse
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 25
+        request.setValue(
+            "application/json",
+            forHTTPHeaderField:
+                "Content-Type"
+        )
+        request.setValue(
+            SmartTubeAuthService.tvUserAgent,
+            forHTTPHeaderField:
+                "User-Agent"
+        )
+        request.setValue(
+            SmartTubeAuthService.tvReferer,
+            forHTTPHeaderField:
+                "Referer"
+        )
+        request.setValue(
+            authorization,
+            forHTTPHeaderField:
+                "Authorization"
+        )
+        request.setValue(
+            "7",
+            forHTTPHeaderField:
+                "X-YouTube-Client-Name"
+        )
+        request.setValue(
+            SmartTubeAuthService.tvClientVersion,
+            forHTTPHeaderField:
+                "X-YouTube-Client-Version"
+        )
+
+        if let visitorData =
+                bootstrap.visitorData,
+           !visitorData.isEmpty {
+            request.setValue(
+                visitorData,
+                forHTTPHeaderField:
+                    "X-Goog-Visitor-Id"
+            )
+        }
+
+        if let pageID =
+                await SmartTubeAuthService
+                    .shared
+                    .selectedPageID(),
+           !pageID.isEmpty {
+            request.setValue(
+                pageID,
+                forHTTPHeaderField:
+                    "X-Goog-Pageid"
+            )
+        }
+
+        request.httpBody =
+            try JSONSerialization.data(
+                withJSONObject: payload
+            )
+
+        let (data, response) =
+            try await URLSession.shared
+                .data(for: request)
+
+        guard let http =
+                response as? HTTPURLResponse,
+              (200..<300).contains(
+                http.statusCode
+              ) else {
+            throw InnerTubeError.invalidResponse
+        }
+
+        if data.isEmpty {
+            return [:]
+        }
+
+        guard let root =
+                try JSONSerialization
+                    .jsonObject(
+                        with: data
+                    ) as? [String: Any]
+        else {
+            throw InnerTubeError.invalidResponse
+        }
+
+        return root
+    }
+
+    private static func extractPlaylistMemberships(
+        from node: Any
+    ) -> [YouTubePlaylistMembership] {
+        var dictionaries:
+            [[String: Any]] = []
+
+        collectDictionaries(
+            from: node,
+            into: &dictionaries
+        )
+
+        var seen = Set<String>()
+        var result:
+            [YouTubePlaylistMembership] = []
+
+        for dictionary in dictionaries {
+            guard let renderer =
+                    dictionary[
+                        "playlistAddToOptionRenderer"
+                    ] as? [String: Any],
+                  let playlistID =
+                    renderer[
+                        "playlistId"
+                    ] as? String,
+                  !playlistID.isEmpty,
+                  seen.insert(
+                    playlistID
+                  ).inserted else {
+                continue
+            }
+
+            let title =
+                firstText(
+                    in: renderer,
+                    keys: ["title"]
+                )
+                ?? playlistID
+            let selected =
+                (
+                    renderer[
+                        "containsSelectedVideos"
+                    ] as? String
+                ) == "ALL"
+
+            result.append(
+                YouTubePlaylistMembership(
+                    id: playlistID,
+                    title: title,
+                    isSelected: selected
+                )
+            )
+        }
+
+        return result
     }
 
     private static func findVideoLikeStatus(
