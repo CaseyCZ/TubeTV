@@ -73,7 +73,7 @@ struct VideoDetailView: View {
             if video.youtubeVideoID != nil {
                 Label(
                     preferredQuality == "Auto"
-                        ? "Kvalita: automaticky – nejlepší nativně přehratelný stream"
+                        ? "Kvalita: automaticky"
                         : "Preferovaná kvalita: \(preferredQuality)",
                     systemImage: "4k.tv"
                 )
@@ -81,9 +81,12 @@ struct VideoDetailView: View {
             }
 
             if let errorMessage {
-                Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red)
-                    .font(.headline)
+                Label(
+                    errorMessage,
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .foregroundStyle(.red)
+                .font(.headline)
             }
 
             Spacer()
@@ -94,6 +97,7 @@ struct VideoDetailView: View {
                 NativePlayerView(
                     source: playbackSource,
                     youtubeVideoID: video.youtubeVideoID,
+                    initialQuality: preferredQuality,
                     captionsEnabled: autoEnableCaptions,
                     captionLanguage: preferredCaptionLanguage,
                     allowCaptionTranslation: autoTranslateCaptions
@@ -139,11 +143,15 @@ final class NativePlayerModel: ObservableObject {
     @Published private(set) var isPreparing = true
     @Published private(set) var currentCaption = ""
     @Published private(set) var captionStatus: String?
+    @Published private(set) var captionOptions: [CaptionLanguageOption] = []
+    @Published private(set) var activeQuality: String
+    @Published private(set) var playbackRate: Float = 1.0
+    @Published private(set) var captionsAreEnabled: Bool
+    @Published private(set) var isSwitchingQuality = false
 
-    private let source: PlaybackSource
+    private var currentSource: PlaybackSource
     private let youtubeVideoID: String?
-    private let captionsEnabled: Bool
-    private let captionLanguage: String
+    private let preferredCaptionLanguage: String
     private let allowCaptionTranslation: Bool
 
     private var didPrepare = false
@@ -155,14 +163,16 @@ final class NativePlayerModel: ObservableObject {
     init(
         source: PlaybackSource,
         youtubeVideoID: String?,
+        initialQuality: String,
         captionsEnabled: Bool,
         captionLanguage: String,
         allowCaptionTranslation: Bool
     ) {
-        self.source = source
+        currentSource = source
         self.youtubeVideoID = youtubeVideoID
-        self.captionsEnabled = captionsEnabled
-        self.captionLanguage = captionLanguage
+        activeQuality = initialQuality
+        captionsAreEnabled = captionsEnabled
+        preferredCaptionLanguage = captionLanguage
         self.allowCaptionTranslation = allowCaptionTranslation
     }
 
@@ -178,7 +188,7 @@ final class NativePlayerModel: ObservableObject {
 
     func prepareAndPlay() async {
         guard !didPrepare else {
-            player.play()
+            play()
             return
         }
 
@@ -187,20 +197,24 @@ final class NativePlayerModel: ObservableObject {
         errorMessage = nil
 
         do {
-            let item = try await makePlayerItem(from: source)
+            let item = try await makePlayerItem(from: currentSource)
             player.replaceCurrentItem(with: item)
             isPreparing = false
-            player.play()
+            play()
             startCaptionLoadingIfNeeded()
             startHistoryTrackingIfNeeded()
+            loadCaptionOptions()
         } catch {
-            if case let .adaptive(_, _, fallback?) = source {
+            if case let .adaptive(_, _, fallback?) = currentSource {
                 player.replaceCurrentItem(with: AVPlayerItem(url: fallback))
+                currentSource = .direct(fallback)
                 isPreparing = false
-                errorMessage = "Vyšší kvalita nešla spojit, přehrávám kompatibilní variantu."
-                player.play()
+                errorMessage =
+                    "Vyšší kvalita nešla spojit, přehrávám kompatibilní variantu."
+                play()
                 startCaptionLoadingIfNeeded()
                 startHistoryTrackingIfNeeded()
+                loadCaptionOptions()
             } else {
                 isPreparing = false
                 errorMessage = error.localizedDescription
@@ -213,6 +227,126 @@ final class NativePlayerModel: ObservableObject {
         player.pause()
     }
 
+    func play() {
+        player.playImmediately(atRate: playbackRate)
+    }
+
+    func setPlaybackRate(_ rate: Float) {
+        playbackRate = rate
+
+        if player.timeControlStatus == .playing {
+            player.playImmediately(atRate: rate)
+        }
+    }
+
+    func changeQuality(_ quality: String) async {
+        guard let youtubeVideoID,
+              !isSwitchingQuality,
+              quality != activeQuality else {
+            return
+        }
+
+        let oldTime = player.currentTime()
+        let wasPlaying = player.timeControlStatus == .playing
+
+        isSwitchingQuality = true
+        errorMessage = nil
+        player.pause()
+
+        do {
+            let newSource = try await StreamResolver.resolveYouTubeVideo(
+                videoID: youtubeVideoID,
+                preferredQuality: quality
+            )
+
+            let newItem = try await makePlayerItem(from: newSource)
+            currentSource = newSource
+            player.replaceCurrentItem(with: newItem)
+
+            await seek(to: oldTime)
+            activeQuality = quality
+
+            if wasPlaying {
+                play()
+            }
+        } catch {
+            errorMessage = "Změna kvality: \(error.localizedDescription)"
+
+            if wasPlaying {
+                play()
+            }
+        }
+
+        isSwitchingQuality = false
+    }
+
+    func disableCaptions() {
+        captionsAreEnabled = false
+        cues = []
+        currentCaption = ""
+        captionStatus = "Vypnuto"
+    }
+
+    func enablePreferredCaptions() {
+        guard let youtubeVideoID else { return }
+
+        captionsAreEnabled = true
+        captionStatus = "Načítám titulky…"
+
+        Task {
+            await loadCaptions(
+                videoID: youtubeVideoID,
+                languageCode: preferredCaptionLanguage,
+                preferTranslation: false
+            )
+        }
+    }
+
+    func selectCaption(_ option: CaptionLanguageOption) {
+        guard let youtubeVideoID else { return }
+
+        captionsAreEnabled = true
+        captionStatus = "Načítám \(option.displayName)…"
+
+        Task {
+            await loadCaptions(
+                videoID: youtubeVideoID,
+                languageCode: option.languageCode,
+                preferTranslation: !option.isNative
+            )
+        }
+    }
+
+    private func loadCaptions(
+        videoID: String,
+        languageCode: String,
+        preferTranslation: Bool
+    ) async {
+        do {
+            let result = try await CaptionService.shared.captions(
+                videoID: videoID,
+                languageCode: languageCode,
+                preferTranslation: preferTranslation,
+                allowTranslation: allowCaptionTranslation
+            )
+
+            guard let result else {
+                cues = []
+                currentCaption = ""
+                captionStatus = "Titulky nejsou dostupné"
+                return
+            }
+
+            cues = result.cues
+            captionStatus = result.displayName
+            installCaptionObserver()
+        } catch {
+            cues = []
+            currentCaption = ""
+            captionStatus = error.localizedDescription
+        }
+    }
+
     private func startHistoryTrackingIfNeeded() {
         guard let youtubeVideoID else { return }
 
@@ -222,14 +356,15 @@ final class NativePlayerModel: ObservableObject {
             }
 
             do {
-                let context = try await YouTubeTrackingService.shared.makeContext(
-                    videoID: youtubeVideoID
-                )
+                let context =
+                    try await YouTubeTrackingService.shared.makeContext(
+                        videoID: youtubeVideoID
+                    )
 
                 trackingContext = context
                 installTrackingObserver()
             } catch {
-                // Tracking must never block or break playback.
+                // History tracking must never block playback.
             }
         }
     }
@@ -272,7 +407,7 @@ final class NativePlayerModel: ObservableObject {
     }
 
     private func startCaptionLoadingIfNeeded() {
-        guard captionsEnabled,
+        guard captionsAreEnabled,
               let youtubeVideoID else {
             return
         }
@@ -280,29 +415,31 @@ final class NativePlayerModel: ObservableObject {
         captionStatus = "Načítám české titulky…"
 
         Task {
+            await loadCaptions(
+                videoID: youtubeVideoID,
+                languageCode: preferredCaptionLanguage,
+                preferTranslation: false
+            )
+        }
+    }
+
+    private func loadCaptionOptions() {
+        guard let youtubeVideoID else { return }
+
+        Task {
             do {
-                let result = try await CaptionService.shared.preferredCaptions(
-                    videoID: youtubeVideoID,
-                    preferredLanguage: captionLanguage,
-                    allowTranslation: allowCaptionTranslation
-                )
-
-                guard let result else {
-                    captionStatus = "České titulky nejsou dostupné"
-                    return
-                }
-
-                cues = result.cues
-                captionStatus = result.displayName
-                installCaptionObserver()
+                captionOptions =
+                    try await CaptionService.shared.availableLanguages(
+                        videoID: youtubeVideoID
+                    )
             } catch {
-                captionStatus = "Titulky: \(error.localizedDescription)"
+                captionOptions = []
             }
         }
     }
 
     private func installCaptionObserver() {
-        guard timeObserver == nil, !cues.isEmpty else { return }
+        guard timeObserver == nil else { return }
 
         let interval = CMTime(seconds: 0.2, preferredTimescale: 600)
 
@@ -311,9 +448,11 @@ final class NativePlayerModel: ObservableObject {
             queue: .main
         ) { [weak self] time in
             guard let self else { return }
+
             let seconds = time.seconds
 
-            guard seconds.isFinite else {
+            guard seconds.isFinite,
+                  self.captionsAreEnabled else {
                 self.currentCaption = ""
                 return
             }
@@ -323,6 +462,8 @@ final class NativePlayerModel: ObservableObject {
     }
 
     private func captionText(at time: TimeInterval) -> String? {
+        guard !cues.isEmpty else { return nil }
+
         var lower = 0
         var upper = cues.count - 1
 
@@ -342,7 +483,21 @@ final class NativePlayerModel: ObservableObject {
         return nil
     }
 
-    private func makePlayerItem(from source: PlaybackSource) async throws -> AVPlayerItem {
+    private func seek(to time: CMTime) async {
+        await withCheckedContinuation { continuation in
+            player.seek(
+                to: time,
+                toleranceBefore: .zero,
+                toleranceAfter: .zero
+            ) { _ in
+                continuation.resume()
+            }
+        }
+    }
+
+    private func makePlayerItem(
+        from source: PlaybackSource
+    ) async throws -> AVPlayerItem {
         switch source {
         case .direct(let url):
             return AVPlayerItem(url: url)
@@ -351,10 +506,14 @@ final class NativePlayerModel: ObservableObject {
             let videoAsset = AVURLAsset(url: videoURL)
             let audioAsset = AVURLAsset(url: audioURL)
 
-            async let loadedVideoTracks = videoAsset.loadTracks(withMediaType: .video)
-            async let loadedAudioTracks = audioAsset.loadTracks(withMediaType: .audio)
-            async let loadedVideoDuration = videoAsset.load(.duration)
-            async let loadedAudioDuration = audioAsset.load(.duration)
+            async let loadedVideoTracks =
+                videoAsset.loadTracks(withMediaType: .video)
+            async let loadedAudioTracks =
+                audioAsset.loadTracks(withMediaType: .audio)
+            async let loadedVideoDuration =
+                videoAsset.load(.duration)
+            async let loadedAudioDuration =
+                audioAsset.load(.duration)
 
             let videoTracks = try await loadedVideoTracks
             let audioTracks = try await loadedAudioTracks
@@ -366,9 +525,10 @@ final class NativePlayerModel: ObservableObject {
                 throw StreamResolverError.noPlayableStream
             }
 
-            let duration = CMTimeCompare(videoDuration, audioDuration) <= 0
-                ? videoDuration
-                : audioDuration
+            let duration = CMTimeCompare(
+                videoDuration,
+                audioDuration
+            ) <= 0 ? videoDuration : audioDuration
 
             let composition = AVMutableComposition()
 
@@ -383,22 +543,45 @@ final class NativePlayerModel: ObservableObject {
                 throw StreamResolverError.noPlayableStream
             }
 
-            let range = CMTimeRange(start: .zero, duration: duration)
-            try videoTrack.insertTimeRange(range, of: sourceVideoTrack, at: .zero)
-            try audioTrack.insertTimeRange(range, of: sourceAudioTrack, at: .zero)
+            let range = CMTimeRange(
+                start: .zero,
+                duration: duration
+            )
+
+            try videoTrack.insertTimeRange(
+                range,
+                of: sourceVideoTrack,
+                at: .zero
+            )
+            try audioTrack.insertTimeRange(
+                range,
+                of: sourceAudioTrack,
+                at: .zero
+            )
 
             return AVPlayerItem(asset: composition)
         }
     }
 }
 
+private enum PlayerSettingsPage {
+    case root
+    case quality
+    case captions
+    case speed
+}
+
 struct NativePlayerView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var model: NativePlayerModel
 
+    @State private var showSettings = false
+    @State private var settingsPage: PlayerSettingsPage = .root
+
     init(
         source: PlaybackSource,
         youtubeVideoID: String?,
+        initialQuality: String,
         captionsEnabled: Bool,
         captionLanguage: String,
         allowCaptionTranslation: Bool
@@ -407,6 +590,7 @@ struct NativePlayerView: View {
             wrappedValue: NativePlayerModel(
                 source: source,
                 youtubeVideoID: youtubeVideoID,
+                initialQuality: initialQuality,
                 captionsEnabled: captionsEnabled,
                 captionLanguage: captionLanguage,
                 allowCaptionTranslation: allowCaptionTranslation
@@ -419,12 +603,32 @@ struct NativePlayerView: View {
             VideoPlayer(player: model.player)
                 .ignoresSafeArea()
 
-            if model.isPreparing {
-                ProgressView("Připravuji video…")
-                    .font(.title3)
+            if model.isPreparing || model.isSwitchingQuality {
+                ProgressView(
+                    model.isSwitchingQuality
+                        ? "Měním kvalitu…"
+                        : "Připravuji video…"
+                )
+                .font(.title3)
             }
 
             VStack {
+                HStack {
+                    Spacer()
+
+                    Button {
+                        settingsPage = .root
+                        showSettings.toggle()
+                    } label: {
+                        Image(systemName: "gearshape.fill")
+                            .font(.title2)
+                            .padding(10)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .padding(.top, 38)
+                    .padding(.trailing, 48)
+                }
+
                 Spacer()
 
                 if !model.currentCaption.isEmpty {
@@ -452,7 +656,17 @@ struct NativePlayerView: View {
                         .allowsHitTesting(false)
                 }
             }
+
+            if showSettings {
+                PlayerSettingsOverlay(
+                    model: model,
+                    page: $settingsPage,
+                    isPresented: $showSettings
+                )
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
         }
+        .animation(.easeInOut(duration: 0.2), value: showSettings)
         .task {
             await model.prepareAndPlay()
         }
@@ -460,7 +674,269 @@ struct NativePlayerView: View {
             model.pause()
         }
         .onExitCommand {
-            dismiss()
+            if showSettings {
+                if settingsPage == .root {
+                    showSettings = false
+                } else {
+                    settingsPage = .root
+                }
+            } else {
+                dismiss()
+            }
         }
+    }
+}
+
+private struct PlayerSettingsOverlay: View {
+    @ObservedObject var model: NativePlayerModel
+    @Binding var page: PlayerSettingsPage
+    @Binding var isPresented: Bool
+
+    var body: some View {
+        HStack {
+            Spacer()
+
+            VStack(alignment: .leading, spacing: 18) {
+                HStack {
+                    if page != .root {
+                        Button {
+                            page = .root
+                        } label: {
+                            Image(systemName: "chevron.left")
+                        }
+                    }
+
+                    Text(title)
+                        .font(.title2.bold())
+
+                    Spacer()
+
+                    Button {
+                        isPresented = false
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                }
+
+                Divider()
+
+                switch page {
+                case .root:
+                    rootPage
+                case .quality:
+                    qualityPage
+                case .captions:
+                    captionsPage
+                case .speed:
+                    speedPage
+                }
+
+                Spacer()
+            }
+            .padding(30)
+            .frame(width: 620, maxHeight: .infinity)
+            .background(.ultraThinMaterial)
+        }
+        .ignoresSafeArea()
+    }
+
+    private var title: String {
+        switch page {
+        case .root:
+            return "Přehrávání"
+        case .quality:
+            return "Kvalita"
+        case .captions:
+            return "Titulky"
+        case .speed:
+            return "Rychlost"
+        }
+    }
+
+    private var rootPage: some View {
+        VStack(spacing: 14) {
+            settingsButton(
+                title: "Kvalita",
+                value: model.activeQuality == "Auto"
+                    ? "Automaticky"
+                    : model.activeQuality,
+                icon: "4k.tv"
+            ) {
+                page = .quality
+            }
+
+            settingsButton(
+                title: "Titulky",
+                value: model.captionsAreEnabled
+                    ? (model.captionStatus ?? "Zapnuto")
+                    : "Vypnuto",
+                icon: "captions.bubble.fill"
+            ) {
+                page = .captions
+            }
+
+            settingsButton(
+                title: "Rychlost",
+                value: rateLabel(model.playbackRate),
+                icon: "speedometer"
+            ) {
+                page = .speed
+            }
+        }
+    }
+
+    private var qualityPage: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                qualityButton("Auto", label: "Automaticky")
+                qualityButton("1080p", label: "1080p")
+                qualityButton("1440p", label: "1440p")
+                qualityButton("2160p", label: "4K / 2160p")
+            }
+        }
+    }
+
+    private var captionsPage: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                Button {
+                    model.disableCaptions()
+                    page = .root
+                } label: {
+                    optionRow(
+                        "Vypnuto",
+                        selected: !model.captionsAreEnabled
+                    )
+                }
+
+                Button {
+                    model.enablePreferredCaptions()
+                    page = .root
+                } label: {
+                    optionRow(
+                        "Čeština – automaticky",
+                        selected:
+                            model.captionsAreEnabled
+                            && (model.captionStatus ?? "")
+                                .localizedCaseInsensitiveContains("če")
+                    )
+                }
+
+                if model.captionOptions.isEmpty {
+                    Text("Načítám dostupné jazyky…")
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 18)
+                } else {
+                    ForEach(model.captionOptions) { option in
+                        Button {
+                            model.selectCaption(option)
+                            page = .root
+                        } label: {
+                            optionRow(
+                                option.displayName,
+                                selected:
+                                    model.captionsAreEnabled
+                                    && model.captionStatus
+                                        == option.displayName
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var speedPage: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                ForEach(
+                    [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0],
+                    id: \.self
+                ) { value in
+                    Button {
+                        model.setPlaybackRate(Float(value))
+                        page = .root
+                    } label: {
+                        optionRow(
+                            rateLabel(Float(value)),
+                            selected:
+                                abs(model.playbackRate - Float(value))
+                                < 0.001
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private func qualityButton(
+        _ value: String,
+        label: String
+    ) -> some View {
+        Button {
+            Task {
+                await model.changeQuality(value)
+                page = .root
+            }
+        } label: {
+            optionRow(
+                label,
+                selected: model.activeQuality == value
+            )
+        }
+        .disabled(model.isSwitchingQuality)
+    }
+
+    private func settingsButton(
+        title: String,
+        value: String,
+        icon: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 18) {
+                Image(systemName: icon)
+                    .frame(width: 38)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.headline)
+
+                    Text(value)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+            }
+            .padding(.vertical, 8)
+        }
+    }
+
+    private func optionRow(
+        _ title: String,
+        selected: Bool
+    ) -> some View {
+        HStack {
+            Text(title)
+                .multilineTextAlignment(.leading)
+
+            Spacer()
+
+            if selected {
+                Image(systemName: "checkmark")
+            }
+        }
+        .padding(.vertical, 8)
+    }
+
+    private func rateLabel(_ rate: Float) -> String {
+        if abs(rate - 1.0) < 0.001 {
+            return "Normální"
+        }
+
+        return String(format: "%.2gx", rate)
     }
 }
