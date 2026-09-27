@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreGraphics
 import CoreMedia
 import Foundation
 
@@ -144,9 +145,8 @@ enum PlaybackFormatInspector {
 
         let extensions =
             CMFormatDescriptionGetExtensions(description)
-            as NSDictionary
 
-        let text = extensions.description.lowercased()
+        let text = String(describing: extensions).lowercased()
 
         if text.contains("smpte_st_2084")
             || text.contains("2084")
