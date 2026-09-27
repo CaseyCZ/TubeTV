@@ -630,13 +630,6 @@ actor AlternativePlayerService {
                 as? String
             ?? ""
 
-        guard status == "OK" else {
-            logger.notice(
-                "Unplayable client=\(client.profile, privacy: .public) status=\(status, privacy: .public) reason=\(reason, privacy: .public)"
-            )
-            return nil
-        }
-
         let adMetadata =
             AdFilteringPolicy
                 .inspectPlayerResponse(
@@ -649,7 +642,7 @@ actor AlternativePlayerService {
                     from: root
                 ) else {
             logger.notice(
-                "No streamingData client=\(client.profile, privacy: .public)"
+                "Unplayable client=\(client.profile, privacy: .public) status=\(status, privacy: .public) reason=\(reason, privacy: .public)"
             )
             return nil
         }
@@ -675,6 +668,27 @@ actor AlternativePlayerService {
             streaming[
                 "hlsManifestUrl"
             ] as? String
+
+        let hasReturnedContent =
+            !combined.isEmpty
+            || !adaptive.isEmpty
+            || hlsRaw != nil
+
+        if status != "OK" {
+            guard hasReturnedContent else {
+                logger.notice(
+                    "Unplayable client=\(client.profile, privacy: .public) status=\(status, privacy: .public) reason=\(reason, privacy: .public)"
+                )
+                return nil
+            }
+
+            // SmartTube's firstPlayable() has a second pass that accepts
+            // a response with regular formats even when it is marked
+            // unplayable. Preserve that behavior for usable content.
+            logger.notice(
+                "Using returned content despite status client=\(client.profile, privacy: .public) status=\(status, privacy: .public)"
+            )
+        }
 
         let playbackHeaders = PlaybackRequestHeaders(
             userAgent: client.userAgent,
