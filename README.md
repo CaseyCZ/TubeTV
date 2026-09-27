@@ -20,7 +20,11 @@ No XcodeGen or generated workspace is required.
 - Native YouTube search
 - Paste a YouTube URL or 11-character video ID
 - YouTube thumbnails
+- YouTube channels with avatar, description and channel videos
+- Channels work signed-in through InnerTube and signed-out through the public YouTube page
 - Native AVPlayer playback
+- SmartTube-style authenticated YouTube TV / InnerTube player after sign-in
+- Automatic fallback to YouTubeKit when the authenticated player does not return a compatible stream
 - Direct YouTube stream extraction through YouTubeKit
 - Adaptive video + audio playback path for higher resolutions
 - Quality preference:
@@ -33,6 +37,8 @@ No XcodeGen or generated workspace is required.
 - Czech captions preferred by default
 - YouTube automatic caption translation to Czech when available
 - Custom synchronized caption overlay
+- SmartTube-style YouTube account history tracking with playback/watchtime updates
+- Multiple YouTube / Brand Account profile selection via X-Goog-Pageid
 - Settings for automatic captions and translation
 
 ### In progress / next
