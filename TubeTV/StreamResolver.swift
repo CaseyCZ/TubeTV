@@ -5,15 +5,18 @@ struct PlaybackRequestHeaders: Hashable {
     let userAgent: String
     let referer: String?
     let origin: String?
+    let clientProfile: String?
 
     init(
         userAgent: String,
         referer: String? = nil,
-        origin: String? = nil
+        origin: String? = nil,
+        clientProfile: String? = nil
     ) {
         self.userAgent = userAgent
         self.referer = referer
         self.origin = origin
+        self.clientProfile = clientProfile
     }
 
     var dictionary: [String: String] {
@@ -41,6 +44,17 @@ enum PlaybackSource: Hashable {
         fallback: URL?,
         headers: PlaybackRequestHeaders
     )
+
+    var clientProfile: String? {
+        switch self {
+        case .directWithHeaders(_, let headers),
+             .adaptiveWithHeaders(_, _, _, let headers):
+            return headers.clientProfile
+
+        case .direct, .adaptive:
+            return nil
+        }
+    }
 }
 
 enum StreamResolverError: LocalizedError {
@@ -114,7 +128,8 @@ enum StreamResolverError: LocalizedError {
 enum StreamResolver {
     static func resolveYouTubeVideo(
         videoID: String,
-        preferredQuality: String = "Auto"
+        preferredQuality: String = "Auto",
+        excludingProfiles: Set<String> = []
     ) async throws -> PlaybackSource {
         guard !videoID.isEmpty else {
             throw StreamResolverError.invalidVideoID
@@ -122,7 +137,8 @@ enum StreamResolver {
 
         var meaningfulError: StreamResolverError?
 
-        if await SmartTubeAuthService.shared.signedIn() {
+        if !excludingProfiles.contains("TV_AUTH"),
+           await SmartTubeAuthService.shared.signedIn() {
             do {
                 return try await AuthenticatedPlayerService.shared.resolve(
                     videoID: videoID,
@@ -144,7 +160,8 @@ enum StreamResolver {
         do {
             return try await AlternativePlayerService.shared.resolve(
                 videoID: videoID,
-                preferredQuality: preferredQuality
+                preferredQuality: preferredQuality,
+                excludingProfiles: excludingProfiles
             )
         } catch let error as StreamResolverError {
             if case .ipBlocked = error {
