@@ -16,10 +16,14 @@ struct YouTubeChannelPage: Identifiable, Hashable {
 }
 
 enum AccountFeedKind: String, CaseIterable, Identifiable {
-    case subscriptions = "Odběry"
-    case history = "Historie"
+    case subscriptions
+    case history
 
     var id: String { rawValue }
+
+    var titleKey: String {
+        rawValue
+    }
 
     var browseID: String {
         switch self {
@@ -47,9 +51,9 @@ enum InnerTubeError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidResponse:
-            return "YouTube účet vrátil neplatnou odpověď."
+            return "YouTube account returned an invalid response."
         case .notSignedIn:
-            return "Pro tuto část se nejdřív přihlas k YouTube."
+            return "Sign in to YouTube to use this section."
         }
     }
 }
@@ -91,7 +95,7 @@ actor InnerTubeService {
 
         return YouTubeChannelPage(
             id: channelID,
-            title: metadata.title ?? "YouTube kanál",
+            title: metadata.title ?? "YouTube channel",
             description: metadata.description ?? "",
             avatarURL: metadata.avatarURL,
             videos: Self.extractVideos(from: root)
