@@ -21,6 +21,21 @@ enum AppLanguage: String, CaseIterable, Identifiable {
 }
 
 enum L10n {
+    static var currentLanguageCode: String {
+        UserDefaults.standard.string(forKey: "appLanguage")
+            ?? AppLanguage.english.rawValue
+    }
+
+    static var acceptLanguageHeader: String {
+        let code = currentLanguageCode
+
+        if code == "en" {
+            return "en-US,en;q=0.9"
+        }
+
+        return "\(code),en;q=0.8"
+    }
+
     static func text(
         _ key: String,
         languageCode: String? = nil
