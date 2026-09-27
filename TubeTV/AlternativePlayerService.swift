@@ -1178,7 +1178,13 @@ actor AlternativePlayerService {
                         == requestedHeight
                 }
                 .max {
-                    ($0.bitrate ?? 0)
+                    if ($0.fps ?? 0)
+                        != ($1.fps ?? 0) {
+                        return ($0.fps ?? 0)
+                            < ($1.fps ?? 0)
+                    }
+
+                    return ($0.bitrate ?? 0)
                         < ($1.bitrate ?? 0)
                 }
         }
@@ -1193,6 +1199,13 @@ actor AlternativePlayerService {
                 != rightHeight {
                 return leftHeight
                     < rightHeight
+            }
+
+            let leftFPS = $0.fps ?? 0
+            let rightFPS = $1.fps ?? 0
+
+            if leftFPS != rightFPS {
+                return leftFPS < rightFPS
             }
 
             return ($0.bitrate ?? 0)
