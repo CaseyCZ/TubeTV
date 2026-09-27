@@ -1,23 +1,73 @@
 import SwiftUI
 
 struct HomeView: View {
-    private let videos = VideoItem.demo
+    @State private var videos: [VideoItem] = []
+    @State private var isLoading = true
+    @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 44) {
-                    Text("Domů")
-                        .font(.largeTitle.bold())
+                    HStack {
+                        Text("Domů")
+                            .font(.largeTitle.bold())
 
-                    VideoRow(title: "Doporučené", videos: videos)
-                    VideoRow(title: "Pokračovat ve sledování", videos: videos)
+                        Spacer()
+
+                        if isLoading {
+                            ProgressView()
+                        }
+                    }
+
+                    if let errorMessage {
+                        Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                    }
+
+                    if videos.isEmpty && !isLoading {
+                        VideoRow(title: "TubeTV", videos: VideoItem.demo)
+                    } else {
+                        VideoRow(
+                            title: "Doporučené",
+                            videos: Array(videos.prefix(24))
+                        )
+
+                        if videos.count > 24 {
+                            VideoRow(
+                                title: "Další videa",
+                                videos: Array(videos.dropFirst(24).prefix(24))
+                            )
+                        }
+                    }
                 }
                 .padding(48)
             }
             .navigationDestination(for: VideoItem.self) { video in
                 VideoDetailView(video: video)
             }
+            .task {
+                await loadHome()
+            }
+        }
+    }
+
+    @MainActor
+    private func loadHome() async {
+        guard videos.isEmpty else { return }
+
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            videos = try await YouTubeService.shared.home()
+
+            if videos.isEmpty {
+                errorMessage = "YouTube nevrátil žádná videa."
+            }
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 }
