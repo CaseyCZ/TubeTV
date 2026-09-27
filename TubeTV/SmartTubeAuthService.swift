@@ -200,10 +200,14 @@ actor SmartTubeAuthService {
             return cachedBootstrap
         }
 
-        var request = URLRequest(url: URL(string: Self.tvReferer)!)
+        guard let tvURL = URL(string: Self.tvReferer) else {
+            throw SmartTubeAuthError.tvPageUnavailable
+        }
+
+        var request = URLRequest(url: tvURL)
         request.timeoutInterval = 20
         request.setValue(Self.tvUserAgent, forHTTPHeaderField: "User-Agent")
-        request.setValue("cs-CZ,cs;q=0.9,en;q=0.7", forHTTPHeaderField: "Accept-Language")
+        request.setValue(L10n.acceptLanguageHeader, forHTTPHeaderField: "Accept-Language")
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -280,8 +284,14 @@ actor SmartTubeAuthService {
             "scope": "http://gdata.youtube.com https://www.googleapis.com/auth/youtube-paid-content"
         ]
 
+        guard let deviceCodeURL = URL(
+            string: "https://www.youtube.com/o/oauth2/device/code"
+        ) else {
+            throw SmartTubeAuthError.invalidResponse
+        }
+
         let response = try await postJSON(
-            URL(string: "https://www.youtube.com/o/oauth2/device/code")!,
+            deviceCodeURL,
             payload: payload
         )
 
@@ -292,6 +302,12 @@ actor SmartTubeAuthService {
         let data = try await bootstrap()
         let deadline = Date().addingTimeInterval(TimeInterval(authorization.expiresIn))
         var delay = max(authorization.interval, 3)
+
+        guard let tokenURL = URL(
+            string: "https://www.youtube.com/o/oauth2/token"
+        ) else {
+            throw SmartTubeAuthError.invalidResponse
+        }
 
         while Date() < deadline {
             try Task.checkCancellation()
@@ -307,7 +323,7 @@ actor SmartTubeAuthService {
             ]
 
             let response = try await postJSON(
-                URL(string: "https://www.youtube.com/o/oauth2/token")!,
+                tokenURL,
                 payload: payload,
                 allowErrorResponse: true
             )
@@ -399,10 +415,14 @@ actor SmartTubeAuthService {
             ]
         ]
 
+        guard let accountsURL = URL(
+            string: "https://www.youtube.com/youtubei/v1/account/accounts_list?prettyPrint=false"
+        ) else {
+            throw SmartTubeAuthError.invalidResponse
+        }
+
         var request = URLRequest(
-            url: URL(
-                string: "https://www.youtube.com/youtubei/v1/account/accounts_list?prettyPrint=false"
-            )!
+            url: accountsURL
         )
         request.httpMethod = "POST"
         request.timeoutInterval = 25
@@ -545,8 +565,14 @@ actor SmartTubeAuthService {
             "grant_type": "refresh_token"
         ]
 
+        guard let tokenURL = URL(
+            string: "https://www.youtube.com/o/oauth2/token"
+        ) else {
+            throw SmartTubeAuthError.invalidResponse
+        }
+
         let response = try await postJSON(
-            URL(string: "https://www.youtube.com/o/oauth2/token")!,
+            tokenURL,
             payload: payload,
             allowErrorResponse: true
         )
