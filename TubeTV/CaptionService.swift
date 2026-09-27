@@ -215,7 +215,7 @@ actor CaptionService {
         }
 
         let watchURL = URL(
-            string: "https://www.youtube.com/watch?v=\(videoID)&hl=cs&gl=CZ"
+            string: "https://www.youtube.com/watch?v=\(videoID)&hl=\(L10n.currentLanguageCode)&gl=CZ"
         )!
 
         var request = URLRequest(url: watchURL)
@@ -290,7 +290,7 @@ actor CaptionService {
             ?? "Titulky"
 
         let translatedName = Locale(
-            identifier: "cs_CZ"
+            identifier: L10n.currentLanguageCode
         ).localizedString(forLanguageCode: outputLanguage)
             ?? outputLanguage
 
@@ -388,7 +388,7 @@ actor CaptionService {
             forHTTPHeaderField: "User-Agent"
         )
         request.setValue(
-            "cs-CZ,cs;q=0.9,en;q=0.7",
+            L10n.acceptLanguageHeader,
             forHTTPHeaderField: "Accept-Language"
         )
         request.setValue(
