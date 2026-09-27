@@ -2,117 +2,159 @@
 
 ![tvOS Build](https://github.com/CaseyCZ/TubeTV/actions/workflows/tvos-build.yml/badge.svg?branch=Master)
 
+### A clean YouTube experience made for Apple TV.
 
-Native Apple TV (tvOS) YouTube client experiment built with **Swift + SwiftUI**.
+TubeTV is a native tvOS app designed for comfortable YouTube watching from the couch.  
+It combines a TV-first interface, Apple TV Remote navigation, high-quality playback, multilingual subtitles and YouTube account features in one simple app.
 
-TubeTV is an independent project and is not affiliated with YouTube, Google, or SmartTube.
+> **TubeTV is currently in active development.**
 
-## Current status
+---
 
-The project is a normal Xcode project:
+## ✨ Highlights
+
+### Native Apple TV experience
+TubeTV is designed specifically for tvOS with a large-screen interface, focus-based navigation and full Apple TV Remote support.
+
+### Clean playback
+TubeTV is built around direct content playback and does not intentionally create playback items from YouTube ad placements.
+
+### High-quality video
+Choose the quality that fits your setup:
+
+- Automatic
+- 1080p
+- 1440p
+- 4K / 2160p
+- 60 fps when available
+- HDR when supported by the video, Apple TV and connected display
+
+During playback, TubeTV can show the actual resolution, frame rate, dynamic range and codec currently in use.
+
+### Subtitles & translation
+TubeTV supports YouTube subtitle tracks directly inside the player.
+
+- Native subtitle tracks
+- Auto-generated subtitles
+- Automatic translation when available
+- Quick subtitle switching while watching
+- Independent app and subtitle languages
+
+Czech subtitles can remain preferred even when the whole TubeTV interface is set to English.
+
+### YouTube account
+Sign in using the familiar TV device-code flow.
+
+After signing in, TubeTV can provide:
+
+- Personalized Home
+- Subscriptions
+- YouTube History
+- Playlists
+- Multiple YouTube / Brand Account profiles
+- Watch progress synchronization
+
+Account tokens are stored securely in the Apple Keychain.
+
+### Search, channels & playlists
+Browse YouTube without leaving the TV interface.
+
+- Search videos
+- Paste a YouTube URL or video ID
+- Open channels
+- Browse channel videos
+- Open playlists
+- View thumbnails and video metadata
+
+---
+
+## 🎬 Player
+
+The TubeTV player keeps the most useful controls available while the video is playing.
+
+You can change:
+
+- Video quality
+- Subtitle track
+- Subtitle translation
+- Playback speed from 0.5× to 2×
+- Active YouTube profile through app settings
+
+Changing quality keeps your current playback position whenever possible.
+
+---
+
+## 🌍 Languages
+
+**English is the default TubeTV language.**
+
+Current interface languages:
+
+- English
+- Čeština
+- Deutsch
+- Polski
+- Slovenčina
+
+The interface language and preferred subtitle language are separate settings, so every user can combine them however they want.
+
+More languages can be added over time.
+
+---
+
+## 📺 Designed for
+
+TubeTV is focused on:
+
+- Apple TV
+- tvOS
+- Large-screen viewing
+- Apple TV Remote navigation
+
+Playback capabilities depend on the Apple TV model, tvOS version, connected display and formats available for each YouTube video.
+
+---
+
+## 🚧 Development status
+
+TubeTV is still under active development and is being tested feature by feature.
+
+The current focus is:
+
+- Stable playback on real Apple TV hardware
+- Reliable account sign-in and sync
+- 1080p / 1440p / 4K playback
+- 60 fps and HDR compatibility
+- Subtitle reliability
+- Ad-free playback path stability
+- UI polish and TV usability
+
+The badge at the top of this page shows the current automated tvOS build status.
+
+---
+
+## 🧪 Development build
+
+TubeTV is not yet distributed as a finished public release.
+
+Developers can open:
 
 `TubeTV.xcodeproj`
 
-No XcodeGen or generated workspace is required.
+and build the tvOS target using Xcode.
 
-### Implemented
+---
 
-- Native tvOS SwiftUI interface
-- Apple TV Remote / Focus Engine navigation
-- Home screen with live YouTube video cards
-- Native YouTube search
-- Paste a YouTube URL or 11-character video ID
-- YouTube thumbnails
-- YouTube channels with avatar, description and channel videos
-- Channels work signed-in through InnerTube and signed-out through the public YouTube page
-- Native AVPlayer playback
-- SmartTube-style authenticated YouTube TV / InnerTube player after sign-in
-- SmartTube-style ad filtering: ad placements are never turned into playable media
-- Direct content video/audio streams are preferred over ad-bearing player manifests
-- Ad-aware client fallback chain: signed TV → VisionOS → Android VR → iOS → YouTubeKit
-- Automatic fallback to YouTubeKit when the authenticated player does not return a compatible stream
-- Direct YouTube stream extraction through YouTubeKit
-- Adaptive video + audio playback path for higher resolutions
-- Quality preference:
-  - Auto
-  - 1080p
-  - 1440p
-  - 4K / 2160p
-- Automatic fallback to a compatible combined stream
-- Caption discovery from YouTube
-- Czech captions preferred by default
-- YouTube automatic caption translation to Czech when available
-- Custom synchronized caption overlay
-- SmartTube-style YouTube account history tracking with playback/watchtime updates
-- Multiple YouTube / Brand Account profile selection via X-Goog-Pageid
-- Settings for automatic captions and translation
-- In-player settings panel for quality, subtitles and playback speed
-- Actual AVFoundation format inspection: resolution, FPS, SDR/HDR and codec
-- Apple TV HDR eligibility check through AVPlayer
-- VideoToolbox hardware codec checks for H.264, HEVC and AV1
-- Live quality switching while preserving the current playback position
-- Full YouTube subtitle language list with native tracks and automatic translations
+## ❤️ Inspired by the TV experience
 
-### In progress / next
+TubeTV takes inspiration from the usability and feature set of SmartTube while using its own native Swift / SwiftUI implementation for Apple TV.
 
-- Validate adaptive 1080p / 1440p / 4K playback on real Apple TV hardware
-- HDR / codec selection
-- YouTube account sign-in
-- Subscriptions
-- YouTube history
-- Playlists
-- Channel detail
-- Better video detail metadata
-- Player quality selector while video is playing
-- Subtitle language selector while video is playing
-- SponsorBlock
-- UI polish closer to SmartTube
+Third-party attribution and licensing information is available in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-## First Apple TV test
+---
 
-1. Open `TubeTV.xcodeproj`.
-2. Select the TubeTV tvOS target.
-3. Let Xcode resolve the YouTubeKit Swift Package.
-4. Run on Apple TV or tvOS Simulator.
-5. Test **Domů**.
-6. Test **Hledat** with a normal query.
-7. Open a result and press **Přehrát**.
-8. Test quality settings.
-9. Test a video with English or auto-generated captions and verify Czech translation.
+## Disclaimer
 
-## Dependency
+TubeTV is an independent project and is not affiliated with, endorsed by, or sponsored by YouTube, Google, Apple or SmartTube.
 
-Playback stream extraction currently uses:
-
-- [YouTubeKit](https://github.com/alexeichhorn/YouTubeKit) 0.4.8
-
-YouTubeKit supports tvOS and exposes direct video/audio stream URLs for native playback.
-
-
-## Ads / ad filtering
-
-TubeTV follows the same high-level principle as SmartTube: the app has no playback path that intentionally renders YouTube ad placements.
-
-The player response may contain fields such as `adPlacements`, `playerAds`, `adSlots` and `adBreakHeartbeatParams`. TubeTV inspects these fields but does not convert them into AVPlayer items.
-
-Playback order:
-
-1. Signed-in YouTube TV / InnerTube direct content formats.
-2. VisionOS direct content formats.
-3. Android VR direct content formats.
-4. iOS direct content formats.
-5. YouTubeKit direct stream extraction.
-
-HLS is only a last-resort fallback and is rejected when the same player response contains advertising metadata and no independent direct content stream is available.
-
-This is intentionally separate from SponsorBlock, which handles sponsor messages embedded inside the creator's video itself.
-
-
-## Languages
-
-- English is the default app language.
-- The interface language is selectable in Settings.
-- Initial UI languages: English, Czech, German, Polish and Slovak.
-- App language and subtitle language are independent settings.
-- YouTube metadata requests follow the selected app language.
-- Subtitle tracks and automatic translation keep their own preferred-language setting.
+YouTube availability, account features and playback formats may change over time because they depend on external services.
