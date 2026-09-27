@@ -26,8 +26,21 @@ struct VideoDetailView: View {
             Text(video.title)
                 .font(.largeTitle.bold())
 
-            Text(video.channel)
-                .font(.title2)
+            if let channelID = video.channelID {
+                NavigationLink {
+                    ChannelView(
+                        channelID: channelID,
+                        fallbackTitle: video.channel
+                    )
+                } label: {
+                    Label(video.channel, systemImage: "person.crop.circle")
+                        .font(.title2)
+                }
+                .buttonStyle(.plain)
+            } else {
+                Text(video.channel)
+                    .font(.title2)
+            }
 
             Text(video.subtitle)
                 .font(.title3)
