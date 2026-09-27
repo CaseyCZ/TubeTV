@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import VideoToolbox
 
 enum AuthenticatedPlayerError: LocalizedError {
     case notSignedIn
@@ -44,18 +45,25 @@ private struct InnerTubeFormat {
         guard isVideo else { return false }
 
         if mimeType.contains("avc1") {
-            return true
+            return VTIsHardwareDecodeSupported(
+                kCMVideoCodecType_H264
+            )
         }
 
         if mimeType.contains("hvc1") || mimeType.contains("hev1") {
-            return true
+            return VTIsHardwareDecodeSupported(
+                kCMVideoCodecType_HEVC
+            )
         }
 
         if mimeType.contains("av01") {
-            return true
+            return VTIsHardwareDecodeSupported(
+                kCMVideoCodecType_AV1
+            )
         }
 
-        return mimeType.hasPrefix("video/mp4")
+        // YouTube VP9 is intentionally not accepted by AVPlayer here.
+        return false
     }
 
     var isAppleFriendlyAudio: Bool {
