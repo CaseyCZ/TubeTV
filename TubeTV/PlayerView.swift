@@ -15,6 +15,13 @@ private func localizedLanguageName(
         ?? languageCode.uppercased()
 }
 
+struct PlayerAudioTrackInfo: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let languageCode: String
+    let isOriginal: Bool
+}
+
 struct VideoDetailView: View {
     let video: VideoItem
 
@@ -172,6 +179,7 @@ final class NativePlayerModel: ObservableObject {
     @Published private(set) var isSwitchingQuality = false
     @Published private(set) var availableQualityHeights: [Int]
     @Published private(set) var activeClientProfile: String?
+    @Published private(set) var availableAudioTracks: [PlayerAudioTrackInfo] = []
 
     private var currentSource: PlaybackSource
     private let youtubeVideoID: String?
@@ -344,6 +352,9 @@ final class NativePlayerModel: ObservableObject {
         )
 
         await updateFormatInfo(
+            from: item
+        )
+        await loadAudioTracks(
             from: item
         )
         refreshAvailableQualityHeights(
@@ -563,6 +574,9 @@ final class NativePlayerModel: ObservableObject {
             }
 
             await updateFormatInfo(
+                from: newItem
+            )
+            await loadAudioTracks(
                 from: newItem
             )
             refreshAvailableQualityHeights(
@@ -832,6 +846,147 @@ final class NativePlayerModel: ObservableObject {
     ) async {
         formatInfo = await PlaybackFormatInspector.inspect(
             asset: item.asset
+        )
+    }
+
+    private func loadAudioTracks(
+        from item: AVPlayerItem
+    ) async {
+        guard let group = try? await item.asset
+            .loadMediaSelectionGroup(
+                for: .audible
+            ),
+            !group.options.isEmpty else {
+            availableAudioTracks = []
+            return
+        }
+
+        let mainOptions = group.options.filter {
+            $0.hasMediaCharacteristic(
+                .isMainProgramContent
+            )
+        }
+        let mainDiscriminates =
+            !mainOptions.isEmpty
+            && mainOptions.count
+                < group.options.count
+
+        let initialTracks =
+            group.options.enumerated().map {
+                index,
+                option
+                -> PlayerAudioTrackInfo in
+
+                let languageCode =
+                    option.locale?.identifier
+                    ?? option.extendedLanguageTag
+                    ?? "und"
+
+                let localizedName =
+                    Locale(
+                        identifier:
+                            L10n.currentLanguageCode
+                    )
+                    .localizedString(
+                        forLanguageCode:
+                            languageCode
+                    )
+                    ?? option.displayName
+
+                let isDefault =
+                    group.defaultOption.map {
+                        defaultOption in
+                        defaultOption === option
+                            || (
+                                defaultOption.locale
+                                    != nil
+                                && defaultOption.locale
+                                    == option.locale
+                            )
+                            || (
+                                defaultOption
+                                    .extendedLanguageTag
+                                    != nil
+                                && defaultOption
+                                    .extendedLanguageTag
+                                    == option
+                                        .extendedLanguageTag
+                            )
+                    } ?? false
+
+                let isOriginal =
+                    mainDiscriminates
+                        ? option
+                            .hasMediaCharacteristic(
+                                .isMainProgramContent
+                            )
+                        : isDefault
+
+                return PlayerAudioTrackInfo(
+                    id:
+                        "\(languageCode)-\(index)",
+                    name: localizedName,
+                    languageCode:
+                        languageCode,
+                    isOriginal:
+                        isOriginal
+                )
+            }
+
+        var tracks = initialTracks
+
+        if tracks.count > 1,
+           !tracks.contains(where: {
+                $0.isOriginal
+           }) {
+            let nonAuxiliaryIndices =
+                group.options.indices.filter {
+                    !group.options[$0]
+                        .hasMediaCharacteristic(
+                            .isAuxiliaryContent
+                        )
+                }
+
+            if nonAuxiliaryIndices.count == 1,
+               let originalIndex =
+                    nonAuxiliaryIndices.first {
+                tracks = tracks.enumerated().map {
+                    index,
+                    track in
+                    PlayerAudioTrackInfo(
+                        id: track.id,
+                        name: track.name,
+                        languageCode:
+                            track.languageCode,
+                        isOriginal:
+                            index
+                                == originalIndex
+                    )
+                }
+            }
+        }
+
+        if !tracks.isEmpty,
+           !tracks.contains(where: {
+                $0.isOriginal
+           }),
+           let lastID = tracks.last?.id {
+            tracks = tracks.map {
+                PlayerAudioTrackInfo(
+                    id: $0.id,
+                    name: $0.name,
+                    languageCode:
+                        $0.languageCode,
+                    isOriginal:
+                        $0.id == lastID
+                )
+            }
+        }
+
+        availableAudioTracks = tracks
+
+        playbackLogger.notice(
+            "Audio tracks loaded count=\(tracks.count, privacy: .public) original=\(tracks.first(where: { $0.isOriginal })?.languageCode ?? "none", privacy: .public)"
         )
     }
 
@@ -1206,6 +1361,7 @@ private enum PlayerSettingsPage {
     case root
     case quality
     case captions
+    case audio
     case speed
 }
 
@@ -1369,6 +1525,8 @@ private struct PlayerSettingsOverlay: View {
                     qualityPage
                 case .captions:
                     captionsPage
+                case .audio:
+                    audioPage
                 case .speed:
                     speedPage
                 }
@@ -1391,6 +1549,8 @@ private struct PlayerSettingsOverlay: View {
             return L10n.text("quality", languageCode: appLanguage)
         case .captions:
             return L10n.text("captions", languageCode: appLanguage)
+        case .audio:
+            return L10n.text("audio", languageCode: appLanguage)
         case .speed:
             return L10n.text("speed", languageCode: appLanguage)
         }
@@ -1414,6 +1574,19 @@ private struct PlayerSettingsOverlay: View {
                 icon: "captions.bubble.fill"
             ) {
                 page = .captions
+            }
+
+            if !model.availableAudioTracks.isEmpty {
+                settingsButton(
+                    title: L10n.text(
+                        "audio",
+                        languageCode: appLanguage
+                    ),
+                    value: audioSummary,
+                    icon: "speaker.wave.2.fill"
+                ) {
+                    page = .audio
+                }
             }
 
             settingsButton(
@@ -1519,6 +1692,50 @@ private struct PlayerSettingsOverlay: View {
         }
     }
 
+    private var audioPage: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                ForEach(
+                    model.availableAudioTracks
+                ) { track in
+                    HStack {
+                        VStack(
+                            alignment: .leading,
+                            spacing: 4
+                        ) {
+                            Text(track.name)
+
+                            Text(
+                                track.languageCode
+                            )
+                            .font(.caption)
+                            .foregroundStyle(
+                                .secondary
+                            )
+                        }
+
+                        Spacer()
+
+                        if track.isOriginal {
+                            Text(
+                                L10n.text(
+                                    "original_audio",
+                                    languageCode:
+                                        appLanguage
+                                )
+                            )
+                            .font(.caption)
+                            .foregroundStyle(
+                                .secondary
+                            )
+                        }
+                    }
+                    .padding(.vertical, 8)
+                }
+            }
+        }
+    }
+
     private var speedPage: some View {
         ScrollView {
             VStack(spacing: 12) {
@@ -1617,6 +1834,18 @@ private struct PlayerSettingsOverlay: View {
             }
         }
         .padding(.vertical, 8)
+    }
+
+    private var audioSummary: String {
+        if let original =
+                model.availableAudioTracks
+                    .first(where: {
+                        $0.isOriginal
+                    }) {
+            return original.name
+        }
+
+        return "\(model.availableAudioTracks.count)"
     }
 
     private func rateLabel(_ rate: Float) -> String {
