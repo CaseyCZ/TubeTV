@@ -1,6 +1,14 @@
 import OSLog
 import SwiftUI
 
+private enum CIAdFilteringConfiguration {
+    static var enabled: Bool {
+        ProcessInfo.processInfo.environment[
+            "TUBETV_CI_AD_FILTER_SMOKE"
+        ] == "1"
+    }
+}
+
 private enum CIVideoSmokeConfiguration {
     static var videoID: String? {
         ProcessInfo.processInfo.environment["TUBETV_CI_VIDEO_ID"]
@@ -21,6 +29,166 @@ private enum CIVideoSmokeConfiguration {
         ProcessInfo.processInfo.environment[
             "TUBETV_CI_VIDEO_SMOKE"
         ] == "1"
+    }
+}
+
+private struct CIAdFilteringSmokeView: View {
+    @State private var status = "Testing ad filtering…"
+
+    private let logger = Logger(
+        subsystem: "cz.caseycz.tubetv",
+        category: "CI"
+    )
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Image(systemName: "shield.fill")
+                .font(.system(size: 72))
+
+            Text("TubeTV ad filtering test")
+                .font(.largeTitle.bold())
+
+            Text(status)
+                .font(.title3)
+                .foregroundStyle(.secondary)
+        }
+        .task {
+            runTest()
+        }
+    }
+
+    @MainActor
+    private func runTest() {
+        let cleanRoot: [String: Any] = [
+            "streamingData": [
+                "hlsManifestUrl":
+                    "https://example.com/content.m3u8",
+                "formats": [
+                    [
+                        "url":
+                            "https://example.com/content.mp4"
+                    ]
+                ]
+            ]
+        ]
+
+        let adPlacementRoot: [String: Any] = [
+            "streamingData": [
+                "hlsManifestUrl":
+                    "https://example.com/content.m3u8"
+            ],
+            "adPlacements": [
+                [
+                    "adPlacementRenderer": [
+                        "config": "ad"
+                    ]
+                ]
+            ]
+        ]
+
+        let playerAdsRoot: [String: Any] = [
+            "playerAds": [
+                [
+                    "playerLegacyDesktopWatchAdsRenderer": [
+                        "playerAdParams": "ad"
+                    ]
+                ]
+            ]
+        ]
+
+        let adSlotsRoot: [String: Any] = [
+            "adSlots": [
+                [
+                    "adSlotRenderer": [
+                        "slotId": "ad"
+                    ]
+                ]
+            ]
+        ]
+
+        let heartbeatRoot: [String: Any] = [
+            "adBreakHeartbeatParams": "ad"
+        ]
+
+        let cleanMetadata =
+            AdFilteringPolicy
+                .inspectPlayerResponse(
+                    cleanRoot
+                )
+        let placementMetadata =
+            AdFilteringPolicy
+                .inspectPlayerResponse(
+                    adPlacementRoot
+                )
+
+        let detectsAllAdSignals =
+            placementMetadata.hasAdPlacements
+            && AdFilteringPolicy
+                .inspectPlayerResponse(
+                    playerAdsRoot
+                )
+                .hasPlayerAds
+            && AdFilteringPolicy
+                .inspectPlayerResponse(
+                    adSlotsRoot
+                )
+                .hasAdSlots
+            && AdFilteringPolicy
+                .inspectPlayerResponse(
+                    heartbeatRoot
+                )
+                .hasAdBreakHeartbeat
+
+        let keepsOnlyContentStreamingData =
+            AdFilteringPolicy
+                .contentStreamingData(
+                    from: adPlacementRoot
+                )?["hlsManifestUrl"]
+                as? String
+            == "https://example.com/content.m3u8"
+
+        let blocksAdBearingHLS =
+            !AdFilteringPolicy
+                .shouldUseHLSFallback(
+                    adMetadata:
+                        placementMetadata,
+                    hasDirectContentFormats:
+                        false
+                )
+
+        let allowsCleanHLSFallback =
+            AdFilteringPolicy
+                .shouldUseHLSFallback(
+                    adMetadata:
+                        cleanMetadata,
+                    hasDirectContentFormats:
+                        false
+                )
+
+        let prefersDirectContent =
+            !AdFilteringPolicy
+                .shouldUseHLSFallback(
+                    adMetadata:
+                        cleanMetadata,
+                    hasDirectContentFormats:
+                        true
+                )
+
+        if detectsAllAdSignals
+            && keepsOnlyContentStreamingData
+            && blocksAdBearingHLS
+            && allowsCleanHLSFallback
+            && prefersDirectContent {
+            status = "Ad filtering policy passed."
+            logger.notice(
+                "TUBETV_AD_FILTER_OK"
+            )
+        } else {
+            status = "Ad filtering policy failed."
+            logger.error(
+                "TUBETV_AD_FILTER_FAILED signals=\(detectsAllAdSignals, privacy: .public) content=\(keepsOnlyContentStreamingData, privacy: .public) blocksAdHLS=\(blocksAdBearingHLS, privacy: .public) cleanHLS=\(allowsCleanHLSFallback, privacy: .public) direct=\(prefersDirectContent, privacy: .public)"
+            )
+        }
     }
 }
 
@@ -118,7 +286,9 @@ private struct CIVideoSmokeView: View {
 struct TubeTVApp: App {
     var body: some Scene {
         WindowGroup {
-            if CIVideoSmokeConfiguration.enabled,
+            if CIAdFilteringConfiguration.enabled {
+                CIAdFilteringSmokeView()
+            } else if CIVideoSmokeConfiguration.enabled,
                let directURL =
                 CIVideoSmokeConfiguration.directURL {
                 CIDirectVideoSmokeView(
