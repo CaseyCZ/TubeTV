@@ -158,6 +158,7 @@ final class NativePlayerModel: ObservableObject {
     @Published private(set) var captionsAreEnabled: Bool
     @Published private(set) var isSwitchingQuality = false
     @Published private(set) var availableQualityHeights: [Int]
+    @Published private(set) var activeClientProfile: String?
 
     private var currentSource: PlaybackSource
     private let youtubeVideoID: String?
@@ -196,6 +197,8 @@ final class NativePlayerModel: ObservableObject {
         captionsAreEnabled = captionsEnabled
         availableQualityHeights =
             source.availableQualityHeights
+        activeClientProfile =
+            source.clientProfile
         preferredCaptionLanguage = captionLanguage
         self.allowCaptionTranslation = allowCaptionTranslation
     }
@@ -244,6 +247,8 @@ final class NativePlayerModel: ObservableObject {
                 )
 
                 currentSource = source
+                activeClientProfile =
+                    source.clientProfile
                 isPreparing = false
                 errorMessage = nil
 
@@ -360,6 +365,28 @@ final class NativePlayerModel: ObservableObject {
 
         throw StreamResolverError
             .noPlayableStream
+    }
+
+    var currentPlaybackDescription: String {
+        let fallbackQuality =
+            activeQuality == "Auto"
+                ? L10n.text("automatic")
+                : activeQuality
+
+        return [
+            formatInfo?.displayName
+                ?? fallbackQuality,
+            activeClientProfile
+        ]
+        .compactMap { value in
+            guard let value,
+                  !value.isEmpty else {
+                return nil
+            }
+
+            return value
+        }
+        .joined(separator: " • ")
     }
 
     func pause() {
@@ -491,6 +518,8 @@ final class NativePlayerModel: ObservableObject {
             )
 
             activeQuality = quality
+            activeClientProfile =
+                newSource.clientProfile
 
             let restoredSeconds =
                 player.currentTime().seconds
@@ -1301,12 +1330,7 @@ private struct PlayerSettingsOverlay: View {
         VStack(spacing: 14) {
             settingsButton(
                 title: L10n.text("quality", languageCode: appLanguage),
-                value: model.formatInfo?.displayName
-                    ?? (
-                        model.activeQuality == "Auto"
-                            ? L10n.text("automatic", languageCode: appLanguage)
-                            : model.activeQuality
-                    ),
+                value: model.currentPlaybackDescription,
                 icon: "4k.tv"
             ) {
                 page = .quality
@@ -1360,8 +1384,10 @@ private struct PlayerSettingsOverlay: View {
                         Text(L10n.text("current_playback", languageCode: appLanguage))
                             .font(.headline)
 
-                        Text(format.displayName)
-                            .foregroundStyle(.secondary)
+                        Text(
+                            model.currentPlaybackDescription
+                        )
+                        .foregroundStyle(.secondary)
 
                         if format.width > 0 && format.height > 0 {
                             Text("\(format.width) × \(format.height)")
