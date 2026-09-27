@@ -708,10 +708,11 @@ actor AlternativePlayerService {
 
             if preferredQuality == "Auto",
                let video = videos.first {
-                return .adaptive(
+                return .adaptiveWithHeaders(
                     video: video.url,
                     audio: audio.url,
-                    fallback: fallback
+                    fallback: fallback,
+                    headers: playbackHeaders
                 )
             }
         }
