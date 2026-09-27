@@ -2,6 +2,8 @@ import AVFoundation
 import SwiftUI
 
 struct SettingsView: View {
+    @AppStorage("appLanguage") private var appLanguage =
+        AppLanguage.english.rawValue
     @AppStorage("preferredQuality") private var preferredQuality = "Auto"
     @AppStorage("preferredCaptionLanguage") private var preferredCaptionLanguage = "cs"
     @AppStorage("autoEnableCaptions") private var autoEnableCaptions = true
@@ -17,18 +19,45 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Přehrávání") {
-                    Picker("Preferovaná kvalita", selection: $preferredQuality) {
-                        Text("Automaticky").tag("Auto")
+                Section(L10n.text("language_section", languageCode: appLanguage)) {
+                    Picker(
+                        L10n.text("app_language", languageCode: appLanguage),
+                        selection: $appLanguage
+                    ) {
+                        ForEach(AppLanguage.allCases) { language in
+                            Text(language.displayName)
+                                .tag(language.rawValue)
+                        }
+                    }
+
+                    Text(
+                        L10n.text(
+                            "language_restart_note",
+                            languageCode: appLanguage
+                        )
+                    )
+                    .foregroundStyle(.secondary)
+                }
+
+                Section(L10n.text("playback_section", languageCode: appLanguage)) {
+                    Picker(
+                        L10n.text("preferred_quality", languageCode: appLanguage),
+                        selection: $preferredQuality
+                    ) {
+                        Text(L10n.text("automatic", languageCode: appLanguage))
+                            .tag("Auto")
                         Text("1080p").tag("1080p")
                         Text("1440p").tag("1440p")
                         Text("4K / 2160p").tag("2160p")
                     }
 
                     Label(
-                        AVPlayer.eligibleForHDRPlayback
-                            ? "HDR výstup je dostupný"
-                            : "HDR výstup aktuálně není dostupný",
+                        L10n.text(
+                            AVPlayer.eligibleForHDRPlayback
+                                ? "hdr_available"
+                                : "hdr_unavailable",
+                            languageCode: appLanguage
+                        ),
                         systemImage:
                             AVPlayer.eligibleForHDRPlayback
                                 ? "sparkles.tv"
@@ -37,20 +66,43 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
 
                     Label(
-                        "Reklamy: blokování aktivní",
+                        L10n.text("ads_active", languageCode: appLanguage),
                         systemImage: "hand.raised.fill"
                     )
                     .foregroundStyle(.secondary)
 
-                    Text("TubeTV nepředává YouTube reklamní placementy do AVPlayeru a preferuje přímé obsahové video/audio streamy.")
-                        .foregroundStyle(.secondary)
+                    Text(
+                        L10n.text(
+                            "ads_description",
+                            languageCode: appLanguage
+                        )
+                    )
+                    .foregroundStyle(.secondary)
                 }
 
-                Section("Titulky") {
-                    Toggle("Automaticky zapnout titulky", isOn: $autoEnableCaptions)
-                    Toggle("Automaticky překládat", isOn: $autoTranslateCaptions)
+                Section(L10n.text("subtitles_section", languageCode: appLanguage)) {
+                    Toggle(
+                        L10n.text(
+                            "auto_enable_subtitles",
+                            languageCode: appLanguage
+                        ),
+                        isOn: $autoEnableCaptions
+                    )
+                    Toggle(
+                        L10n.text(
+                            "auto_translate_subtitles",
+                            languageCode: appLanguage
+                        ),
+                        isOn: $autoTranslateCaptions
+                    )
 
-                    Picker("Preferovaný jazyk", selection: $preferredCaptionLanguage) {
+                    Picker(
+                        L10n.text(
+                            "preferred_subtitle_language",
+                            languageCode: appLanguage
+                        ),
+                        selection: $preferredCaptionLanguage
+                    ) {
                         Text("Čeština").tag("cs")
                         Text("English").tag("en")
                         Text("Deutsch").tag("de")
@@ -58,20 +110,31 @@ struct SettingsView: View {
                         Text("Slovenčina").tag("sk")
                     }
 
-                    Text("Když video nemá českou stopu, TubeTV bude preferovat překlad dostupných nebo automaticky generovaných titulků do češtiny.")
-                        .foregroundStyle(.secondary)
+                    Text(
+                        L10n.text(
+                            "subtitle_fallback_description",
+                            languageCode: appLanguage
+                        )
+                    )
+                    .foregroundStyle(.secondary)
                 }
 
-                Section("YouTube účet") {
+                Section(L10n.text("youtube_account", languageCode: appLanguage)) {
                     if isSignedIn {
                         Label(
-                            "Přihlášeno k YouTube",
+                            L10n.text("signed_in", languageCode: appLanguage),
                             systemImage: "checkmark.circle.fill"
                         )
                         .foregroundStyle(.green)
 
                         if !profiles.isEmpty {
-                            Picker("YouTube profil", selection: $selectedProfileID) {
+                            Picker(
+                                L10n.text(
+                                    "youtube_profile",
+                                    languageCode: appLanguage
+                                ),
+                                selection: $selectedProfileID
+                            ) {
                                 ForEach(profiles) { profile in
                                     VStack(alignment: .leading) {
                                         Text(profile.name)
@@ -93,18 +156,26 @@ struct SettingsView: View {
 
                                 Task {
                                     await SmartTubeAuthService.shared.selectAccount(profile)
-                                    accountMessage = "Aktivní YouTube profil: \(profile.name)"
+                                    accountMessage =
+                                        "\(L10n.text("profile_active", languageCode: appLanguage)): \(profile.name)"
                                 }
                             }
                         }
 
-                        Button("Obnovit profily") {
+                        Button(
+                            L10n.text(
+                                "refresh_profiles",
+                                languageCode: appLanguage
+                            )
+                        ) {
                             Task {
                                 await loadProfiles()
                             }
                         }
 
-                        Button("Odhlásit účet") {
+                        Button(
+                            L10n.text("sign_out", languageCode: appLanguage)
+                        ) {
                             Task {
                                 await signOut()
                             }
@@ -118,12 +189,21 @@ struct SettingsView: View {
                             if isSigningIn {
                                 HStack(spacing: 12) {
                                     ProgressView()
-                                    Text("Čekám na potvrzení…")
+                                    Text(
+                                        L10n.text(
+                                            "waiting_confirmation",
+                                            languageCode: appLanguage
+                                        )
+                                    )
                                 }
                             } else {
                                 Label(
-                                    "Přihlásit YouTube účet",
-                                    systemImage: "person.crop.circle.badge.plus"
+                                    L10n.text(
+                                        "sign_in",
+                                        languageCode: appLanguage
+                                    ),
+                                    systemImage:
+                                        "person.crop.circle.badge.plus"
                                 )
                             }
                         }
@@ -131,20 +211,41 @@ struct SettingsView: View {
 
                         if let authorization {
                             VStack(alignment: .leading, spacing: 14) {
-                                Text("Na telefonu nebo počítači otevři:")
-                                    .foregroundStyle(.secondary)
+                                Text(
+                                    L10n.text(
+                                        "open_on_phone",
+                                        languageCode: appLanguage
+                                    )
+                                )
+                                .foregroundStyle(.secondary)
 
                                 Text(authorization.verificationURL)
                                     .font(.title3.weight(.semibold))
 
-                                Text("Zadej kód:")
-                                    .foregroundStyle(.secondary)
+                                Text(
+                                    L10n.text(
+                                        "enter_code",
+                                        languageCode: appLanguage
+                                    )
+                                )
+                                .foregroundStyle(.secondary)
 
                                 Text(authorization.userCode)
-                                    .font(.system(size: 42, weight: .bold, design: .monospaced))
+                                    .font(
+                                        .system(
+                                            size: 42,
+                                            weight: .bold,
+                                            design: .monospaced
+                                        )
+                                    )
 
-                                Text("TubeTV čeká na dokončení přihlášení.")
-                                    .foregroundStyle(.secondary)
+                                Text(
+                                    L10n.text(
+                                        "waiting_sign_in",
+                                        languageCode: appLanguage
+                                    )
+                                )
+                                .foregroundStyle(.secondary)
                             }
                             .padding(.vertical, 10)
                         }
@@ -155,15 +256,23 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    Text("TubeTV používá stejný princip jako SmartTube: YouTube TV device login, refresh token v Keychainu a InnerTube TV profil včetně brand kanálů.")
-                        .foregroundStyle(.secondary)
+                    Text(
+                        L10n.text(
+                            "smarttube_login_description",
+                            languageCode: appLanguage
+                        )
+                    )
+                    .foregroundStyle(.secondary)
                 }
             }
-            .navigationTitle("Nastavení")
+            .navigationTitle(
+                L10n.text("settings", languageCode: appLanguage)
+            )
             .task {
                 await loadAccountState()
             }
         }
+        .id(appLanguage)
     }
 
     @MainActor
@@ -190,20 +299,28 @@ struct SettingsView: View {
             let loaded = try await SmartTubeAuthService.shared.accounts()
             profiles = loaded
 
-            let selectedPageID = await SmartTubeAuthService.shared.selectedPageID()
+            let selectedPageID =
+                await SmartTubeAuthService.shared.selectedPageID()
 
             if let current = loaded.first(
-                where: { $0.pageID == selectedPageID && selectedPageID != nil }
-            ) ?? loaded.first(where: { $0.isSelected }) ?? loaded.first {
+                where: {
+                    $0.pageID == selectedPageID
+                    && selectedPageID != nil
+                }
+            ) ?? loaded.first(
+                where: { $0.isSelected }
+            ) ?? loaded.first {
                 selectedProfileID = current.id
                 await SmartTubeAuthService.shared.selectAccount(current)
             }
 
             if loaded.count > 1 {
-                accountMessage = "Nalezeno \(loaded.count) YouTube profilů."
+                accountMessage =
+                    "\(loaded.count) \(L10n.text("profiles_found", languageCode: appLanguage))"
             }
         } catch {
-            accountMessage = "Profily: \(error.localizedDescription)"
+            accountMessage =
+                "\(L10n.text("profile_error", languageCode: appLanguage)): \(error.localizedDescription)"
         }
     }
 
@@ -214,14 +331,19 @@ struct SettingsView: View {
         authorization = nil
 
         do {
-            let auth = try await SmartTubeAuthService.shared.beginSignIn()
+            let auth =
+                try await SmartTubeAuthService.shared.beginSignIn()
             authorization = auth
 
             try await SmartTubeAuthService.shared.finishSignIn(auth)
 
             isSignedIn = true
             authorization = nil
-            accountMessage = "Přihlášení bylo dokončeno."
+            accountMessage =
+                L10n.text(
+                    "sign_in_complete",
+                    languageCode: appLanguage
+                )
             await loadProfiles()
         } catch {
             accountMessage = error.localizedDescription
@@ -237,6 +359,7 @@ struct SettingsView: View {
         authorization = nil
         profiles = []
         selectedProfileID = ""
-        accountMessage = "YouTube účet byl odhlášen."
+        accountMessage =
+            L10n.text("signed_out", languageCode: appLanguage)
     }
 }
