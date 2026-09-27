@@ -6,6 +6,33 @@ struct VideoItem: Identifiable, Hashable {
     let channel: String
     let subtitle: String
     let playbackURL: URL?
+    let youtubeVideoID: String?
+
+    init(
+        id: String,
+        title: String,
+        channel: String,
+        subtitle: String,
+        playbackURL: URL? = nil,
+        youtubeVideoID: String? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.channel = channel
+        self.subtitle = subtitle
+        self.playbackURL = playbackURL
+        self.youtubeVideoID = youtubeVideoID
+    }
+
+    static func youtube(videoID: String) -> VideoItem {
+        VideoItem(
+            id: "youtube-\(videoID)",
+            title: "YouTube video",
+            channel: "YouTube",
+            subtitle: videoID,
+            youtubeVideoID: videoID
+        )
+    }
 }
 
 extension VideoItem {
@@ -18,18 +45,16 @@ extension VideoItem {
             playbackURL: URL(string: "https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_ts/master.m3u8")
         ),
         VideoItem(
-            id: "demo-quality",
-            title: "Kvalita 1080p / 1440p / 4K / HDR",
+            id: "demo-youtube",
+            title: "Vyzkoušet skutečné YouTube video",
             channel: "TubeTV",
-            subtitle: "Stream resolver přijde v další etapě",
-            playbackURL: nil
+            subtitle: "V Hledat vlož YouTube URL nebo 11znakové video ID"
         ),
         VideoItem(
             id: "demo-captions",
             title: "Automatické české titulky",
             channel: "TubeTV",
-            subtitle: "Čeština bude preferovaný jazyk",
-            playbackURL: nil
+            subtitle: "Čeština bude preferovaný jazyk"
         )
     ]
 }
