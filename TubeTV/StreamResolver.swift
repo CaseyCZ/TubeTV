@@ -1,6 +1,11 @@
 import Foundation
 import YouTubeKit
 
+enum PlaybackSource: Hashable {
+    case direct(URL)
+    case adaptive(video: URL, audio: URL, fallback: URL?)
+}
+
 enum StreamResolverError: LocalizedError {
     case invalidVideoID
     case noPlayableStream
@@ -19,31 +24,58 @@ enum StreamResolver {
     static func resolveYouTubeVideo(
         videoID: String,
         preferredQuality: String = "Auto"
-    ) async throws -> URL {
+    ) async throws -> PlaybackSource {
         guard !videoID.isEmpty else {
             throw StreamResolverError.invalidVideoID
         }
 
         let streams = try await YouTube(videoID: videoID).streams
+
+        let combined = streams
             .filterVideoAndAudio()
             .filter { $0.isNativelyPlayable }
 
-        guard !streams.isEmpty else {
+        let fallbackURL = combined.highestResolutionStream()?.url
+
+        let videoOnly = streams
+            .filterVideoOnly()
+            .filter { $0.isNativelyPlayable }
+
+        let audioOnly = streams
+            .filterAudioOnly()
+            .filter { $0.isNativelyPlayable }
+
+        if let requestedHeight = requestedHeight(for: preferredQuality) {
+            if let video = videoOnly
+                .streams(withExactResolution: requestedHeight)
+                .highestResolutionStream(),
+               let audio = audioOnly.highestAudioBitrateStream() {
+                return .adaptive(
+                    video: video.url,
+                    audio: audio.url,
+                    fallback: fallbackURL
+                )
+            }
+
+            if let exactCombined = combined
+                .streams(withExactResolution: requestedHeight)
+                .highestResolutionStream() {
+                return .direct(exactCombined.url)
+            }
+        } else if let video = videoOnly.highestResolutionStream(),
+                  let audio = audioOnly.highestAudioBitrateStream() {
+            return .adaptive(
+                video: video.url,
+                audio: audio.url,
+                fallback: fallbackURL
+            )
+        }
+
+        guard let fallbackURL else {
             throw StreamResolverError.noPlayableStream
         }
 
-        if let requestedHeight = requestedHeight(for: preferredQuality),
-           let exact = streams
-            .streams(withExactResolution: requestedHeight)
-            .highestResolutionStream() {
-            return exact.url
-        }
-
-        guard let best = streams.highestResolutionStream() else {
-            throw StreamResolverError.noPlayableStream
-        }
-
-        return best.url
+        return .direct(fallbackURL)
     }
 
     static func videoID(from input: String) -> String? {
@@ -102,7 +134,9 @@ enum StreamResolver {
     private static func isLikelyVideoID(_ value: String) -> Bool {
         guard value.count == 11 else { return false }
 
-        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
+        let allowed = CharacterSet(
+            charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
+        )
         return value.unicodeScalars.allSatisfy { allowed.contains($0) }
     }
 }
