@@ -26,6 +26,7 @@ private struct AlternativeFormat {
     let fps: Int?
     let bitrate: Int?
     let hasAudio: Bool
+    let isHDR: Bool
 
     var isVideo: Bool {
         mimeType.hasPrefix("video/")
@@ -45,7 +46,9 @@ private struct AlternativeFormat {
         }
 
         if mimeType.contains("hvc1")
-            || mimeType.contains("hev1") {
+            || mimeType.contains("hev1")
+            || mimeType.contains("dvh1")
+            || mimeType.contains("dvhe") {
             return VTIsHardwareDecodeSupported(
                 kCMVideoCodecType_HEVC
             )
@@ -67,6 +70,25 @@ private struct AlternativeFormat {
             || mimeType.contains("ec-3")
             || mimeType.hasPrefix("audio/mp4")
         )
+    }
+
+    var codecPriority: Int {
+        if mimeType.contains("hvc1")
+            || mimeType.contains("hev1")
+            || mimeType.contains("dvh1")
+            || mimeType.contains("dvhe") {
+            return 0
+        }
+
+        if mimeType.contains("avc1") {
+            return 1
+        }
+
+        if mimeType.contains("av01") {
+            return 2
+        }
+
+        return 9
     }
 
     // SmartTubeIOS skips these on AVPlayer unless a valid poToken is available.
@@ -1156,7 +1178,10 @@ actor AlternativePlayerService {
                     item["audioQuality"]
                         != nil
                     || item["audioChannels"]
-                        != nil
+                        != nil,
+                isHDR: Self.isHDRFormat(
+                    item
+                )
             )
         }
     }
@@ -1184,6 +1209,20 @@ actor AlternativePlayerService {
                             < ($1.fps ?? 0)
                     }
 
+                    if $0.isHDR != $1.isHDR {
+                        if AVPlayer.eligibleForHDRPlayback {
+                            return !$0.isHDR
+                        }
+
+                        return $0.isHDR
+                    }
+
+                    if $0.codecPriority
+                        != $1.codecPriority {
+                        return $0.codecPriority
+                            > $1.codecPriority
+                    }
+
                     return ($0.bitrate ?? 0)
                         < ($1.bitrate ?? 0)
                 }
@@ -1206,6 +1245,20 @@ actor AlternativePlayerService {
 
             if leftFPS != rightFPS {
                 return leftFPS < rightFPS
+            }
+
+            if $0.isHDR != $1.isHDR {
+                if AVPlayer.eligibleForHDRPlayback {
+                    return !$0.isHDR
+                }
+
+                return $0.isHDR
+            }
+
+            if $0.codecPriority
+                != $1.codecPriority {
+                return $0.codecPriority
+                    > $1.codecPriority
             }
 
             return ($0.bitrate ?? 0)
@@ -1235,8 +1288,55 @@ actor AlternativePlayerService {
                 > rightFPS
         }
 
+        if lhs.isHDR != rhs.isHDR {
+            if AVPlayer.eligibleForHDRPlayback {
+                return lhs.isHDR
+            }
+
+            return !lhs.isHDR
+        }
+
+        if lhs.codecPriority
+            != rhs.codecPriority {
+            return lhs.codecPriority
+                < rhs.codecPriority
+        }
+
         return (lhs.bitrate ?? 0)
             > (rhs.bitrate ?? 0)
+    }
+
+    private static func isHDRFormat(
+        _ item: [String: Any]
+    ) -> Bool {
+        if let colorInfo =
+                item["colorInfo"]
+                    as? [String: Any] {
+            let text =
+                colorInfo.description
+                    .lowercased()
+
+            if text.contains("2084")
+                || text.contains("2100")
+                || text.contains("hdr")
+                || text.contains("hlg")
+                || text.contains("pq") {
+                return true
+            }
+        }
+
+        if let mime =
+                item["mimeType"] as? String {
+            let lowered =
+                mime.lowercased()
+
+            if lowered.contains("dvh1")
+                || lowered.contains("dvhe") {
+                return true
+            }
+        }
+
+        return false
     }
 
     private func requestedHeight(
