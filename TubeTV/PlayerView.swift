@@ -584,21 +584,29 @@ final class NativePlayerModel: ObservableObject {
         from source: PlaybackSource
     ) -> PlaybackSource? {
         switch source {
-        case .adaptive(_, _, let fallback?):
+        case .adaptive(_, _, let fallback):
+            guard let fallback else {
+                return nil
+            }
+
             return .direct(fallback)
 
         case .adaptiveWithHeaders(
             _,
             _,
-            let fallback?,
+            let fallback,
             let headers
         ):
+            guard let fallback else {
+                return nil
+            }
+
             return .directWithHeaders(
                 fallback,
                 headers
             )
 
-        default:
+        case .direct, .directWithHeaders:
             return nil
         }
     }
