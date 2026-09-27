@@ -286,7 +286,27 @@ actor AlternativePlayerService {
                 ],
                 thirdParty: nil
             )
-        ]
+,
+            AlternativePlayerClient(
+                profile: "ANDROID",
+                name: "ANDROID",
+                version: "21.26.364",
+                innerTubeName: "3",
+                userAgent:
+                    "com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip",
+                referer: nil,
+                origin: nil,
+                apiKey: Self.webAPIKey,
+                clientScreen: "WATCH",
+                supportXhr: true,
+                seedWebSession: false,
+                extraClientFields: [
+                    "androidSdkVersion": 30,
+                    "osName": "Android",
+                    "osVersion": "11"
+                ],
+                thirdParty: nil
+            )        ]
     }
 
     func resolve(
@@ -506,7 +526,10 @@ actor AlternativePlayerService {
         ]
 
         payload["cpn"] = Self.generateCPN()
-        payload["playbackContext"] = playbackContext
+
+        if client.profile != "ANDROID" {
+            payload["playbackContext"] = playbackContext
+        }
 
         if client.profile == "GEO" {
             // Same geo fallback parameter used by SmartTube QueryBuilder.
@@ -514,7 +537,9 @@ actor AlternativePlayerService {
         }
 
         let playerEndpoint =
-            "https://www.youtube.com/youtubei/v1/player"
+            client.profile == "ANDROID"
+                ? "https://youtubei.googleapis.com/youtubei/v1/player"
+                : "https://www.youtube.com/youtubei/v1/player"
 
         var components = URLComponents(
             string: playerEndpoint
@@ -700,6 +725,25 @@ actor AlternativePlayerService {
             "Formats client=\(client.profile, privacy: .public) combined=\(combined.count, privacy: .public) adaptive=\(adaptive.count, privacy: .public) hls=\(hlsRaw != nil, privacy: .public) ads=\(adMetadata.containsAdvertisingMetadata, privacy: .public)"
         )
 
+        // SmartTubeIOS uses standard Android only as the final muxed
+        // direct-stream fallback. Do not try its adaptive rqh=1 URLs.
+        if client.profile == "ANDROID" {
+            guard let muxed = bestCombined(
+                combined,
+                requestedHeight:
+                    requestedHeight(
+                        for: preferredQuality
+                    )
+            )?.url else {
+                return nil
+            }
+
+            return .directWithHeaders(
+                muxed,
+                playbackHeaders
+            )
+        }
+
         // On Apple platforms, VisionOS HLS is the preferred
         // native path when YouTube returns it.
         if client.profile == "VISIONOS",
@@ -819,6 +863,17 @@ actor AlternativePlayerService {
                 "userAgent": client.userAgent,
                 "osName": "Android",
                 "osVersion": "12L"
+            ]
+
+        case "ANDROID":
+            fields = [
+                "hl": L10n.currentLanguageCode,
+                "gl": "CZ",
+                "clientName": client.name,
+                "clientVersion": client.version,
+                "androidSdkVersion": 30,
+                "osName": "Android",
+                "osVersion": "11"
             ]
 
         case "WEB", "WEB_SAFARI", "GEO":
