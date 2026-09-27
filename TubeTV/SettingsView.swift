@@ -35,6 +35,15 @@ struct SettingsView: View {
                                 : "tv.slash"
                     )
                     .foregroundStyle(.secondary)
+
+                    Label(
+                        "Reklamy: blokování aktivní",
+                        systemImage: "hand.raised.fill"
+                    )
+                    .foregroundStyle(.secondary)
+
+                    Text("TubeTV nepředává YouTube reklamní placementy do AVPlayeru a preferuje přímé obsahové video/audio streamy.")
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("Titulky") {
