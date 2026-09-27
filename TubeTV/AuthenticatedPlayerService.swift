@@ -111,7 +111,8 @@ actor AuthenticatedPlayerService {
             "Mozilla/5.0 (DirectFB; Linux x86_64) Cobalt/4.13031-qa (unlike Gecko) Starboard/1"
         let playbackHeaders = PlaybackRequestHeaders(
             userAgent: playerUserAgent,
-            referer: "https://www.youtube.com/tv"
+            referer: "https://www.youtube.com/tv",
+            clientProfile: "TV_AUTH"
         )
 
         var client: [String: Any] = [
