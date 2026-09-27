@@ -87,6 +87,7 @@ actor YouTubeService {
             let channel = Self.text(from: renderer["ownerText"])
                 ?? Self.text(from: renderer["longBylineText"])
                 ?? "YouTube"
+            let channelID = Self.channelID(from: renderer)
 
             let duration = Self.text(from: renderer["lengthText"])
             let published = Self.text(from: renderer["publishedTimeText"])
@@ -107,7 +108,8 @@ actor YouTubeService {
                     channel: channel,
                     subtitle: subtitle,
                     thumbnailURL: thumbnailURL,
-                    youtubeVideoID: videoID
+                    youtubeVideoID: videoID,
+                    channelID: channelID
                 )
             )
 
@@ -151,6 +153,28 @@ actor YouTubeService {
                 .joined()
 
             return value.isEmpty ? nil : value
+        }
+
+        return nil
+    }
+
+    private static func channelID(from renderer: [String: Any]) -> String? {
+        for key in ["ownerText", "longBylineText", "shortBylineText"] {
+            guard let text = renderer[key] as? [String: Any],
+                  let runs = text["runs"] as? [[String: Any]] else {
+                continue
+            }
+
+            for run in runs {
+                guard let endpoint = run["navigationEndpoint"] as? [String: Any],
+                      let browse = endpoint["browseEndpoint"] as? [String: Any],
+                      let browseID = browse["browseId"] as? String,
+                      browseID.hasPrefix("UC") else {
+                    continue
+                }
+
+                return browseID
+            }
         }
 
         return nil
