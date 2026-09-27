@@ -283,7 +283,7 @@ actor AlternativePlayerService {
                     "osVersion": "11"
                 ],
                 thirdParty: nil
-            )
+            ),
             AlternativePlayerClient(
                 profile: "ANDROID_VR",
                 name: "ANDROID_VR",
