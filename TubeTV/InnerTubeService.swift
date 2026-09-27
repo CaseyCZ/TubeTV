@@ -141,6 +141,14 @@ actor InnerTubeService {
             forHTTPHeaderField: "Authorization"
         )
 
+        if let pageID = await SmartTubeAuthService.shared.selectedPageID(),
+           !pageID.isEmpty {
+            request.setValue(
+                pageID,
+                forHTTPHeaderField: "X-Goog-Pageid"
+            )
+        }
+
         if let visitorData = bootstrap.visitorData,
            !visitorData.isEmpty {
             request.setValue(
