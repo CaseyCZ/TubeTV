@@ -50,25 +50,48 @@ struct VideoItem: Identifiable, Hashable {
 }
 
 extension VideoItem {
-    static let demo: [VideoItem] = [
-        VideoItem(
-            id: "demo-player",
-            title: "TubeTV – test nativního přehrávače",
-            channel: "TubeTV",
-            subtitle: "Apple HLS test stream",
-            playbackURL: URL(string: "https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_ts/master.m3u8")
-        ),
-        VideoItem(
-            id: "demo-youtube",
-            title: "Vyzkoušet skutečné YouTube video",
-            channel: "TubeTV",
-            subtitle: "V Hledat vlož YouTube URL nebo 11znakové video ID"
-        ),
-        VideoItem(
-            id: "demo-captions",
-            title: "Automatické české titulky",
-            channel: "TubeTV",
-            subtitle: "Čeština bude preferovaný jazyk"
-        )
-    ]
+    static func demo(languageCode: String) -> [VideoItem] {
+        [
+            VideoItem(
+                id: "demo-player",
+                title: L10n.text(
+                    "demo_player_title",
+                    languageCode: languageCode
+                ),
+                channel: "TubeTV",
+                subtitle: L10n.text(
+                    "demo_player_subtitle",
+                    languageCode: languageCode
+                ),
+                playbackURL: URL(
+                    string:
+                        "https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_ts/master.m3u8"
+                )
+            ),
+            VideoItem(
+                id: "demo-youtube",
+                title: L10n.text(
+                    "demo_youtube_title",
+                    languageCode: languageCode
+                ),
+                channel: "TubeTV",
+                subtitle: L10n.text(
+                    "demo_youtube_subtitle",
+                    languageCode: languageCode
+                )
+            ),
+            VideoItem(
+                id: "demo-captions",
+                title: L10n.text(
+                    "demo_captions_title",
+                    languageCode: languageCode
+                ),
+                channel: "TubeTV",
+                subtitle: L10n.text(
+                    "demo_captions_subtitle",
+                    languageCode: languageCode
+                )
+            )
+        ]
+    }
 }
