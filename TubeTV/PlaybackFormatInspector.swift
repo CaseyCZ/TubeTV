@@ -11,7 +11,7 @@ struct PlaybackFormatInfo: Hashable {
     let dynamicRange: String
 
     var resolutionLabel: String {
-        guard height > 0 else { return "Neznámé" }
+        guard height > 0 else { return L10n.text("unknown") }
 
         if height >= 2160 {
             return "2160p"
