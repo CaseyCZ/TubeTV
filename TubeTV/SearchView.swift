@@ -244,7 +244,11 @@ struct SearchView: View {
         isLoadingMore = false
         continuationToken = nil
         errorMessage = nil
-        defer { isSearching = false }
+        defer {
+            if generation == searchGeneration {
+                isSearching = false
+            }
+        }
 
         do {
             let page =
@@ -295,7 +299,11 @@ struct SearchView: View {
         }
 
         isLoadingMore = true
-        defer { isLoadingMore = false }
+        defer {
+            if generation == searchGeneration {
+                isLoadingMore = false
+            }
+        }
 
         do {
             let page =
