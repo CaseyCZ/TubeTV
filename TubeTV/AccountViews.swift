@@ -219,7 +219,9 @@ struct AccountFeedView: View {
 struct PlaylistsView: View {
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @State private var playlists: [YouTubePlaylistItem] = []
+    @State private var continuationToken: String?
     @State private var isLoading = true
+    @State private var isLoadingMore = false
     @State private var errorMessage: String?
 
     var body: some View {
@@ -254,13 +256,43 @@ struct PlaylistsView: View {
                         columns: [GridItem(.adaptive(minimum: 420), spacing: 28)],
                         spacing: 28
                     ) {
-                        ForEach(playlists) { playlist in
+                        ForEach(
+                            playlists.indices,
+                            id: \.self
+                        ) { index in
+                            let playlist = playlists[index]
+
                             NavigationLink {
-                                PlaylistDetailView(playlist: playlist)
+                                PlaylistDetailView(
+                                    playlist: playlist
+                                )
                             } label: {
-                                PlaylistCard(playlist: playlist)
+                                PlaylistCard(
+                                    playlist: playlist
+                                )
                             }
                             .buttonStyle(.card)
+                            .onAppear {
+                                let threshold =
+                                    max(
+                                        0,
+                                        playlists.count - 4
+                                    )
+
+                                if index >= threshold {
+                                    Task {
+                                        await loadMore()
+                                    }
+                                }
+                            }
+                        }
+
+                        if isLoadingMore {
+                            ProgressView()
+                                .frame(
+                                    width: 420,
+                                    height: 236
+                                )
                         }
                     }
                 }
@@ -279,7 +311,13 @@ struct PlaylistsView: View {
         defer { isLoading = false }
 
         do {
-            playlists = try await InnerTubeService.shared.playlists()
+            let page =
+                try await InnerTubeService.shared
+                    .playlistsPage()
+
+            playlists = page.playlists
+            continuationToken =
+                page.continuationToken
 
             if playlists.isEmpty {
                 errorMessage = L10n.text("youtube_no_playlists", languageCode: appLanguage)
@@ -287,6 +325,50 @@ struct PlaylistsView: View {
         } catch {
             playlists = []
             errorMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func loadMore() async {
+        guard !isLoadingMore,
+              let token = continuationToken,
+              !token.isEmpty else {
+            return
+        }
+
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+
+        do {
+            let page =
+                try await InnerTubeService.shared
+                    .continuePlaylists(
+                        token
+                    )
+
+            var seen = Set(
+                playlists.map(\.id)
+            )
+            let newPlaylists =
+                page.playlists.filter {
+                    seen.insert($0.id).inserted
+                }
+
+            playlists.append(
+                contentsOf: newPlaylists
+            )
+
+            let nextToken =
+                page.continuationToken
+
+            continuationToken =
+                nextToken == token
+                    && newPlaylists.isEmpty
+                ? nil
+                : nextToken
+        } catch {
+            errorMessage =
+                error.localizedDescription
         }
     }
 }
