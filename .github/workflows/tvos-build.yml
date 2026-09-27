@@ -157,7 +157,7 @@ jobs:
           xcrun simctl spawn "$UDID" log show \
             --style compact \
             --last 3m \
-            --predicate 'subsystem == "cz.caseycz.tubetv" AND category == "CI"' \
+            --predicate 'subsystem == "cz.caseycz.tubetv"' \
             > tubetv-video-smoke.log 2>&1 || true
 
           cat tubetv-video-smoke.log
