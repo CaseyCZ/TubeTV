@@ -6,17 +6,22 @@ struct PlaybackRequestHeaders: Hashable {
     let referer: String?
     let origin: String?
     let clientProfile: String?
+    let availableHeights: [Int]
 
     init(
         userAgent: String,
         referer: String? = nil,
         origin: String? = nil,
-        clientProfile: String? = nil
+        clientProfile: String? = nil,
+        availableHeights: [Int] = []
     ) {
         self.userAgent = userAgent
         self.referer = referer
         self.origin = origin
         self.clientProfile = clientProfile
+        self.availableHeights = Array(
+            Set(availableHeights.filter { $0 > 0 })
+        ).sorted(by: >)
     }
 
     var dictionary: [String: String] {
@@ -53,6 +58,17 @@ enum PlaybackSource: Hashable {
 
         case .direct, .adaptive:
             return nil
+        }
+    }
+
+    var availableQualityHeights: [Int] {
+        switch self {
+        case .directWithHeaders(_, let headers),
+             .adaptiveWithHeaders(_, _, _, let headers):
+            return headers.availableHeights
+
+        case .direct, .adaptive:
+            return []
         }
     }
 }
@@ -316,16 +332,11 @@ enum StreamResolver {
     }
 
     private static func requestedHeight(for preference: String) -> Int? {
-        switch preference {
-        case "1080p":
-            return 1080
-        case "1440p":
-            return 1440
-        case "2160p":
-            return 2160
-        default:
+        guard preference.hasSuffix("p") else {
             return nil
         }
+
+        return Int(preference.dropLast())
     }
 
     private static func isLikelyVideoID(_ value: String) -> Bool {
