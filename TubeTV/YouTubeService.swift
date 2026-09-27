@@ -8,11 +8,11 @@ enum YouTubeServiceError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidURL:
-            return "Nepodařilo se sestavit požadavek na YouTube."
+            return L10n.text("youtube_request_invalid")
         case .invalidResponse:
-            return "YouTube vrátil neplatnou odpověď."
+            return L10n.text("youtube_response_invalid")
         case .initialDataNotFound:
-            return "Nepodařilo se načíst data YouTube. Struktura stránky se mohla změnit."
+            return L10n.text("youtube_page_data_missing")
         }
     }
 }
@@ -42,7 +42,7 @@ actor YouTubeService {
         var components = URLComponents(string: "https://www.youtube.com/results")
         components?.queryItems = [
             URLQueryItem(name: "search_query", value: trimmed),
-            URLQueryItem(name: "hl", value: "cs"),
+            URLQueryItem(name: "hl", value: L10n.currentLanguageCode),
             URLQueryItem(name: "gl", value: "CZ")
         ]
 
