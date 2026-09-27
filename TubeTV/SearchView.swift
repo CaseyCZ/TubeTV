@@ -12,7 +12,9 @@ struct SearchView: View {
     }
 
     private var visibleResults: [VideoItem] {
-        query.isEmpty ? VideoItem.demo : results
+        query.isEmpty
+            ? VideoItem.demo(languageCode: appLanguage)
+            : results
     }
 
     var body: some View {
