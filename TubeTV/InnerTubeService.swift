@@ -62,7 +62,10 @@ actor InnerTubeService {
     static let shared = InnerTubeService()
 
     func homeVideos() async throws -> [VideoItem] {
-        let root = try await browse("default")
+        let root = try await browse(
+            "default",
+            requireAuthentication: false
+        )
         return Self.extractVideos(from: root)
     }
 
@@ -104,14 +107,19 @@ actor InnerTubeService {
 
     private func browse(
         _ browseID: String,
-        params: String? = nil
+        params: String? = nil,
+        requireAuthentication: Bool = true
     ) async throws -> Any {
-        guard await SmartTubeAuthService.shared.signedIn() else {
+        let isSignedIn = await SmartTubeAuthService.shared.signedIn()
+
+        if requireAuthentication && !isSignedIn {
             throw InnerTubeError.notSignedIn
         }
 
-        let bootstrap = try await SmartTubeAuthService.shared.bootstrap()
-        let authorization = try await SmartTubeAuthService.shared.authorizationHeader()
+        let bootstrap = try? await SmartTubeAuthService.shared.bootstrap()
+        let authorization = isSignedIn
+            ? try await SmartTubeAuthService.shared.authorizationHeader()
+            : nil
 
         let offsetMinutes = TimeZone.current.secondsFromGMT() / 60
 
@@ -131,7 +139,7 @@ actor InnerTubeService {
             ]
         ]
 
-        if let visitorData = bootstrap.visitorData,
+        if let visitorData = bootstrap?.visitorData,
            !visitorData.isEmpty {
             client["visitorData"] = visitorData
         }
@@ -172,12 +180,15 @@ actor InnerTubeService {
             SmartTubeAuthService.tvReferer,
             forHTTPHeaderField: "Referer"
         )
-        request.setValue(
-            authorization,
-            forHTTPHeaderField: "Authorization"
-        )
+        if let authorization {
+            request.setValue(
+                authorization,
+                forHTTPHeaderField: "Authorization"
+            )
+        }
 
-        if let pageID = await SmartTubeAuthService.shared.selectedPageID(),
+        if isSignedIn,
+           let pageID = await SmartTubeAuthService.shared.selectedPageID(),
            !pageID.isEmpty {
             request.setValue(
                 pageID,
@@ -185,7 +196,7 @@ actor InnerTubeService {
             )
         }
 
-        if let visitorData = bootstrap.visitorData,
+        if let visitorData = bootstrap?.visitorData,
            !visitorData.isEmpty {
             request.setValue(
                 visitorData,
@@ -235,70 +246,110 @@ actor InnerTubeService {
     }
 
     private static func extractVideos(from root: Any) -> [VideoItem] {
-        var candidates: [[String: Any]] = []
-        collectDictionaries(from: root, into: &candidates)
+        var renderers: [[String: Any]] = []
+        collectVideoRenderers(from: root, into: &renderers)
 
         var seen = Set<String>()
         var result: [VideoItem] = []
 
-        for dictionary in candidates {
-            guard let videoID = firstString(
-                in: dictionary,
-                keys: ["videoId", "video_id"]
-            ),
-            videoID.count == 11,
-            seen.insert(videoID).inserted else {
+        for renderer in renderers {
+            guard let videoID = videoID(from: renderer),
+                  videoID.count == 11,
+                  seen.insert(videoID).inserted else {
                 continue
             }
 
-            let title = firstText(
-                in: dictionary,
-                keys: ["title", "headline", "primaryText"]
-            ) ?? "YouTube video"
+            let title =
+                firstText(
+                    in: renderer,
+                    keys: ["title", "headline", "primaryText"]
+                )
+                ?? text(
+                    from: nested(
+                        renderer,
+                        path: [
+                            "metadata",
+                            "tileMetadataRenderer",
+                            "title"
+                        ]
+                    )
+                )
+                ?? text(
+                    from: nested(
+                        renderer,
+                        path: [
+                            "metadata",
+                            "lockupMetadataViewModel",
+                            "title"
+                        ]
+                    )
+                )
+                ?? "YouTube video"
 
-            let channel = firstText(
-                in: dictionary,
-                keys: [
-                    "ownerText",
-                    "longBylineText",
-                    "shortBylineText",
-                    "secondaryText",
-                    "byline"
-                ]
-            ) ?? "YouTube"
+            let metadata = metadataTexts(from: renderer)
+                .filter {
+                    !$0.isEmpty
+                        && $0 != title
+                        && $0 != "•"
+                }
 
-            let channelID = findChannelID(in: dictionary)
+            let channel =
+                firstText(
+                    in: renderer,
+                    keys: [
+                        "ownerText",
+                        "longBylineText",
+                        "shortBylineText",
+                        "secondaryText",
+                        "byline"
+                    ]
+                )
+                ?? metadata.first
+                ?? "YouTube"
 
-            let duration = firstText(
-                in: dictionary,
-                keys: ["lengthText", "durationText"]
+            let channelID = findChannelID(in: renderer)
+
+            let duration =
+                firstText(
+                    in: renderer,
+                    keys: ["lengthText", "durationText"]
+                )
+                ?? firstBadgeText(in: renderer)
+
+            let published = firstText(
+                in: renderer,
+                keys: ["publishedTimeText"]
             )
 
-            let metadata = firstText(
-                in: dictionary,
-                keys: [
-                    "publishedTimeText",
-                    "viewCountText",
-                    "metadataText",
-                    "subtitle"
-                ]
+            let views = firstText(
+                in: renderer,
+                keys: ["viewCountText", "shortViewCountText"]
             )
 
-            let subtitle = [metadata, duration]
+            var subtitleParts = [views, published, duration]
                 .compactMap { $0 }
                 .filter { !$0.isEmpty }
-                .joined(separator: " • ")
+
+            if subtitleParts.isEmpty {
+                subtitleParts = metadata
+                    .filter { $0 != channel }
+                    .prefix(3)
+                    .map { $0 }
+            }
 
             let thumbnailURL =
-                firstThumbnailURL(in: dictionary)
-                ?? URL(string: "https://i.ytimg.com/vi/\(videoID)/hqdefault.jpg")
+                firstThumbnailURL(in: renderer)
+                ?? URL(
+                    string:
+                        "https://i.ytimg.com/vi/\(videoID)/hqdefault.jpg"
+                )
 
             result.append(
                 VideoItem(
                     id: "youtube-\(videoID)",
                     title: title,
                     channel: channel,
-                    subtitle: subtitle,
+                    subtitle: subtitleParts.joined(separator: " • "),
                     thumbnailURL: thumbnailURL,
                     youtubeVideoID: videoID,
                     channelID: channelID
@@ -311,6 +362,193 @@ actor InnerTubeService {
         }
 
         return result
+    }
+
+    private static func collectVideoRenderers(
+        from node: Any,
+        into output: inout [[String: Any]]
+    ) {
+        if let dictionary = node as? [String: Any] {
+            let rendererKeys = [
+                "videoRenderer",
+                "gridVideoRenderer",
+                "pivotVideoRenderer",
+                "compactVideoRenderer",
+                "reelItemRenderer",
+                "playlistVideoRenderer",
+                "tileRenderer",
+                "lockupViewModel"
+            ]
+
+            for key in rendererKeys {
+                if let renderer = dictionary[key] as? [String: Any] {
+                    if key != "tileRenderer"
+                        || (renderer["contentType"] as? String)
+                            == "TILE_CONTENT_TYPE_VIDEO" {
+                        output.append(renderer)
+                    }
+                }
+            }
+
+            for value in dictionary.values {
+                collectVideoRenderers(from: value, into: &output)
+            }
+        } else if let array = node as? [Any] {
+            for value in array {
+                collectVideoRenderers(from: value, into: &output)
+            }
+        }
+    }
+
+    private static func videoID(
+        from renderer: [String: Any]
+    ) -> String? {
+        if let direct = renderer["videoId"] as? String,
+           direct.count == 11 {
+            return direct
+        }
+
+        if let contentID = renderer["contentId"] as? String,
+           contentID.count == 11 {
+            return contentID
+        }
+
+        let paths = [
+            ["onSelectCommand", "watchEndpoint", "videoId"],
+            ["navigationEndpoint", "watchEndpoint", "videoId"],
+            [
+                "rendererContext",
+                "commandContext",
+                "onTap",
+                "innertubeCommand",
+                "watchEndpoint",
+                "videoId"
+            ],
+            [
+                "rendererContext",
+                "commandContext",
+                "onTap",
+                "innertubeCommand",
+                "reelWatchEndpoint",
+                "videoId"
+            ]
+        ]
+
+        for path in paths {
+            if let value = nested(renderer, path: path) as? String,
+               value.count == 11 {
+                return value
+            }
+        }
+
+        return nil
+    }
+
+    private static func nested(
+        _ dictionary: [String: Any],
+        path: [String]
+    ) -> Any? {
+        var current: Any = dictionary
+
+        for key in path {
+            guard let object = current as? [String: Any],
+                  let next = object[key] else {
+                return nil
+            }
+
+            current = next
+        }
+
+        return current
+    }
+
+    private static func metadataTexts(
+        from node: Any
+    ) -> [String] {
+        var values: [String] = []
+        collectTextValues(from: node, into: &values)
+
+        var seen = Set<String>()
+
+        return values.filter {
+            let trimmed = $0.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+
+            guard !trimmed.isEmpty,
+                  trimmed.count < 160,
+                  seen.insert(trimmed).inserted else {
+                return false
+            }
+
+            return true
+        }
+    }
+
+    private static func collectTextValues(
+        from node: Any,
+        into output: inout [String]
+    ) {
+        if let dictionary = node as? [String: Any] {
+            if let simpleText = dictionary["simpleText"] as? String {
+                output.append(simpleText)
+            }
+
+            if let content = dictionary["content"] as? String {
+                output.append(content)
+            }
+
+            if let runs = dictionary["runs"] as? [[String: Any]] {
+                let joined = runs
+                    .compactMap { $0["text"] as? String }
+                    .joined()
+
+                if !joined.isEmpty {
+                    output.append(joined)
+                }
+            }
+
+            for value in dictionary.values {
+                collectTextValues(from: value, into: &output)
+            }
+        } else if let array = node as? [Any] {
+            for value in array {
+                collectTextValues(from: value, into: &output)
+            }
+        }
+    }
+
+    private static func firstBadgeText(
+        in node: Any
+    ) -> String? {
+        if let dictionary = node as? [String: Any] {
+            for key in ["text", "label"] {
+                if let raw = dictionary[key] as? String,
+                   raw.contains(":") {
+                    return raw
+                }
+            }
+
+            if let value = dictionary["thumbnailOverlayTimeStatusRenderer"],
+               let text = text(from: value),
+               !text.isEmpty {
+                return text
+            }
+
+            for value in dictionary.values {
+                if let found = firstBadgeText(in: value) {
+                    return found
+                }
+            }
+        } else if let array = node as? [Any] {
+            for value in array {
+                if let found = firstBadgeText(in: value) {
+                    return found
+                }
+            }
+        }
+
+        return nil
     }
 
     private static func extractPlaylists(
