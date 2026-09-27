@@ -453,7 +453,8 @@ actor AlternativePlayerService {
         let effectiveVisitor =
             visitorData ?? bootstrapVisitor
 
-        if let effectiveVisitor,
+        if client.profile != "ANDROID",
+           let effectiveVisitor,
            !effectiveVisitor.isEmpty {
             clientFields["visitorData"] =
                 effectiveVisitor
@@ -525,9 +526,8 @@ actor AlternativePlayerService {
             "contentCheckOk": true
         ]
 
-        payload["cpn"] = Self.generateCPN()
-
         if client.profile != "ANDROID" {
+            payload["cpn"] = Self.generateCPN()
             payload["playbackContext"] = playbackContext
         }
 
@@ -608,7 +608,8 @@ actor AlternativePlayerService {
             )
         }
 
-        if let effectiveVisitor,
+        if client.profile != "ANDROID",
+           let effectiveVisitor,
            !effectiveVisitor.isEmpty {
             request.setValue(
                 effectiveVisitor,
@@ -867,8 +868,8 @@ actor AlternativePlayerService {
 
         case "ANDROID":
             fields = [
-                "hl": L10n.currentLanguageCode,
-                "gl": "CZ",
+                "hl": "en",
+                "gl": "US",
                 "clientName": client.name,
                 "clientVersion": client.version,
                 "androidSdkVersion": 30,
