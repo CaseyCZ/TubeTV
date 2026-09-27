@@ -4,6 +4,7 @@ import OSLog
 import VideoToolbox
 
 private struct AlternativePlayerClient {
+    let profile: String
     let name: String
     let version: String
     let innerTubeName: String
@@ -101,11 +102,12 @@ actor AlternativePlayerService {
         session = URLSession(configuration: configuration)
     }
 
-    // Apple/tvOS order follows the current SmartTubeIOS strategy first,
-    // then the Android SmartTube fallback families.
+    // Keep the fallback order aligned with SmartTube MediaServiceCore
+    // VIDEO_INFO_TYPE_LIST. Platform-specific playback still uses AVPlayer.
     private var clients: [AlternativePlayerClient] {
         [
             AlternativePlayerClient(
+                profile: "VISIONOS",
                 name: "VISIONOS",
                 version: "1.02",
                 innerTubeName: "101",
@@ -126,6 +128,7 @@ actor AlternativePlayerService {
                 thirdParty: nil
             ),
             AlternativePlayerClient(
+                profile: "TV_DOWNGRADED",
                 name: "TVHTML5",
                 version: "5.20260901",
                 innerTubeName: "7",
@@ -141,6 +144,28 @@ actor AlternativePlayerService {
                 thirdParty: nil
             ),
             AlternativePlayerClient(
+                profile: "WEB",
+                name: "WEB",
+                version: "2.20260907.06.00",
+                innerTubeName: "1",
+                userAgent:
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36",
+                referer: "https://www.youtube.com",
+                origin: "https://www.youtube.com",
+                apiKey: Self.webAPIKey,
+                clientScreen: "WATCH",
+                supportXhr: true,
+                seedWebSession: false,
+                extraClientFields: [
+                    "browserName": "Chrome",
+                    "browserVersion": "94.0.4606.81",
+                    "timeZone": "UTC",
+                    "utcOffsetMinutes": 0
+                ],
+                thirdParty: nil
+            ),
+            AlternativePlayerClient(
+                profile: "WEB_EMBED",
                 name: "WEB_EMBEDDED_PLAYER",
                 version: "2.20260908.01.00",
                 innerTubeName: "56",
@@ -161,6 +186,7 @@ actor AlternativePlayerService {
                 ]
             ),
             AlternativePlayerClient(
+                profile: "WEB_SAFARI",
                 name: "WEB",
                 version: "2.20260907.06.00",
                 innerTubeName: "1",
@@ -181,21 +207,7 @@ actor AlternativePlayerService {
                 thirdParty: nil
             ),
             AlternativePlayerClient(
-                name: "MWEB",
-                version: "2.20260907.05.00",
-                innerTubeName: "2",
-                userAgent:
-                    "Mozilla/5.0 (iPad; CPU OS 16_7_10 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1,gzip(gfe)",
-                referer: "https://m.youtube.com",
-                origin: "https://m.youtube.com",
-                apiKey: Self.webAPIKey,
-                clientScreen: "WATCH",
-                supportXhr: true,
-                seedWebSession: false,
-                extraClientFields: [:],
-                thirdParty: nil
-            ),
-            AlternativePlayerClient(
+                profile: "IOS",
                 name: "iOS",
                 version: "21.26.4",
                 innerTubeName: "5",
@@ -216,25 +228,44 @@ actor AlternativePlayerService {
                 thirdParty: nil
             ),
             AlternativePlayerClient(
-                name: "ANDROID",
-                version: "21.26.364",
-                innerTubeName: "3",
+                profile: "GEO",
+                name: "WEB",
+                version: "2.20260907.06.00",
+                innerTubeName: "1",
                 userAgent:
-                    "com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip",
-                referer: nil,
-                origin: nil,
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36",
+                referer: "https://www.youtube.com",
+                origin: "https://www.youtube.com",
                 apiKey: Self.webAPIKey,
                 clientScreen: "WATCH",
                 supportXhr: true,
                 seedWebSession: false,
                 extraClientFields: [
-                    "androidSdkVersion": 30,
-                    "osName": "Android",
-                    "osVersion": "11"
+                    "browserName": "Chrome",
+                    "browserVersion": "94.0.4606.81",
+                    "timeZone": "UTC",
+                    "utcOffsetMinutes": 0
                 ],
                 thirdParty: nil
             ),
             AlternativePlayerClient(
+                profile: "MWEB",
+                name: "MWEB",
+                version: "2.20260907.05.00",
+                innerTubeName: "2",
+                userAgent:
+                    "Mozilla/5.0 (iPad; CPU OS 16_7_10 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1,gzip(gfe)",
+                referer: "https://m.youtube.com",
+                origin: "https://m.youtube.com",
+                apiKey: Self.webAPIKey,
+                clientScreen: "WATCH",
+                supportXhr: true,
+                seedWebSession: false,
+                extraClientFields: [:],
+                thirdParty: nil
+            ),
+            AlternativePlayerClient(
+                profile: "ANDROID_VR",
                 name: "ANDROID_VR",
                 version: "1.65.10",
                 innerTubeName: "28",
@@ -279,14 +310,14 @@ actor AlternativePlayerService {
                     client: client
                 ) {
                     logger.notice(
-                        "Resolved with client=\(client.name, privacy: .public) version=\(client.version, privacy: .public)"
+                        "Resolved with client=\(client.profile, privacy: .public) version=\(client.version, privacy: .public)"
                     )
                     return source
                 }
             } catch {
                 lastError = error
                 logger.error(
-                    "Client failed client=\(client.name, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
+                    "Client failed client=\(client.profile, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
                 )
             }
         }
@@ -402,8 +433,7 @@ actor AlternativePlayerService {
         let effectiveVisitor =
             visitorData ?? bootstrapVisitor
 
-        if client.name != "ANDROID",
-           let effectiveVisitor,
+        if let effectiveVisitor,
            !effectiveVisitor.isEmpty {
             clientFields["visitorData"] =
                 effectiveVisitor
@@ -427,16 +457,20 @@ actor AlternativePlayerService {
             "html5Preference": "HTML5_PREF_WANTS"
         ]
 
-        if client.name == "TVHTML5" {
+        if client.profile == "TV_DOWNGRADED" {
             contentPlaybackContext["lactMilliseconds"] =
                 60_000
             contentPlaybackContext["isInlinePlaybackNoAd"] =
                 true
         }
 
-        if client.name == "ANDROID_VR"
-            || client.name == "WEB"
-            || client.name == "MWEB" {
+        if [
+            "WEB",
+            "WEB_SAFARI",
+            "GEO",
+            "MWEB",
+            "ANDROID_VR"
+        ].contains(client.profile) {
             if let sts =
                 await fetchSignatureTimestampIfNeeded() {
                 contentPlaybackContext[
@@ -445,7 +479,7 @@ actor AlternativePlayerService {
             }
         }
 
-        if client.name == "WEB_EMBEDDED_PLAYER" {
+        if client.profile == "WEB_EMBED" {
             contentPlaybackContext["referer"] =
                 "https://www.youtube.com/watch?v=\(videoID)"
         }
@@ -455,7 +489,7 @@ actor AlternativePlayerService {
                 contentPlaybackContext
         ]
 
-        if client.name == "TVHTML5" {
+        if client.profile == "TV_DOWNGRADED" {
             playbackContext[
                 "devicePlaybackCapabilities"
             ] = [
@@ -471,17 +505,16 @@ actor AlternativePlayerService {
             "contentCheckOk": true
         ]
 
-        // Match SmartTubeIOS fetchPlayerInfoAndroid exactly:
-        // Android uses the plain player body without playbackContext/cpn.
-        if client.name != "ANDROID" {
-            payload["cpn"] = Self.generateCPN()
-            payload["playbackContext"] = playbackContext
+        payload["cpn"] = Self.generateCPN()
+        payload["playbackContext"] = playbackContext
+
+        if client.profile == "GEO" {
+            // Same geo fallback parameter used by SmartTube QueryBuilder.
+            payload["params"] = "CgIQBg%3D%3D"
         }
 
         let playerEndpoint =
-            client.name == "ANDROID"
-                ? "https://youtubei.googleapis.com/youtubei/v1/player"
-                : "https://www.youtube.com/youtubei/v1/player"
+            "https://www.youtube.com/youtubei/v1/player"
 
         var components = URLComponents(
             string: playerEndpoint
@@ -550,8 +583,7 @@ actor AlternativePlayerService {
             )
         }
 
-        if client.name != "ANDROID",
-           let effectiveVisitor,
+        if let effectiveVisitor,
            !effectiveVisitor.isEmpty {
             request.setValue(
                 effectiveVisitor,
@@ -581,7 +613,7 @@ actor AlternativePlayerService {
                         with: data
                     ) as? [String: Any] else {
             logger.error(
-                "Invalid player response client=\(client.name, privacy: .public)"
+                "Invalid player response client=\(client.profile, privacy: .public)"
             )
             return nil
         }
@@ -600,7 +632,7 @@ actor AlternativePlayerService {
 
         guard status == "OK" else {
             logger.notice(
-                "Unplayable client=\(client.name, privacy: .public) status=\(status, privacy: .public) reason=\(reason, privacy: .public)"
+                "Unplayable client=\(client.profile, privacy: .public) status=\(status, privacy: .public) reason=\(reason, privacy: .public)"
             )
             return nil
         }
@@ -617,7 +649,7 @@ actor AlternativePlayerService {
                     from: root
                 ) else {
             logger.notice(
-                "No streamingData client=\(client.name, privacy: .public)"
+                "No streamingData client=\(client.profile, privacy: .public)"
             )
             return nil
         }
@@ -651,12 +683,12 @@ actor AlternativePlayerService {
         )
 
         logger.notice(
-            "Formats client=\(client.name, privacy: .public) combined=\(combined.count, privacy: .public) adaptive=\(adaptive.count, privacy: .public) hls=\(hlsRaw != nil, privacy: .public) ads=\(adMetadata.containsAdvertisingMetadata, privacy: .public)"
+            "Formats client=\(client.profile, privacy: .public) combined=\(combined.count, privacy: .public) adaptive=\(adaptive.count, privacy: .public) hls=\(hlsRaw != nil, privacy: .public) ads=\(adMetadata.containsAdvertisingMetadata, privacy: .public)"
         )
 
         // On Apple platforms, VisionOS HLS is the preferred
         // native path when YouTube returns it.
-        if client.name == "VISIONOS",
+        if client.profile == "VISIONOS",
            let hlsRaw,
            let hls = URL(string: hlsRaw),
            !adMetadata.containsAdvertisingMetadata {
@@ -751,7 +783,7 @@ actor AlternativePlayerService {
     ) -> [String: Any] {
         var fields: [String: Any]
 
-        switch client.name {
+        switch client.profile {
         case "VISIONOS":
             fields = [
                 "clientName": client.name,
@@ -761,17 +793,6 @@ actor AlternativePlayerService {
                 "userAgent": client.userAgent,
                 "osName": "visionOS",
                 "osVersion": "26.5.23O471"
-            ]
-
-        case "ANDROID":
-            fields = [
-                "hl": "en",
-                "gl": "US",
-                "clientName": client.name,
-                "clientVersion": client.version,
-                "androidSdkVersion": 30,
-                "osName": "Android",
-                "osVersion": "11"
             ]
 
         case "ANDROID_VR":
@@ -786,7 +807,7 @@ actor AlternativePlayerService {
                 "osVersion": "12L"
             ]
 
-        case "WEB":
+        case "WEB", "WEB_SAFARI", "GEO":
             fields = [
                 "hl": L10n.currentLanguageCode,
                 "timeZone": "UTC",
@@ -805,7 +826,7 @@ actor AlternativePlayerService {
                 "clientScreen": "WATCH"
             ]
 
-        case "WEB_EMBEDDED_PLAYER":
+        case "WEB_EMBED":
             fields = [
                 "hl": L10n.currentLanguageCode,
                 "gl": "CZ",
