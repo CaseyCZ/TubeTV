@@ -102,9 +102,9 @@ enum InnerTubeError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidResponse:
-            return "YouTube account returned an invalid response."
+            return L10n.text("innertube_invalid_response")
         case .notSignedIn:
-            return "Sign in to YouTube to use this section."
+            return L10n.text("innertube_not_signed_in")
         }
     }
 }
