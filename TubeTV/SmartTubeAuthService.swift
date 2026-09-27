@@ -6,6 +6,14 @@ extension Notification.Name {
         Notification.Name(
             "TubeTV.YouTubeAccountDidChange"
         )
+    static let youtubeSubscriptionsDidChange =
+        Notification.Name(
+            "TubeTV.YouTubeSubscriptionsDidChange"
+        )
+    static let youtubePlaylistsDidChange =
+        Notification.Name(
+            "TubeTV.YouTubePlaylistsDidChange"
+        )
 }
 
 struct TVClientCredentials: Hashable {
