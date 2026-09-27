@@ -11,6 +11,17 @@ struct TVBootstrap: Hashable {
     let visitorData: String?
 }
 
+struct YouTubeAccountProfile: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let email: String?
+    let channelHandle: String?
+    let avatarURL: URL?
+    let pageID: String?
+    let isSelected: Bool
+    let hasChannel: Bool
+}
+
 struct TVDeviceAuthorization: Decodable, Hashable {
     let deviceCode: String
     let userCode: String
@@ -161,6 +172,7 @@ actor SmartTubeAuthService {
     private let refreshTokenKey = "youtube.refreshToken"
     private let accessTokenKey = "youtube.accessToken"
     private let accessTokenExpiryKey = "youtube.accessTokenExpiry"
+    private let selectedPageIDKey = "youtube.selectedPageID"
 
     private var cachedBootstrap: TVBootstrap?
 
@@ -324,10 +336,143 @@ actor SmartTubeAuthService {
         return "Bearer \(try await refreshAccessToken())"
     }
 
+    func accounts() async throws -> [YouTubeAccountProfile] {
+        let bootstrap = try await bootstrap()
+        let authorization = try await authorizationHeader()
+        let offsetMinutes = TimeZone.current.secondsFromGMT() / 60
+
+        var client: [String: Any] = [
+            "clientName": Self.tvClientName,
+            "clientVersion": Self.tvClientVersion,
+            "clientScreen": "WATCH",
+            "userAgent": Self.tvUserAgent,
+            "acceptLanguage": "cs",
+            "acceptRegion": "CZ",
+            "utcOffsetMinutes": offsetMinutes,
+            "webpSupport": false,
+            "animatedWebpSupport": true,
+            "tvAppInfo": [
+                "appQuality": "TV_APP_QUALITY_FULL_ANIMATION",
+                "zylonLeftNav": true
+            ]
+        ]
+
+        if let visitorData = bootstrap.visitorData,
+           !visitorData.isEmpty {
+            client["visitorData"] = visitorData
+        }
+
+        let payload: [String: Any] = [
+            "context": [
+                "client": client,
+                "user": [
+                    "enableSafetyMode": false,
+                    "lockedSafetyMode": false
+                ]
+            ],
+            "racyCheckOk": true,
+            "contentCheckOk": true,
+            "accountReadMask": [
+                "returnOwner": true,
+                "returnBrandAccounts": true,
+                "returnPersonaAccounts": false
+            ]
+        ]
+
+        var request = URLRequest(
+            url: URL(
+                string: "https://www.youtube.com/youtubei/v1/account/accounts_list?prettyPrint=false"
+            )!
+        )
+        request.httpMethod = "POST"
+        request.timeoutInterval = 25
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(Self.tvUserAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue(Self.tvReferer, forHTTPHeaderField: "Referer")
+        request.setValue(authorization, forHTTPHeaderField: "Authorization")
+
+        if let visitorData = bootstrap.visitorData,
+           !visitorData.isEmpty {
+            request.setValue(visitorData, forHTTPHeaderField: "X-Goog-Visitor-Id")
+        }
+
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+        let (responseData, response) = try await URLSession.shared.data(for: request)
+
+        guard let http = response as? HTTPURLResponse,
+              (200..<300).contains(http.statusCode),
+              let root = try JSONSerialization.jsonObject(with: responseData) as? [String: Any] else {
+            throw SmartTubeAuthError.invalidResponse
+        }
+
+        var accountItems: [[String: Any]] = []
+        Self.collectAccountItems(from: root, into: &accountItems)
+
+        var profiles: [YouTubeAccountProfile] = []
+        var seen = Set<String>()
+
+        for item in accountItems {
+            let name = Self.text(from: item["accountName"]) ?? "YouTube"
+            let email = Self.text(from: item["accountByline"])
+            let handle = Self.text(from: item["channelHandle"])
+            let selected = item["isSelected"] as? Bool ?? false
+            let disabled = item["isDisabled"] as? Bool ?? false
+            let hasChannel = item["hasChannel"] as? Bool ?? true
+            let pageID = Self.pageID(from: item)
+            let avatar = Self.thumbnailURL(from: item["accountPhoto"])
+
+            guard !disabled else { continue }
+
+            let stableID = pageID
+                ?? handle
+                ?? email
+                ?? name
+
+            guard seen.insert(stableID).inserted else { continue }
+
+            profiles.append(
+                YouTubeAccountProfile(
+                    id: stableID,
+                    name: name,
+                    email: email,
+                    channelHandle: handle,
+                    avatarURL: avatar,
+                    pageID: pageID,
+                    isSelected: selected,
+                    hasChannel: hasChannel
+                )
+            )
+        }
+
+        if selectedPageID() == nil {
+            let preferred = profiles.first(where: { $0.isSelected }) ?? profiles.first
+
+            if let preferred {
+                selectAccount(preferred)
+            }
+        }
+
+        return profiles
+    }
+
+    func selectedPageID() -> String? {
+        UserDefaults.standard.string(forKey: selectedPageIDKey)
+    }
+
+    func selectAccount(_ profile: YouTubeAccountProfile) {
+        if let pageID = profile.pageID, !pageID.isEmpty {
+            UserDefaults.standard.set(pageID, forKey: selectedPageIDKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: selectedPageIDKey)
+        }
+    }
+
     func signOut() {
         TubeTVKeychain.delete(refreshTokenKey)
         TubeTVKeychain.delete(accessTokenKey)
         TubeTVKeychain.delete(accessTokenExpiryKey)
+        UserDefaults.standard.removeObject(forKey: selectedPageIDKey)
     }
 
     private func refreshAccessToken() async throws -> String {
@@ -415,6 +560,106 @@ actor SmartTubeAuthService {
         }
 
         return data
+    }
+
+    private static func collectAccountItems(
+        from node: Any,
+        into output: inout [[String: Any]]
+    ) {
+        if let dictionary = node as? [String: Any] {
+            if let item = dictionary["accountItem"] as? [String: Any] {
+                output.append(item)
+            }
+
+            for value in dictionary.values {
+                collectAccountItems(from: value, into: &output)
+            }
+        } else if let array = node as? [Any] {
+            for value in array {
+                collectAccountItems(from: value, into: &output)
+            }
+        }
+    }
+
+    private static func pageID(from item: [String: Any]) -> String? {
+        guard let endpoint = item["serviceEndpoint"] as? [String: Any],
+              let select = endpoint["selectActiveIdentityEndpoint"] as? [String: Any],
+              let tokens = select["supportedTokens"] as? [[String: Any]] else {
+            return nil
+        }
+
+        for token in tokens {
+            if let pageToken = token["pageIdToken"] as? [String: Any],
+               let pageID = pageToken["pageId"] as? String,
+               !pageID.isEmpty {
+                return pageID
+            }
+        }
+
+        return nil
+    }
+
+    private static func text(from value: Any?) -> String? {
+        guard let value else { return nil }
+
+        if let string = value as? String {
+            return string
+        }
+
+        if let dictionary = value as? [String: Any] {
+            if let simpleText = dictionary["simpleText"] as? String {
+                return simpleText
+            }
+
+            if let runs = dictionary["runs"] as? [[String: Any]] {
+                let joined = runs
+                    .compactMap { $0["text"] as? String }
+                    .joined()
+
+                return joined.isEmpty ? nil : joined
+            }
+
+            if let content = dictionary["content"] as? String {
+                return content
+            }
+        }
+
+        return nil
+    }
+
+    private static func thumbnailURL(from value: Any?) -> URL? {
+        guard let value else { return nil }
+
+        if let dictionary = value as? [String: Any] {
+            if let raw = dictionary["url"] as? String {
+                return URL(string: raw)
+            }
+
+            if let thumbnails = dictionary["thumbnails"] as? [[String: Any]] {
+                for item in thumbnails.reversed() {
+                    if let raw = item["url"] as? String,
+                       let url = URL(string: raw) {
+                        return url
+                    }
+                }
+            }
+
+            for nested in dictionary.values {
+                if let url = thumbnailURL(from: nested) {
+                    return url
+                }
+            }
+        }
+
+        if let array = value as? [Any] {
+            for nested in array.reversed() {
+                if let url = thumbnailURL(from: nested) {
+                    return url
+                }
+            }
+        }
+
+        return nil
     }
 
     private static func extractCredentials(
