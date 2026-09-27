@@ -673,14 +673,16 @@ actor AlternativePlayerService {
             return nil
         }
 
-        let combined = formats(
+        let allCombined = formats(
             from: streaming["formats"]
         )
         .filter {
             $0.isVideo
                 && $0.hasAudio
-                && !$0.requiresPoToken
         }
+
+        let combined = allCombined
+            .filter { !$0.requiresPoToken }
 
         let adaptive = formats(
             from:
@@ -696,7 +698,9 @@ actor AlternativePlayerService {
             ] as? String
 
         let hasReturnedContent =
-            !combined.isEmpty
+            !(client.profile == "ANDROID"
+                ? allCombined
+                : combined).isEmpty
             || !adaptive.isEmpty
             || hlsRaw != nil
 
@@ -723,14 +727,14 @@ actor AlternativePlayerService {
         )
 
         logger.notice(
-            "Formats client=\(client.profile, privacy: .public) combined=\(combined.count, privacy: .public) adaptive=\(adaptive.count, privacy: .public) hls=\(hlsRaw != nil, privacy: .public) ads=\(adMetadata.containsAdvertisingMetadata, privacy: .public)"
+            "Formats client=\(client.profile, privacy: .public) combined=\(combined.count, privacy: .public) combinedAll=\(allCombined.count, privacy: .public) adaptive=\(adaptive.count, privacy: .public) hls=\(hlsRaw != nil, privacy: .public) ads=\(adMetadata.containsAdvertisingMetadata, privacy: .public)"
         )
 
         // SmartTubeIOS uses standard Android only as the final muxed
         // direct-stream fallback. Do not try its adaptive rqh=1 URLs.
         if client.profile == "ANDROID" {
             guard let muxed = bestCombined(
-                combined,
+                allCombined,
                 requestedHeight:
                     requestedHeight(
                         for: preferredQuality
