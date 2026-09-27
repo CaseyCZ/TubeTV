@@ -753,11 +753,31 @@ actor AlternativePlayerService {
             )
         }
 
+        let qualityFormats: [AlternativeFormat]
+        if client.profile == "ANDROID" {
+            qualityFormats = allCombined.filter {
+                $0.isNativeVideo
+            }
+        } else {
+            qualityFormats =
+                combined.filter { $0.isNativeVideo }
+                + adaptive.filter { $0.isNativeVideo }
+        }
+
+        let availableHeights = Array(
+            Set(
+                qualityFormats.compactMap {
+                    $0.height
+                }
+            )
+        ).sorted(by: >)
+
         let playbackHeaders = PlaybackRequestHeaders(
             userAgent: client.userAgent,
             referer: client.referer,
             origin: client.origin,
-            clientProfile: client.profile
+            clientProfile: client.profile,
+            availableHeights: availableHeights
         )
 
         logger.notice(
@@ -1209,16 +1229,11 @@ actor AlternativePlayerService {
     private func requestedHeight(
         for preference: String
     ) -> Int? {
-        switch preference {
-        case "1080p":
-            return 1080
-        case "1440p":
-            return 1440
-        case "2160p":
-            return 2160
-        default:
+        guard preference.hasSuffix("p") else {
             return nil
         }
+
+        return Int(preference.dropLast())
     }
 
     private static func generateCPN()
