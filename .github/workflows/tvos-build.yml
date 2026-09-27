@@ -6,6 +6,10 @@ on:
       - Master
   workflow_dispatch:
 
+concurrency:
+  group: tvos-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Build TubeTV for tvOS Simulator
