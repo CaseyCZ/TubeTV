@@ -219,12 +219,13 @@ jobs:
           xcrun simctl spawn "$UDID" log show \
             --style compact \
             --last 2m \
-            --predicate 'subsystem == "cz.caseycz.tubetv" AND category == "CI"' \
+            --predicate 'subsystem == "cz.caseycz.tubetv" AND (category == "CI" OR category == "PlaybackFailover")' \
             > tubetv-direct-video.log 2>&1 || true
 
           cat tubetv-direct-video.log
           grep -q "TUBETV_DIRECT_VIDEO_STARTED" tubetv-direct-video.log
           grep -q "TUBETV_VIDEO_PLAYBACK_OK" tubetv-direct-video.log
+          grep -q "PLAYBACK_DIAG .*source=HLS .*profile=UNTAGGED" tubetv-direct-video.log
 
       - name: Upload simulator evidence
         if: always()
