@@ -10,6 +10,8 @@ struct SettingsView: View {
     @State private var authorization: TVDeviceAuthorization?
     @State private var isSigningIn = false
     @State private var accountMessage: String?
+    @State private var profiles: [YouTubeAccountProfile] = []
+    @State private var selectedProfileID = ""
 
     var body: some View {
         NavigationStack {
@@ -46,6 +48,40 @@ struct SettingsView: View {
                             systemImage: "checkmark.circle.fill"
                         )
                         .foregroundStyle(.green)
+
+                        if !profiles.isEmpty {
+                            Picker("YouTube profil", selection: $selectedProfileID) {
+                                ForEach(profiles) { profile in
+                                    VStack(alignment: .leading) {
+                                        Text(profile.name)
+
+                                        if let handle = profile.channelHandle,
+                                           !handle.isEmpty {
+                                            Text(handle)
+                                        }
+                                    }
+                                    .tag(profile.id)
+                                }
+                            }
+                            .onChange(of: selectedProfileID) { newValue in
+                                guard let profile = profiles.first(
+                                    where: { $0.id == newValue }
+                                ) else {
+                                    return
+                                }
+
+                                Task {
+                                    await SmartTubeAuthService.shared.selectAccount(profile)
+                                    accountMessage = "Aktivní YouTube profil: \(profile.name)"
+                                }
+                            }
+                        }
+
+                        Button("Obnovit profily") {
+                            Task {
+                                await loadProfiles()
+                            }
+                        }
 
                         Button("Odhlásit účet") {
                             Task {
@@ -98,14 +134,55 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    Text("Přihlášení používá stejný princip jako SmartTube: TubeTV načte aktuální YouTube TV OAuth konfiguraci, zobrazí TV kód a refresh token uloží bezpečně do Keychainu.")
+                    Text("TubeTV používá stejný princip jako SmartTube: YouTube TV device login, refresh token v Keychainu a InnerTube TV profil včetně brand kanálů.")
                         .foregroundStyle(.secondary)
                 }
             }
             .navigationTitle("Nastavení")
             .task {
-                isSignedIn = await SmartTubeAuthService.shared.signedIn()
+                await loadAccountState()
             }
+        }
+    }
+
+    @MainActor
+    private func loadAccountState() async {
+        isSignedIn = await SmartTubeAuthService.shared.signedIn()
+
+        if isSignedIn {
+            await loadProfiles()
+        } else {
+            profiles = []
+            selectedProfileID = ""
+        }
+    }
+
+    @MainActor
+    private func loadProfiles() async {
+        guard await SmartTubeAuthService.shared.signedIn() else {
+            profiles = []
+            selectedProfileID = ""
+            return
+        }
+
+        do {
+            let loaded = try await SmartTubeAuthService.shared.accounts()
+            profiles = loaded
+
+            let selectedPageID = await SmartTubeAuthService.shared.selectedPageID()
+
+            if let current = loaded.first(
+                where: { $0.pageID == selectedPageID && selectedPageID != nil }
+            ) ?? loaded.first(where: { $0.isSelected }) ?? loaded.first {
+                selectedProfileID = current.id
+                await SmartTubeAuthService.shared.selectAccount(current)
+            }
+
+            if loaded.count > 1 {
+                accountMessage = "Nalezeno \(loaded.count) YouTube profilů."
+            }
+        } catch {
+            accountMessage = "Profily: \(error.localizedDescription)"
         }
     }
 
@@ -124,6 +201,7 @@ struct SettingsView: View {
             isSignedIn = true
             authorization = nil
             accountMessage = "Přihlášení bylo dokončeno."
+            await loadProfiles()
         } catch {
             accountMessage = error.localizedDescription
         }
@@ -136,6 +214,8 @@ struct SettingsView: View {
         await SmartTubeAuthService.shared.signOut()
         isSignedIn = false
         authorization = nil
+        profiles = []
+        selectedProfileID = ""
         accountMessage = "YouTube účet byl odhlášen."
     }
 }
