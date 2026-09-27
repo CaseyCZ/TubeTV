@@ -91,6 +91,19 @@ struct AccountFeedView: View {
             .task {
                 await load()
             }
+            .onReceive(
+                NotificationCenter.default.publisher(
+                    for: .youtubeSubscriptionsDidChange
+                )
+            ) { _ in
+                guard kind == .subscriptions else {
+                    return
+                }
+
+                Task {
+                    await load()
+                }
+            }
         }
     }
 
@@ -301,6 +314,15 @@ struct PlaylistsView: View {
             .task {
                 await load()
             }
+            .onReceive(
+                NotificationCenter.default.publisher(
+                    for: .youtubePlaylistsDidChange
+                )
+            ) { _ in
+                Task {
+                    await load()
+                }
+            }
         }
     }
 
@@ -451,6 +473,15 @@ struct PlaylistDetailView: View {
         }
         .task {
             await load()
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: .youtubePlaylistsDidChange
+            )
+        ) { _ in
+            Task {
+                await load()
+            }
         }
     }
 
@@ -731,6 +762,15 @@ struct SubscribedChannelsView: View {
             }
             .task {
                 await load()
+            }
+            .onReceive(
+                NotificationCenter.default.publisher(
+                    for: .youtubeSubscriptionsDidChange
+                )
+            ) { _ in
+                Task {
+                    await load()
+                }
             }
         }
     }
