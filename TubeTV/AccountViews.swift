@@ -5,7 +5,9 @@ struct AccountFeedView: View {
     let kind: AccountFeedKind
 
     @State private var videos: [VideoItem] = []
+    @State private var continuationToken: String?
     @State private var isLoading = true
+    @State private var isLoadingMore = false
     @State private var errorMessage: String?
 
     var body: some View {
@@ -40,11 +42,42 @@ struct AccountFeedView: View {
                         columns: [GridItem(.adaptive(minimum: 420), spacing: 28)],
                         spacing: 28
                     ) {
-                        ForEach(videos) { video in
+                        ForEach(
+                            videos.indices,
+                            id: \.self
+                        ) { index in
+                            let video = videos[index]
+
                             NavigationLink(value: video) {
                                 VideoCard(video: video)
                             }
                             .buttonStyle(.card)
+                            .onAppear {
+                                guard kind == .subscriptions else {
+                                    return
+                                }
+
+                                let threshold =
+                                    max(
+                                        0,
+                                        videos.count - 4
+                                    )
+
+                                if index >= threshold {
+                                    Task {
+                                        await loadMoreSubscriptions()
+                                    }
+                                }
+                            }
+                        }
+
+                        if kind == .subscriptions
+                            && isLoadingMore {
+                            ProgressView()
+                                .frame(
+                                    width: 420,
+                                    height: 236
+                                )
                         }
                     }
                 }
@@ -66,7 +99,20 @@ struct AccountFeedView: View {
         defer { isLoading = false }
 
         do {
-            videos = try await InnerTubeService.shared.videos(for: kind)
+            if kind == .subscriptions {
+                let page =
+                    try await InnerTubeService.shared
+                        .subscriptionsPage()
+
+                videos = page.videos
+                continuationToken =
+                    page.continuationToken
+            } else {
+                videos =
+                    try await InnerTubeService.shared
+                        .videos(for: kind)
+                continuationToken = nil
+            }
 
             if videos.isEmpty {
                 errorMessage = L10n.text("youtube_no_videos", languageCode: appLanguage)
@@ -74,6 +120,51 @@ struct AccountFeedView: View {
         } catch {
             videos = []
             errorMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func loadMoreSubscriptions() async {
+        guard kind == .subscriptions,
+              !isLoadingMore,
+              let token = continuationToken,
+              !token.isEmpty else {
+            return
+        }
+
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+
+        do {
+            let page =
+                try await InnerTubeService.shared
+                    .continueSubscriptions(
+                        token
+                    )
+
+            var seen = Set(
+                videos.map(\.id)
+            )
+            let newVideos =
+                page.videos.filter {
+                    seen.insert($0.id).inserted
+                }
+
+            videos.append(
+                contentsOf: newVideos
+            )
+
+            let nextToken =
+                page.continuationToken
+
+            continuationToken =
+                nextToken == token
+                    && newVideos.isEmpty
+                ? nil
+                : nextToken
+        } catch {
+            errorMessage =
+                error.localizedDescription
         }
     }
 }
