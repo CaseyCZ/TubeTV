@@ -582,9 +582,11 @@ actor AlternativePlayerService {
                 ? "https://youtubei.googleapis.com/youtubei/v1/player"
                 : "https://www.youtube.com/youtubei/v1/player"
 
-        var components = URLComponents(
+        guard var components = URLComponents(
             string: playerEndpoint
-        )!
+        ) else {
+            return nil
+        }
 
         var queryItems = [
             URLQueryItem(
@@ -1470,7 +1472,7 @@ actor AlternativePlayerService {
             (0..<16).map { _ in
                 alphabet.randomElement(
                     using: &generator
-                )!
+                ) ?? "A"
             }
         )
     }
