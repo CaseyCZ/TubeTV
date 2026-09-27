@@ -25,15 +25,6 @@ jobs:
           xcodebuild -version
           xcrun simctl list runtimes
 
-      - name: Render tvOS icon assets
-        run: |
-          set -euo pipefail
-          xcrun --sdk macosx swift scripts/render-tvos-icon.swift \
-            "TubeTV/Assets.xcassets/App Icon & Top Shelf Image.brandassets"
-
-          test -f "TubeTV/Assets.xcassets/App Icon & Top Shelf Image.brandassets/App Icon.imagestack/Front.imagestacklayer/Content.imageset/front@2x.png"
-          test -f "TubeTV/Assets.xcassets/App Icon & Top Shelf Image.brandassets/App Icon - App Store.imagestack/Front.imagestacklayer/Content.imageset/front.png"
-
       - name: Resolve Swift packages
         run: |
           xcodebuild \
