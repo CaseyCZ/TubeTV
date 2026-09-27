@@ -193,14 +193,12 @@ actor AuthenticatedPlayerService {
             throw AuthenticatedPlayerError.unplayable(reason)
         }
 
-        guard let streaming = root["streamingData"] as? [String: Any] else {
-            throw AuthenticatedPlayerError.noPlayableStream
-        }
+        let adMetadata = AdFilteringPolicy.inspectPlayerResponse(root)
 
-        if preferredQuality == "Auto",
-           let hls = streaming["hlsManifestUrl"] as? String,
-           let hlsURL = URL(string: hls) {
-            return .direct(hlsURL)
+        guard let streaming = AdFilteringPolicy.contentStreamingData(
+            from: root
+        ) else {
+            throw AuthenticatedPlayerError.noPlayableStream
         }
 
         let combined = Self.formats(
@@ -251,11 +249,21 @@ actor AuthenticatedPlayerService {
             return .direct(fallback)
         }
 
-        if let hls = streaming["hlsManifestUrl"] as? String,
-           let hlsURL = URL(string: hls) {
+        let hasDirectContentFormats =
+            !combined.isEmpty || !adaptive.isEmpty
+
+        if AdFilteringPolicy.shouldUseHLSFallback(
+            adMetadata: adMetadata,
+            hasDirectContentFormats: hasDirectContentFormats
+        ),
+        let hls = streaming["hlsManifestUrl"] as? String,
+        let hlsURL = URL(string: hls) {
             return .direct(hlsURL)
         }
 
+        // Do not play ad placements or ad-bearing HLS fallbacks.
+        // StreamResolver will try YouTubeKit next, similar to
+        // SmartTube switching to another player client.
         throw AuthenticatedPlayerError.noPlayableStream
     }
 
