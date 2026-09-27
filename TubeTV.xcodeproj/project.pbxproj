@@ -53,6 +53,7 @@
 		A00000000000000000000019 /* AdFilteringPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/AdFilteringPolicy.swift; sourceTree = SOURCE_ROOT; };
 		A00000000000000000000020 /* AlternativePlayerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/AlternativePlayerService.swift; sourceTree = SOURCE_ROOT; };
 		A00000000000000000000021 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/Localization.swift; sourceTree = SOURCE_ROOT; };
+		A00000000000000000000022 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = TubeTV/Assets.xcassets; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
