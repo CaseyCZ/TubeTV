@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct HomeView: View {
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @State private var videos: [VideoItem] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
@@ -10,7 +11,7 @@ struct HomeView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 44) {
                     HStack {
-                        Text("Domů")
+                        Text(L10n.text("home", languageCode: appLanguage))
                             .font(.largeTitle.bold())
 
                         Spacer()
@@ -29,13 +30,13 @@ struct HomeView: View {
                         VideoRow(title: "TubeTV", videos: VideoItem.demo)
                     } else {
                         VideoRow(
-                            title: "Doporučené",
+                            title: L10n.text("recommended", languageCode: appLanguage),
                             videos: Array(videos.prefix(24))
                         )
 
                         if videos.count > 24 {
                             VideoRow(
-                                title: "Další videa",
+                                title: L10n.text("more_videos", languageCode: appLanguage),
                                 videos: Array(videos.dropFirst(24).prefix(24))
                             )
                         }
@@ -73,7 +74,7 @@ struct HomeView: View {
             }
 
             if videos.isEmpty {
-                errorMessage = "YouTube nevrátil žádná videa."
+                errorMessage = L10n.text("youtube_no_videos", languageCode: appLanguage)
             }
         } catch {
             errorMessage = error.localizedDescription
@@ -139,7 +140,7 @@ struct VideoCard: View {
                 }
 
                 if video.playbackURL != nil {
-                    Text("TEST")
+                    Text(L10n.text("test", languageCode: appLanguage))
                         .font(.caption.bold())
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
