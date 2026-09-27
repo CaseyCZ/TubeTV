@@ -1,5 +1,6 @@
 import AVFoundation
 import AVKit
+import OSLog
 import SwiftUI
 
 struct VideoDetailView: View {
@@ -167,6 +168,12 @@ final class NativePlayerModel: ObservableObject {
     private var timeObserver: Any?
     private var trackingObserver: Any?
     private var trackingContext: YouTubeTrackingContext?
+    private var ciSmokeVerificationScheduled = false
+
+    private let ciLogger = Logger(
+        subsystem: "cz.caseycz.tubetv",
+        category: "CI"
+    )
 
     init(
         source: PlaybackSource,
@@ -203,6 +210,7 @@ final class NativePlayerModel: ObservableObject {
             startCaptionLoadingIfNeeded()
             startHistoryTrackingIfNeeded()
             loadCaptionOptions()
+            scheduleCISmokeVerificationIfNeeded()
         } catch {
             if case let .adaptive(_, _, fallback?) = currentSource {
                 let fallbackItem = AVPlayerItem(url: fallback)
@@ -215,6 +223,7 @@ final class NativePlayerModel: ObservableObject {
                 startCaptionLoadingIfNeeded()
                 startHistoryTrackingIfNeeded()
                 loadCaptionOptions()
+                scheduleCISmokeVerificationIfNeeded()
             } else {
                 isPreparing = false
                 errorMessage = error.localizedDescription
@@ -244,6 +253,45 @@ final class NativePlayerModel: ObservableObject {
 
     func play() {
         player.playImmediately(atRate: playbackRate)
+    }
+
+    private func scheduleCISmokeVerificationIfNeeded() {
+        guard !ciSmokeVerificationScheduled,
+              ProcessInfo.processInfo.environment[
+                "TUBETV_CI_VIDEO_SMOKE"
+              ] == "1" else {
+            return
+        }
+
+        ciSmokeVerificationScheduled = true
+
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(
+                nanoseconds: 10_000_000_000
+            )
+
+            guard let self else { return }
+
+            let seconds = self.player.currentTime().seconds
+            let rate = self.player.rate
+            let status = String(
+                describing: self.player.timeControlStatus
+            )
+
+            self.ciLogger.notice(
+                "TUBETV_VIDEO_PLAYBACK time=\(seconds, privacy: .public) rate=\(rate, privacy: .public) status=\(status, privacy: .public)"
+            )
+
+            if seconds.isFinite && seconds > 0.5 {
+                self.ciLogger.notice(
+                    "TUBETV_VIDEO_PLAYBACK_OK"
+                )
+            } else {
+                self.ciLogger.error(
+                    "TUBETV_VIDEO_PLAYBACK_FAILED"
+                )
+            }
+        }
     }
 
     func setPlaybackRate(_ rate: Float) {
