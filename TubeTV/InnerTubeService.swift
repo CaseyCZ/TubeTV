@@ -83,8 +83,13 @@ actor InnerTubeService {
             requireAuthentication: false,
             includeVisitorData: true
         )
+        let diagnostics =
+            Self.rendererDiagnostics(from: root)
         let videos = Self.extractVideos(from: root)
 
+        logger.notice(
+            "Home renderer diagnostics=\(diagnostics, privacy: .public)"
+        )
         logger.notice(
             "Home parsed videos=\(videos.count, privacy: .public)"
         )
@@ -434,6 +439,53 @@ actor InnerTubeService {
         return result
     }
 
+    private static func rendererDiagnostics(
+        from root: Any
+    ) -> String {
+        let watched = Set([
+            "videoRenderer",
+            "gridVideoRenderer",
+            "compactVideoRenderer",
+            "playlistVideoRenderer",
+            "reelItemRenderer",
+            "tileRenderer",
+            "lockupViewModel",
+            "shortsLockupViewModel",
+            "richItemRenderer",
+            "richShelfRenderer",
+            "richGridRenderer",
+            "tvBrowseRenderer"
+        ])
+
+        var counts: [String: Int] = [:]
+
+        func walk(_ node: Any) {
+            if let dictionary = node as? [String: Any] {
+                for (key, value) in dictionary {
+                    if watched.contains(key) {
+                        counts[key, default: 0] += 1
+                    }
+                    walk(value)
+                }
+            } else if let array = node as? [Any] {
+                for value in array {
+                    walk(value)
+                }
+            }
+        }
+
+        walk(root)
+
+        if counts.isEmpty {
+            return "none"
+        }
+
+        return counts
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key)=\($0.value)" }
+            .joined(separator: " ")
+    }
+
     private static func collectVideoRenderers(
         from node: Any,
         into output: inout [[String: Any]]
@@ -447,15 +499,22 @@ actor InnerTubeService {
                 "reelItemRenderer",
                 "playlistVideoRenderer",
                 "tileRenderer",
-                "lockupViewModel"
+                "lockupViewModel",
+                "shortsLockupViewModel"
             ]
 
             for key in rendererKeys {
                 if let renderer = dictionary[key] as? [String: Any] {
-                    if key != "tileRenderer"
-                        || (renderer["contentType"] as? String)
-                            == "TILE_CONTENT_TYPE_VIDEO" {
+                    if key != "tileRenderer" {
                         output.append(renderer)
+                    } else {
+                        let contentType =
+                            renderer["contentType"] as? String
+
+                        if contentType == "TILE_CONTENT_TYPE_VIDEO"
+                            || contentType == "TILE_CONTENT_TYPE_REEL" {
+                            output.append(renderer)
+                        }
                     }
                 }
             }
@@ -485,7 +544,33 @@ actor InnerTubeService {
 
         let paths = [
             ["onSelectCommand", "watchEndpoint", "videoId"],
+            ["onSelectCommand", "reelWatchEndpoint", "videoId"],
+            [
+                "onSelectCommand",
+                "innertubeCommand",
+                "watchEndpoint",
+                "videoId"
+            ],
+            [
+                "onSelectCommand",
+                "innertubeCommand",
+                "reelWatchEndpoint",
+                "videoId"
+            ],
             ["navigationEndpoint", "watchEndpoint", "videoId"],
+            ["navigationEndpoint", "reelWatchEndpoint", "videoId"],
+            [
+                "navigationEndpoint",
+                "innertubeCommand",
+                "watchEndpoint",
+                "videoId"
+            ],
+            [
+                "navigationEndpoint",
+                "innertubeCommand",
+                "reelWatchEndpoint",
+                "videoId"
+            ],
             [
                 "rendererContext",
                 "commandContext",
@@ -497,6 +582,12 @@ actor InnerTubeService {
             [
                 "rendererContext",
                 "commandContext",
+                "onTap",
+                "innertubeCommand",
+                "reelWatchEndpoint",
+                "videoId"
+            ],
+            [
                 "onTap",
                 "innertubeCommand",
                 "reelWatchEndpoint",
