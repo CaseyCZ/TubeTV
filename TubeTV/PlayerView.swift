@@ -441,35 +441,76 @@ final class NativePlayerModel: ObservableObject {
         }
 
         let oldTime = player.currentTime()
-        let wasPlaying = player.timeControlStatus == .playing
+        let savedSeconds = oldTime.seconds
+        let wasPlaying =
+            player.timeControlStatus == .playing
 
         isSwitchingQuality = true
         errorMessage = nil
         player.pause()
 
+        playbackLogger.notice(
+            "Quality switch start from=\(self.activeQuality, privacy: .public) to=\(quality, privacy: .public) saved=\(savedSeconds, privacy: .public)"
+        )
+
         do {
-            let newSource = try await StreamResolver.resolveYouTubeVideo(
-                videoID: youtubeVideoID,
-                preferredQuality: quality
+            let newSource =
+                try await StreamResolver
+                    .resolveYouTubeVideo(
+                        videoID: youtubeVideoID,
+                        preferredQuality: quality
+                    )
+
+            let newItem =
+                try await makePlayerItem(
+                    from: newSource
+                )
+
+            currentSource = newSource
+            player.replaceCurrentItem(
+                with: newItem
             )
 
-            let newItem = try await makePlayerItem(from: newSource)
-            currentSource = newSource
-            player.replaceCurrentItem(with: newItem)
-            await updateFormatInfo(from: newItem)
+            // Match SmartTubeIOS: do not seek a newly replaced item
+            // while it is still .unknown. AVPlayer can ignore that seek.
+            // Wait until the new quality is actually ready first.
+            try await waitUntilReadyToPlay(
+                newItem
+            )
+
+            if savedSeconds.isFinite,
+               savedSeconds > 0 {
+                await seek(to: oldTime)
+            }
+
+            await updateFormatInfo(
+                from: newItem
+            )
             refreshAvailableQualityHeights(
                 for: newSource
             )
 
-            await seek(to: oldTime)
             activeQuality = quality
+
+            let restoredSeconds =
+                player.currentTime().seconds
+
+            playbackLogger.notice(
+                "Quality switch ready quality=\(quality, privacy: .public) saved=\(savedSeconds, privacy: .public) restored=\(restoredSeconds, privacy: .public)"
+            )
 
             if wasPlaying {
                 play()
+            } else {
+                player.pause()
             }
         } catch {
             errorMessage =
                 "\(L10n.text("quality_change_error")): \(error.localizedDescription)"
+
+            playbackLogger.error(
+                "Quality switch failed quality=\(quality, privacy: .public) saved=\(savedSeconds, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
+            )
 
             if wasPlaying {
                 play()
