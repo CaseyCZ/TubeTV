@@ -378,7 +378,9 @@ struct PlaylistDetailView: View {
     let playlist: YouTubePlaylistItem
 
     @State private var videos: [VideoItem] = []
+    @State private var continuationToken: String?
     @State private var isLoading = true
+    @State private var isLoadingMore = false
     @State private var errorMessage: String?
 
     var body: some View {
@@ -408,11 +410,37 @@ struct PlaylistDetailView: View {
                     columns: [GridItem(.adaptive(minimum: 420), spacing: 28)],
                     spacing: 28
                 ) {
-                    ForEach(videos) { video in
+                    ForEach(
+                        videos.indices,
+                        id: \.self
+                    ) { index in
+                        let video = videos[index]
+
                         NavigationLink(value: video) {
                             VideoCard(video: video)
                         }
                         .buttonStyle(.card)
+                        .onAppear {
+                            let threshold =
+                                max(
+                                    0,
+                                    videos.count - 4
+                                )
+
+                            if index >= threshold {
+                                Task {
+                                    await loadMore()
+                                }
+                            }
+                        }
+                    }
+
+                    if isLoadingMore {
+                        ProgressView()
+                            .frame(
+                                width: 420,
+                                height: 236
+                            )
                     }
                 }
             }
@@ -433,7 +461,15 @@ struct PlaylistDetailView: View {
         defer { isLoading = false }
 
         do {
-            videos = try await InnerTubeService.shared.playlistVideos(playlist.id)
+            let page =
+                try await InnerTubeService.shared
+                    .playlistVideosPage(
+                        playlist.id
+                    )
+
+            videos = page.videos
+            continuationToken =
+                page.continuationToken
 
             if videos.isEmpty {
                 errorMessage = L10n.text("playlist_empty", languageCode: appLanguage)
@@ -441,6 +477,50 @@ struct PlaylistDetailView: View {
         } catch {
             videos = []
             errorMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func loadMore() async {
+        guard !isLoadingMore,
+              let token = continuationToken,
+              !token.isEmpty else {
+            return
+        }
+
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+
+        do {
+            let page =
+                try await InnerTubeService.shared
+                    .continuePlaylistVideos(
+                        token
+                    )
+
+            var seen = Set(
+                videos.map(\.id)
+            )
+            let newVideos =
+                page.videos.filter {
+                    seen.insert($0.id).inserted
+                }
+
+            videos.append(
+                contentsOf: newVideos
+            )
+
+            let nextToken =
+                page.continuationToken
+
+            continuationToken =
+                nextToken == token
+                    && newVideos.isEmpty
+                ? nil
+                : nextToken
+        } catch {
+            errorMessage =
+                error.localizedDescription
         }
     }
 }

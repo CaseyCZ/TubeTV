@@ -290,12 +290,44 @@ actor InnerTubeService {
     }
 
     func playlistVideos(_ playlistID: String) async throws -> [VideoItem] {
+        try await playlistVideosPage(
+            playlistID
+        ).videos
+    }
+
+    func playlistVideosPage(
+        _ playlistID: String
+    ) async throws -> (
+        videos: [VideoItem],
+        continuationToken: String?
+    ) {
         let browseID = playlistID.hasPrefix("VL")
             ? playlistID
             : "VL\(playlistID)"
 
         let root = try await browse(browseID)
-        return Self.extractVideos(from: root)
+
+        return (
+            Self.extractVideos(from: root),
+            Self.nextContinuationToken(from: root)
+        )
+    }
+
+    func continuePlaylistVideos(
+        _ continuationToken: String
+    ) async throws -> (
+        videos: [VideoItem],
+        continuationToken: String?
+    ) {
+        let root = try await browse(
+            nil,
+            continuation: continuationToken
+        )
+
+        return (
+            Self.extractVideos(from: root),
+            Self.nextContinuationToken(from: root)
+        )
     }
 
     func channel(_ channelID: String) async throws -> YouTubeChannelPage {
