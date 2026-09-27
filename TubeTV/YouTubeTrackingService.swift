@@ -138,6 +138,8 @@ actor YouTubeTrackingService {
             throw YouTubeTrackingError.trackingDataUnavailable
         }
 
+        lastPositions.removeValue(forKey: videoID)
+
         return YouTubeTrackingContext(
             videoID: videoID,
             cpn: cpn,
@@ -196,7 +198,7 @@ actor YouTubeTrackingService {
 
             try await updateWatchTime(
                 context: context,
-                oldPosition: shouldFinish ? duration : oldPosition,
+                oldPosition: oldPosition,
                 position: shouldFinish ? duration : position,
                 duration: duration,
                 authorization: authorization,
