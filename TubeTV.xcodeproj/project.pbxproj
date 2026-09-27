@@ -27,6 +27,7 @@
 		A00000000000000000000118 /* PlaybackFormatInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000018 /* PlaybackFormatInspector.swift */; };
 		A00000000000000000000119 /* AdFilteringPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000019 /* AdFilteringPolicy.swift */; };
 		A00000000000000000000120 /* AlternativePlayerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000020 /* AlternativePlayerService.swift */; };
+		A00000000000000000000121 /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000021 /* Localization.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -50,6 +51,7 @@
 		A00000000000000000000018 /* PlaybackFormatInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/PlaybackFormatInspector.swift; sourceTree = SOURCE_ROOT; };
 		A00000000000000000000019 /* AdFilteringPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/AdFilteringPolicy.swift; sourceTree = SOURCE_ROOT; };
 		A00000000000000000000020 /* AlternativePlayerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/AlternativePlayerService.swift; sourceTree = SOURCE_ROOT; };
+		A00000000000000000000021 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/Localization.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -94,6 +96,7 @@
 				A00000000000000000000018 /* PlaybackFormatInspector.swift */,
 				A00000000000000000000019 /* AdFilteringPolicy.swift */,
 				A00000000000000000000020 /* AlternativePlayerService.swift */,
+				A00000000000000000000021 /* Localization.swift */,
 			);
 			name = Sources;
 			sourceTree = "<group>";
@@ -199,6 +202,7 @@
 				A00000000000000000000118 /* PlaybackFormatInspector.swift in Sources */,
 				A00000000000000000000119 /* AdFilteringPolicy.swift in Sources */,
 				A00000000000000000000120 /* AlternativePlayerService.swift in Sources */,
+				A00000000000000000000121 /* Localization.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
