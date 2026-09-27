@@ -16,9 +16,9 @@ enum YouTubeTrackingError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidPlayerResponse:
-            return "YouTube nevrátil platná player data pro historii."
+            return L10n.text("history_tracking_invalid_player")
         case .trackingDataUnavailable:
-            return "YouTube nevrátil tracking parametry pro historii."
+            return L10n.text("history_tracking_unavailable")
         }
     }
 }
