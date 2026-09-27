@@ -1,0 +1,254 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A00000000000000000000101 /* TubeTVApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000001 /* TubeTVApp.swift */; };
+		A00000000000000000000102 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000002 /* RootView.swift */; };
+		A00000000000000000000103 /* VideoItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000003 /* VideoItem.swift */; };
+		A00000000000000000000104 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000004 /* HomeView.swift */; };
+		A00000000000000000000105 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000005 /* SearchView.swift */; };
+		A00000000000000000000106 /* PlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000006 /* PlayerView.swift */; };
+		A00000000000000000000107 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000007 /* SettingsView.swift */; };
+		A00000000000000000000108 /* YouTubeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000008 /* YouTubeService.swift */; };
+		A00000000000000000000109 /* CaptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000009 /* CaptionService.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A00000000000000000000001 /* TubeTVApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/TubeTVApp.swift; sourceTree = SOURCE_ROOT; };
+		A00000000000000000000002 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/RootView.swift; sourceTree = SOURCE_ROOT; };
+		A00000000000000000000003 /* VideoItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/VideoItem.swift; sourceTree = SOURCE_ROOT; };
+		A00000000000000000000004 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/HomeView.swift; sourceTree = SOURCE_ROOT; };
+		A00000000000000000000005 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/SearchView.swift; sourceTree = SOURCE_ROOT; };
+		A00000000000000000000006 /* PlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/PlayerView.swift; sourceTree = SOURCE_ROOT; };
+		A00000000000000000000007 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/SettingsView.swift; sourceTree = SOURCE_ROOT; };
+		A00000000000000000000008 /* YouTubeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/YouTubeService.swift; sourceTree = SOURCE_ROOT; };
+		A00000000000000000000009 /* CaptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/CaptionService.swift; sourceTree = SOURCE_ROOT; };
+		A00000000000000000000010 /* TubeTV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TubeTV.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A00000000000000000000201 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A00000000000000000000301 = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000302 /* Sources */,
+				A00000000000000000000303 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A00000000000000000000302 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000001 /* TubeTVApp.swift */,
+				A00000000000000000000002 /* RootView.swift */,
+				A00000000000000000000003 /* VideoItem.swift */,
+				A00000000000000000000004 /* HomeView.swift */,
+				A00000000000000000000005 /* SearchView.swift */,
+				A00000000000000000000006 /* PlayerView.swift */,
+				A00000000000000000000007 /* SettingsView.swift */,
+				A00000000000000000000008 /* YouTubeService.swift */,
+				A00000000000000000000009 /* CaptionService.swift */,
+			);
+			name = Sources;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000303 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000010 /* TubeTV.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A00000000000000000000401 /* TubeTV */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A00000000000000000000802 /* Build configuration list for PBXNativeTarget "TubeTV" */;
+			buildPhases = (
+				A00000000000000000000501 /* Sources */,
+				A00000000000000000000201 /* Frameworks */,
+				A00000000000000000000601 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TubeTV;
+			productName = TubeTV;
+			productReference = A00000000000000000000010 /* TubeTV.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A00000000000000000000701 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					A00000000000000000000401 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = A00000000000000000000801 /* Build configuration list for PBXProject "TubeTV" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A00000000000000000000301;
+			productRefGroup = A00000000000000000000303 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A00000000000000000000401 /* TubeTV */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A00000000000000000000601 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A00000000000000000000501 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A00000000000000000000101 /* TubeTVApp.swift in Sources */,
+				A00000000000000000000102 /* RootView.swift in Sources */,
+				A00000000000000000000103 /* VideoItem.swift in Sources */,
+				A00000000000000000000104 /* HomeView.swift in Sources */,
+				A00000000000000000000105 /* SearchView.swift in Sources */,
+				A00000000000000000000106 /* PlayerView.swift in Sources */,
+				A00000000000000000000107 /* SettingsView.swift in Sources */,
+				A00000000000000000000108 /* YouTubeService.swift in Sources */,
+				A00000000000000000000109 /* CaptionService.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A00000000000000000000901 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				SDKROOT = appletvos;
+				SWIFT_VERSION = 5.9;
+				TVOS_DEPLOYMENT_TARGET = 17.0;
+			};
+			name = Debug;
+		};
+		A00000000000000000000902 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				SDKROOT = appletvos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+				TVOS_DEPLOYMENT_TARGET = 17.0;
+			};
+			name = Release;
+		};
+		A00000000000000000000903 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = TubeTV;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = cz.caseycz.tubetv;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 17.0;
+			};
+			name = Debug;
+		};
+		A00000000000000000000904 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = TubeTV;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = cz.caseycz.tubetv;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 17.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A00000000000000000000801 /* Build configuration list for PBXProject "TubeTV" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A00000000000000000000901 /* Debug */,
+				A00000000000000000000902 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A00000000000000000000802 /* Build configuration list for PBXNativeTarget "TubeTV" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A00000000000000000000903 /* Debug */,
+				A00000000000000000000904 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A00000000000000000000701 /* Project object */;
+}
