@@ -23,7 +23,7 @@ actor YouTubeService {
     func home() async throws -> [VideoItem] {
         var components = URLComponents(string: "https://www.youtube.com/")
         components?.queryItems = [
-            URLQueryItem(name: "hl", value: "cs"),
+            URLQueryItem(name: "hl", value: L10n.currentLanguageCode),
             URLQueryItem(name: "gl", value: "CZ")
         ]
 
@@ -66,7 +66,7 @@ actor YouTubeService {
 
         return YouTubeChannelPage(
             id: channelID,
-            title: metadata.title ?? "YouTube kanál",
+            title: metadata.title ?? "YouTube channel",
             description: metadata.description ?? "",
             avatarURL: metadata.avatarURL,
             videos: Self.videoItems(from: json, limit: 100)
@@ -304,7 +304,7 @@ actor YouTubeService {
             forHTTPHeaderField: "User-Agent"
         )
         request.setValue(
-            "cs-CZ,cs;q=0.9,en;q=0.7",
+            L10n.acceptLanguageHeader,
             forHTTPHeaderField: "Accept-Language"
         )
         request.setValue(
