@@ -3,6 +3,18 @@ import AVKit
 import OSLog
 import SwiftUI
 
+private func localizedLanguageName(
+    _ languageCode: String,
+    localeCode: String
+) -> String {
+    Locale(identifier: localeCode)
+        .localizedString(
+            forLanguageCode: languageCode
+        )?
+        .capitalized
+        ?? languageCode.uppercased()
+}
+
 struct VideoDetailView: View {
     let video: VideoItem
 
@@ -68,7 +80,7 @@ struct VideoDetailView: View {
 
                 Label(
                     autoEnableCaptions
-                        ? "\(L10n.text("captions", languageCode: appLanguage)): Čeština"
+                        ? "\(L10n.text("captions", languageCode: appLanguage)): \(localizedLanguageName(preferredCaptionLanguage, localeCode: appLanguage))"
                         : "\(L10n.text("captions", languageCode: appLanguage)): \(L10n.text("captions_off", languageCode: appLanguage))",
                     systemImage: "captions.bubble.fill"
                 )
@@ -151,6 +163,7 @@ final class NativePlayerModel: ObservableObject {
     @Published private(set) var isPreparing = true
     @Published private(set) var currentCaption = ""
     @Published private(set) var captionStatus: String?
+    @Published private(set) var activeCaptionLanguageCode: String?
     @Published private(set) var captionOptions: [CaptionLanguageOption] = []
     @Published private(set) var activeQuality: String
     @Published private(set) var formatInfo: PlaybackFormatInfo?
@@ -367,6 +380,25 @@ final class NativePlayerModel: ObservableObject {
             .noPlayableStream
     }
 
+    var preferredCaptionDisplayName: String {
+        localizedLanguageName(
+            preferredCaptionLanguage,
+            localeCode: L10n.currentLanguageCode
+        )
+    }
+
+    var isPreferredCaptionActive: Bool {
+        guard captionsAreEnabled,
+              let activeCaptionLanguageCode else {
+            return false
+        }
+
+        return activeCaptionLanguageCode
+            .caseInsensitiveCompare(
+                preferredCaptionLanguage
+            ) == .orderedSame
+    }
+
     var currentPlaybackDescription: String {
         let fallbackQuality =
             activeQuality == "Auto"
@@ -553,6 +585,7 @@ final class NativePlayerModel: ObservableObject {
         captionsAreEnabled = false
         cues = []
         currentCaption = ""
+        activeCaptionLanguageCode = nil
         captionStatus = L10n.text("captions_off")
     }
 
@@ -575,7 +608,7 @@ final class NativePlayerModel: ObservableObject {
         guard let youtubeVideoID else { return }
 
         captionsAreEnabled = true
-        captionStatus = "Načítám \(option.displayName)…"
+        captionStatus = L10n.text("loading_captions")
 
         Task {
             await loadCaptions(
@@ -602,16 +635,20 @@ final class NativePlayerModel: ObservableObject {
             guard let result else {
                 cues = []
                 currentCaption = ""
+                activeCaptionLanguageCode = nil
                 captionStatus = L10n.text("captions_unavailable")
                 return
             }
 
             cues = result.cues
+            activeCaptionLanguageCode =
+                result.languageCode
             captionStatus = result.displayName
             installCaptionObserver()
         } catch {
             cues = []
             currentCaption = ""
+            activeCaptionLanguageCode = nil
             captionStatus = error.localizedDescription
         }
     }
@@ -683,7 +720,7 @@ final class NativePlayerModel: ObservableObject {
             return
         }
 
-        captionStatus = L10n.text("loading_czech_captions")
+        captionStatus = L10n.text("loading_captions")
 
         Task {
             await loadCaptions(
@@ -701,7 +738,9 @@ final class NativePlayerModel: ObservableObject {
             do {
                 captionOptions =
                     try await CaptionService.shared.availableLanguages(
-                        videoID: youtubeVideoID
+                        videoID: youtubeVideoID,
+                        preferredLanguage:
+                            preferredCaptionLanguage
                     )
             } catch {
                 captionOptions = []
@@ -1419,11 +1458,9 @@ private struct PlayerSettingsOverlay: View {
                     page = .root
                 } label: {
                     optionRow(
-                        L10n.text("czech_automatic", languageCode: appLanguage),
+                        "\(model.preferredCaptionDisplayName) – \(L10n.text("automatic", languageCode: appLanguage))",
                         selected:
-                            model.captionsAreEnabled
-                            && (model.captionStatus ?? "")
-                                .localizedCaseInsensitiveContains("če")
+                            model.isPreferredCaptionActive
                     )
                 }
 
