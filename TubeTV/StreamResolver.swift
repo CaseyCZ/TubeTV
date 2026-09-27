@@ -47,7 +47,7 @@ enum StreamResolver {
             .filterVideoAndAudio()
             .filter { $0.isNativelyPlayable }
 
-        let fallbackURL = combined.highestResolutionStream()?.url
+        let fallbackURL = bestVideoStream(combined)?.url
 
         let videoOnly = streams
             .filterVideoOnly()
@@ -58,9 +58,10 @@ enum StreamResolver {
             .filter { $0.isNativelyPlayable }
 
         if let requestedHeight = requestedHeight(for: preferredQuality) {
-            if let video = videoOnly
-                .streams(withExactResolution: requestedHeight)
-                .highestResolutionStream(),
+            if let video = bestVideoStream(
+                videoOnly,
+                requestedHeight: requestedHeight
+            ),
                let audio = audioOnly.highestAudioBitrateStream() {
                 return .adaptive(
                     video: video.url,
@@ -69,12 +70,13 @@ enum StreamResolver {
                 )
             }
 
-            if let exactCombined = combined
-                .streams(withExactResolution: requestedHeight)
-                .highestResolutionStream() {
+            if let exactCombined = bestVideoStream(
+                combined,
+                requestedHeight: requestedHeight
+            ) {
                 return .direct(exactCombined.url)
             }
-        } else if let video = videoOnly.highestResolutionStream(),
+        } else if let video = bestVideoStream(videoOnly),
                   let audio = audioOnly.highestAudioBitrateStream() {
             return .adaptive(
                 video: video.url,
@@ -88,6 +90,41 @@ enum StreamResolver {
         }
 
         return .direct(fallbackURL)
+    }
+
+    private static func bestVideoStream(
+        _ streams: [YouTubeKit.Stream],
+        requestedHeight: Int? = nil
+    ) -> YouTubeKit.Stream? {
+        let candidates: [YouTubeKit.Stream]
+
+        if let requestedHeight {
+            candidates = streams.filter {
+                $0.videoResolution == requestedHeight
+            }
+        } else {
+            candidates = streams
+        }
+
+        return candidates.max { lhs, rhs in
+            let leftHeight = lhs.videoResolution ?? 0
+            let rightHeight = rhs.videoResolution ?? 0
+
+            if leftHeight != rightHeight {
+                return leftHeight < rightHeight
+            }
+
+            let leftBitrate =
+                lhs.averageBitrate
+                ?? lhs.bitrate
+                ?? 0
+            let rightBitrate =
+                rhs.averageBitrate
+                ?? rhs.bitrate
+                ?? 0
+
+            return leftBitrate < rightBitrate
+        }
     }
 
     static func videoID(from input: String) -> String? {
