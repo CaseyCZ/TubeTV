@@ -21,6 +21,7 @@
 		A00000000000000000000112 /* SmartTubeAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000012 /* SmartTubeAuthService.swift */; };
 		A00000000000000000000113 /* InnerTubeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000013 /* InnerTubeService.swift */; };
 		A00000000000000000000114 /* AccountViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000014 /* AccountViews.swift */; };
+		A00000000000000000000115 /* YouTubeTrackingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000015 /* YouTubeTrackingService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -38,6 +39,7 @@
 		A00000000000000000000012 /* SmartTubeAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/SmartTubeAuthService.swift; sourceTree = SOURCE_ROOT; };
 		A00000000000000000000013 /* InnerTubeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/InnerTubeService.swift; sourceTree = SOURCE_ROOT; };
 		A00000000000000000000014 /* AccountViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/AccountViews.swift; sourceTree = SOURCE_ROOT; };
+		A00000000000000000000015 /* YouTubeTrackingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/YouTubeTrackingService.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -76,6 +78,7 @@
 				A00000000000000000000012 /* SmartTubeAuthService.swift */,
 				A00000000000000000000013 /* InnerTubeService.swift */,
 				A00000000000000000000014 /* AccountViews.swift */,
+				A00000000000000000000015 /* YouTubeTrackingService.swift */,
 			);
 			name = Sources;
 			sourceTree = "<group>";
@@ -175,6 +178,7 @@
 				A00000000000000000000112 /* SmartTubeAuthService.swift in Sources */,
 				A00000000000000000000113 /* InnerTubeService.swift in Sources */,
 				A00000000000000000000114 /* AccountViews.swift in Sources */,
+				A00000000000000000000115 /* YouTubeTrackingService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
