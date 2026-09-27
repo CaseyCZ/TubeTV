@@ -84,6 +84,8 @@ actor AlternativePlayerService {
 
     private let session: URLSession
     private var visitorData: String?
+    private var signatureTimestamp: Int?
+    private var signatureTimestampFetchedAt: Date?
 
     init() {
         let configuration = URLSessionConfiguration.default
@@ -243,8 +245,7 @@ actor AlternativePlayerService {
             do {
                 if client.seedWebSession {
                     await seedWebSession(
-                        videoID: videoID,
-                        userAgent: client.userAgent
+                        videoID: videoID
                     )
                 }
 
@@ -270,8 +271,7 @@ actor AlternativePlayerService {
     }
 
     private func seedWebSession(
-        videoID: String,
-        userAgent: String
+        videoID: String
     ) async {
         var components = URLComponents(
             string: "https://www.youtube.com/watch"
@@ -314,7 +314,7 @@ actor AlternativePlayerService {
             timeoutInterval: 15
         )
         request.setValue(
-            userAgent,
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.5 Safari/605.1.15,gzip(gfe)",
             forHTTPHeaderField: "User-Agent"
         )
         request.setValue(
@@ -366,22 +366,14 @@ actor AlternativePlayerService {
         preferredQuality: String,
         client: AlternativePlayerClient
     ) async throws -> PlaybackSource? {
-        var clientFields: [String: Any] = [
-            "clientName": client.name,
-            "clientVersion": client.version,
-            "clientScreen": client.clientScreen,
-            "userAgent": client.userAgent,
-            "acceptLanguage":
-                L10n.currentLanguageCode,
-            "acceptRegion": "CZ",
-            "utcOffsetMinutes":
-                TimeZone.current
-                    .secondsFromGMT() / 60
-        ]
+        var clientFields =
+            clientFields(for: client)
 
-        let bootstrapVisitor =
+        let bootstrap =
             try? await SmartTubeAuthService
-                .shared.bootstrap().visitorData
+                .shared.bootstrap()
+        let bootstrapVisitor =
+            bootstrap?.visitorData
 
         let effectiveVisitor =
             visitorData ?? bootstrapVisitor
@@ -390,11 +382,6 @@ actor AlternativePlayerService {
            !effectiveVisitor.isEmpty {
             clientFields["visitorData"] =
                 effectiveVisitor
-        }
-
-        for (key, value)
-            in client.extraClientFields {
-            clientFields[key] = value
         }
 
         var context: [String: Any] = [
@@ -411,28 +398,54 @@ actor AlternativePlayerService {
                 thirdParty
         }
 
+        var contentPlaybackContext: [String: Any] = [
+            "html5Preference": "HTML5_PREF_WANTS"
+        ]
+
+        if client.name == "TVHTML5" {
+            contentPlaybackContext["lactMilliseconds"] =
+                60_000
+            contentPlaybackContext["isInlinePlaybackNoAd"] =
+                true
+        }
+
+        if client.name == "ANDROID_VR"
+            || client.name == "WEB"
+            || client.name == "MWEB" {
+            if let sts =
+                await fetchSignatureTimestampIfNeeded() {
+                contentPlaybackContext[
+                    "signatureTimestamp"
+                ] = sts
+            }
+        }
+
+        if client.name == "WEB_EMBEDDED_PLAYER" {
+            contentPlaybackContext["referer"] =
+                "https://www.youtube.com/watch?v=\(videoID)"
+        }
+
+        var playbackContext: [String: Any] = [
+            "contentPlaybackContext":
+                contentPlaybackContext
+        ]
+
+        if client.name == "TVHTML5" {
+            playbackContext[
+                "devicePlaybackCapabilities"
+            ] = [
+                "supportsVp9Encoding": true,
+                "supportXhr": client.supportXhr
+            ]
+        }
+
         let payload: [String: Any] = [
             "context": context,
             "videoId": videoID,
             "cpn": Self.generateCPN(),
             "racyCheckOk": true,
             "contentCheckOk": true,
-            "playbackContext": [
-                "contentPlaybackContext": [
-                    "html5Preference":
-                        "HTML5_PREF_WANTS",
-                    "lactMilliseconds":
-                        60_000,
-                    "isInlinePlaybackNoAd":
-                        true
-                ],
-                "devicePlaybackCapabilities": [
-                    "supportsVp9Encoding":
-                        true,
-                    "supportXhr":
-                        client.supportXhr
-                ]
-            ]
+            "playbackContext": playbackContext
         ]
 
         var components = URLComponents(
@@ -676,6 +689,165 @@ actor AlternativePlayerService {
         }
 
         return nil
+    }
+
+    private func clientFields(
+        for client: AlternativePlayerClient
+    ) -> [String: Any] {
+        var fields: [String: Any]
+
+        switch client.name {
+        case "VISIONOS":
+            fields = [
+                "clientName": client.name,
+                "clientVersion": client.version,
+                "deviceMake": "Apple",
+                "deviceModel": "RealityDevice17,1",
+                "userAgent": client.userAgent,
+                "osName": "visionOS",
+                "osVersion": "26.5.23O471"
+            ]
+
+        case "ANDROID_VR":
+            fields = [
+                "clientName": client.name,
+                "clientVersion": client.version,
+                "deviceMake": "Oculus",
+                "deviceModel": "Quest 3",
+                "androidSdkVersion": 32,
+                "userAgent": client.userAgent,
+                "osName": "Android",
+                "osVersion": "12L"
+            ]
+
+        case "WEB":
+            fields = [
+                "hl": L10n.currentLanguageCode,
+                "timeZone": "UTC",
+                "utcOffsetMinutes": 0,
+                "clientName": client.name,
+                "clientVersion": client.version,
+                "userAgent": client.userAgent
+            ]
+
+        case "MWEB":
+            fields = [
+                "hl": L10n.currentLanguageCode,
+                "gl": "CZ",
+                "clientName": client.name,
+                "clientVersion": client.version,
+                "clientScreen": "WATCH"
+            ]
+
+        case "WEB_EMBEDDED_PLAYER":
+            fields = [
+                "hl": L10n.currentLanguageCode,
+                "gl": "CZ",
+                "clientName": client.name,
+                "clientVersion": client.version,
+                "clientScreen": "EMBED"
+            ]
+
+        default:
+            fields = [
+                "hl": L10n.currentLanguageCode,
+                "gl": "CZ",
+                "clientName": client.name,
+                "clientVersion": client.version,
+                "clientScreen": client.clientScreen,
+                "userAgent": client.userAgent
+            ]
+        }
+
+        for (key, value) in client.extraClientFields {
+            if fields[key] == nil {
+                fields[key] = value
+            }
+        }
+
+        return fields
+    }
+
+    private func fetchSignatureTimestampIfNeeded()
+        async -> Int? {
+        if let signatureTimestamp,
+           let signatureTimestampFetchedAt,
+           Date().timeIntervalSince(
+            signatureTimestampFetchedAt
+           ) < 3600 {
+            return signatureTimestamp
+        }
+
+        guard let url =
+            URL(string: "https://www.youtube.com/")
+        else {
+            return nil
+        }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 15
+        request.setValue(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.5 Safari/605.1.15,gzip(gfe)",
+            forHTTPHeaderField: "User-Agent"
+        )
+
+        do {
+            let (data, response) =
+                try await session.data(for: request)
+
+            guard let http =
+                    response as? HTTPURLResponse,
+                  (200..<300).contains(http.statusCode),
+                  let html =
+                    String(
+                        data: data,
+                        encoding: .utf8
+                    ) else {
+                return nil
+            }
+
+            let pattern =
+                #""STS"\s*:\s*(\d+)"#
+
+            guard let regex =
+                    try? NSRegularExpression(
+                        pattern: pattern
+                    ),
+                  let match =
+                    regex.firstMatch(
+                        in: html,
+                        range: NSRange(
+                            html.startIndex...,
+                            in: html
+                        )
+                    ),
+                  let range =
+                    Range(
+                        match.range(at: 1),
+                        in: html
+                    ),
+                  let value =
+                    Int(html[range]) else {
+                logger.notice(
+                    "STS not found"
+                )
+                return nil
+            }
+
+            signatureTimestamp = value
+            signatureTimestampFetchedAt =
+                Date()
+
+            logger.notice(
+                "STS fetched value=\(value, privacy: .public)"
+            )
+            return value
+        } catch {
+            logger.notice(
+                "STS request failed error=\(error.localizedDescription, privacy: .public)"
+            )
+            return nil
+        }
     }
 
     private static func extractVisitorData(
