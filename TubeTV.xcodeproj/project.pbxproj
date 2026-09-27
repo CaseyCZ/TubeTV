@@ -22,6 +22,8 @@
 		A00000000000000000000113 /* InnerTubeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000013 /* InnerTubeService.swift */; };
 		A00000000000000000000114 /* AccountViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000014 /* AccountViews.swift */; };
 		A00000000000000000000115 /* YouTubeTrackingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000015 /* YouTubeTrackingService.swift */; };
+		A00000000000000000000116 /* ChannelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000016 /* ChannelView.swift */; };
+		A00000000000000000000117 /* AuthenticatedPlayerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000017 /* AuthenticatedPlayerService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,6 +42,8 @@
 		A00000000000000000000013 /* InnerTubeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/InnerTubeService.swift; sourceTree = SOURCE_ROOT; };
 		A00000000000000000000014 /* AccountViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/AccountViews.swift; sourceTree = SOURCE_ROOT; };
 		A00000000000000000000015 /* YouTubeTrackingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/YouTubeTrackingService.swift; sourceTree = SOURCE_ROOT; };
+		A00000000000000000000016 /* ChannelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/ChannelView.swift; sourceTree = SOURCE_ROOT; };
+		A00000000000000000000017 /* AuthenticatedPlayerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/AuthenticatedPlayerService.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -79,6 +83,8 @@
 				A00000000000000000000013 /* InnerTubeService.swift */,
 				A00000000000000000000014 /* AccountViews.swift */,
 				A00000000000000000000015 /* YouTubeTrackingService.swift */,
+				A00000000000000000000016 /* ChannelView.swift */,
+				A00000000000000000000017 /* AuthenticatedPlayerService.swift */,
 			);
 			name = Sources;
 			sourceTree = "<group>";
@@ -179,6 +185,8 @@
 				A00000000000000000000113 /* InnerTubeService.swift in Sources */,
 				A00000000000000000000114 /* AccountViews.swift in Sources */,
 				A00000000000000000000115 /* YouTubeTrackingService.swift in Sources */,
+				A00000000000000000000116 /* ChannelView.swift in Sources */,
+				A00000000000000000000117 /* AuthenticatedPlayerService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
