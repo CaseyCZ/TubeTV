@@ -312,12 +312,14 @@ actor AlternativePlayerService {
 
     func resolve(
         videoID: String,
-        preferredQuality: String
+        preferredQuality: String,
+        excludingProfiles: Set<String> = []
     ) async throws -> PlaybackSource {
         var lastError: Error =
             StreamResolverError.noPlayableStream
 
-        for client in clients {
+        for client in clients
+        where !excludingProfiles.contains(client.profile) {
             do {
                 if client.seedWebSession {
                     await seedWebSession(
@@ -754,7 +756,8 @@ actor AlternativePlayerService {
         let playbackHeaders = PlaybackRequestHeaders(
             userAgent: client.userAgent,
             referer: client.referer,
-            origin: client.origin
+            origin: client.origin,
+            clientProfile: client.profile
         )
 
         logger.notice(
