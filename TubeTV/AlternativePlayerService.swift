@@ -67,6 +67,11 @@ private struct AlternativeFormat {
             || mimeType.hasPrefix("audio/mp4")
         )
     }
+
+    // SmartTubeIOS skips these on AVPlayer unless a valid poToken is available.
+    var requiresPoToken: Bool {
+        url.absoluteString.contains("/rqh/1/")
+    }
 }
 
 actor AlternativePlayerService {
@@ -207,6 +212,25 @@ actor AlternativePlayerService {
                     "deviceModel": "iPhone16,2",
                     "osName": "iPhone",
                     "osVersion": "18.3.2.22D82"
+                ],
+                thirdParty: nil
+            ),
+            AlternativePlayerClient(
+                name: "ANDROID",
+                version: "21.26.364",
+                innerTubeName: "3",
+                userAgent:
+                    "com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip",
+                referer: nil,
+                origin: nil,
+                apiKey: Self.webAPIKey,
+                clientScreen: "WATCH",
+                supportXhr: true,
+                seedWebSession: false,
+                extraClientFields: [
+                    "androidSdkVersion": 30,
+                    "osName": "Android",
+                    "osVersion": "11"
                 ],
                 thirdParty: nil
             ),
@@ -378,7 +402,8 @@ actor AlternativePlayerService {
         let effectiveVisitor =
             visitorData ?? bootstrapVisitor
 
-        if let effectiveVisitor,
+        if client.name != "ANDROID",
+           let effectiveVisitor,
            !effectiveVisitor.isEmpty {
             clientFields["visitorData"] =
                 effectiveVisitor
@@ -439,18 +464,27 @@ actor AlternativePlayerService {
             ]
         }
 
-        let payload: [String: Any] = [
+        var payload: [String: Any] = [
             "context": context,
             "videoId": videoID,
-            "cpn": Self.generateCPN(),
             "racyCheckOk": true,
-            "contentCheckOk": true,
-            "playbackContext": playbackContext
+            "contentCheckOk": true
         ]
 
+        // Match SmartTubeIOS fetchPlayerInfoAndroid exactly:
+        // Android uses the plain player body without playbackContext/cpn.
+        if client.name != "ANDROID" {
+            payload["cpn"] = Self.generateCPN()
+            payload["playbackContext"] = playbackContext
+        }
+
+        let playerEndpoint =
+            client.name == "ANDROID"
+                ? "https://youtubei.googleapis.com/youtubei/v1/player"
+                : "https://www.youtube.com/youtubei/v1/player"
+
         var components = URLComponents(
-            string:
-                "https://www.youtube.com/youtubei/v1/player"
+            string: playerEndpoint
         )!
 
         var queryItems = [
@@ -516,7 +550,8 @@ actor AlternativePlayerService {
             )
         }
 
-        if let effectiveVisitor,
+        if client.name != "ANDROID",
+           let effectiveVisitor,
            !effectiveVisitor.isEmpty {
             request.setValue(
                 effectiveVisitor,
@@ -591,7 +626,9 @@ actor AlternativePlayerService {
             from: streaming["formats"]
         )
         .filter {
-            $0.isVideo && $0.hasAudio
+            $0.isVideo
+                && $0.hasAudio
+                && !$0.requiresPoToken
         }
 
         let adaptive = formats(
@@ -600,6 +637,7 @@ actor AlternativePlayerService {
                     "adaptiveFormats"
                 ]
         )
+        .filter { !$0.requiresPoToken }
 
         let hlsRaw =
             streaming[
@@ -706,6 +744,17 @@ actor AlternativePlayerService {
                 "userAgent": client.userAgent,
                 "osName": "visionOS",
                 "osVersion": "26.5.23O471"
+            ]
+
+        case "ANDROID":
+            fields = [
+                "hl": "en",
+                "gl": "US",
+                "clientName": client.name,
+                "clientVersion": client.version,
+                "androidSdkVersion": 30,
+                "osName": "Android",
+                "osVersion": "11"
             ]
 
         case "ANDROID_VR":
