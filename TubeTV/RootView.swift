@@ -35,11 +35,11 @@ struct RootView: View {
                 case .home:
                     HomeView()
                 case .subscriptions:
-                    PlaceholderView(title: "Odběry", icon: "person.2.fill")
+                    AccountFeedView(kind: .subscriptions)
                 case .history:
-                    PlaceholderView(title: "Historie", icon: "clock.arrow.circlepath")
+                    AccountFeedView(kind: .history)
                 case .playlists:
-                    PlaceholderView(title: "Playlisty", icon: "rectangle.stack.fill")
+                    PlaylistsView()
                 case .search:
                     SearchView()
                 case .settings:
