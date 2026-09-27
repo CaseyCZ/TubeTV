@@ -2,7 +2,7 @@ import SwiftUI
 
 struct HomeView: View {
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
-    @State private var videos: [VideoItem] = []
+    @State private var sections: [YouTubeHomeSection] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
 
@@ -26,21 +26,22 @@ struct HomeView: View {
                             .foregroundStyle(.red)
                     }
 
-                    if videos.isEmpty && !isLoading {
+                    if sections.isEmpty && !isLoading {
                         VideoRow(
                             title: "TubeTV",
                             videos: VideoItem.demo(languageCode: appLanguage)
                         )
                     } else {
-                        VideoRow(
-                            title: L10n.text("recommended", languageCode: appLanguage),
-                            videos: Array(videos.prefix(24))
-                        )
-
-                        if videos.count > 24 {
+                        ForEach(sections) { section in
                             VideoRow(
-                                title: L10n.text("more_videos", languageCode: appLanguage),
-                                videos: Array(videos.dropFirst(24).prefix(24))
+                                title:
+                                    section.title.isEmpty
+                                    ? L10n.text(
+                                        "recommended",
+                                        languageCode: appLanguage
+                                    )
+                                    : section.title,
+                                videos: section.videos
                             )
                         }
                     }
@@ -58,7 +59,7 @@ struct HomeView: View {
 
     @MainActor
     private func loadHome() async {
-        guard videos.isEmpty else { return }
+        guard sections.isEmpty else { return }
 
         isLoading = true
         errorMessage = nil
@@ -68,13 +69,27 @@ struct HomeView: View {
             do {
                 // SmartTube uses the TV InnerTube Home for signed-in
                 // and anonymous browsing.
-                videos = try await InnerTubeService.shared.homeVideos()
+                sections =
+                    try await InnerTubeService.shared
+                        .homeSections()
             } catch {
                 // Keep the public web parser only as a last-resort fallback.
-                videos = try await YouTubeService.shared.home()
+                let videos =
+                    try await YouTubeService.shared.home()
+
+                sections = [
+                    YouTubeHomeSection(
+                        id: "web-fallback",
+                        title: L10n.text(
+                            "recommended",
+                            languageCode: appLanguage
+                        ),
+                        videos: videos
+                    )
+                ]
             }
 
-            if videos.isEmpty {
+            if sections.allSatisfy({ $0.videos.isEmpty }) {
                 errorMessage = L10n.text(
                     "youtube_no_videos",
                     languageCode: appLanguage

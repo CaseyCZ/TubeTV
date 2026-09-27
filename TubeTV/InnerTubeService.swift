@@ -8,6 +8,12 @@ struct YouTubePlaylistItem: Identifiable, Hashable {
     let thumbnailURL: URL?
 }
 
+struct YouTubeHomeSection: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let videos: [VideoItem]
+}
+
 struct YouTubeChannelPage: Identifiable, Hashable {
     let id: String
     let title: String
@@ -75,9 +81,9 @@ actor InnerTubeService {
 
     private var browseVisitorData: String?
 
-    func homeVideos() async throws -> [VideoItem] {
-        // SmartTubeIOS uses WEB + FEwhat_to_watch for anonymous Home
-        // and TVHTML5 for the authenticated personalised Home.
+    func homeSections() async throws -> [YouTubeHomeSection] {
+        // SmartTube keeps Home as separate MediaGroup rows instead of
+        // flattening the whole browse response into one video list.
         let root = try await browse(
             "FEwhat_to_watch",
             requireAuthentication: false,
@@ -85,16 +91,28 @@ actor InnerTubeService {
         )
         let diagnostics =
             Self.rendererDiagnostics(from: root)
-        let videos = Self.extractVideos(from: root)
+        let sections =
+            Self.extractHomeSections(from: root)
 
         logger.notice(
             "Home renderer diagnostics=\(diagnostics, privacy: .public)"
         )
         logger.notice(
-            "Home parsed videos=\(videos.count, privacy: .public)"
+            "Home parsed sections=\(sections.count, privacy: .public) videos=\(sections.reduce(0) { $0 + $1.videos.count }, privacy: .public)"
         )
 
-        return videos
+        return sections
+    }
+
+    func homeVideos() async throws -> [VideoItem] {
+        let sections = try await homeSections()
+        var seen = Set<String>()
+
+        return sections
+            .flatMap(\.videos)
+            .filter {
+                seen.insert($0.id).inserted
+            }
     }
 
     func videos(for kind: AccountFeedKind) async throws -> [VideoItem] {
@@ -437,6 +455,97 @@ actor InnerTubeService {
         }
 
         return result
+    }
+
+    private static func extractHomeSections(
+        from root: Any
+    ) -> [YouTubeHomeSection] {
+        var shelves: [[String: Any]] = []
+        collectHomeShelfRenderers(
+            from: root,
+            into: &shelves
+        )
+
+        var sections: [YouTubeHomeSection] = []
+
+        for (index, shelf) in shelves.enumerated() {
+            let videos = extractVideos(from: shelf)
+
+            guard !videos.isEmpty else {
+                continue
+            }
+
+            let title =
+                firstText(
+                    in: shelf,
+                    keys: [
+                        "title",
+                        "headline",
+                        "header",
+                        "primaryText"
+                    ]
+                )
+                ?? ""
+
+            sections.append(
+                YouTubeHomeSection(
+                    id:
+                        "home-\(index)-\(videos[0].id)",
+                    title: title,
+                    videos: videos
+                )
+            )
+        }
+
+        if !sections.isEmpty {
+            return sections
+        }
+
+        let videos = extractVideos(from: root)
+
+        guard !videos.isEmpty else {
+            return []
+        }
+
+        return [
+            YouTubeHomeSection(
+                id: "home-feed",
+                title: "",
+                videos: videos
+            )
+        ]
+    }
+
+    private static func collectHomeShelfRenderers(
+        from node: Any,
+        into output: inout [[String: Any]]
+    ) {
+        if let dictionary = node as? [String: Any] {
+            for key in [
+                "shelfRenderer",
+                "richShelfRenderer"
+            ] {
+                if let renderer =
+                        dictionary[key]
+                        as? [String: Any] {
+                    output.append(renderer)
+                }
+            }
+
+            for value in dictionary.values {
+                collectHomeShelfRenderers(
+                    from: value,
+                    into: &output
+                )
+            }
+        } else if let array = node as? [Any] {
+            for value in array {
+                collectHomeShelfRenderers(
+                    from: value,
+                    into: &output
+                )
+            }
+        }
     }
 
     private static func rendererDiagnostics(
