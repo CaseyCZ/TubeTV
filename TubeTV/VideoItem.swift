@@ -5,6 +5,7 @@ struct VideoItem: Identifiable, Hashable {
     let title: String
     let channel: String
     let subtitle: String
+    let thumbnailURL: URL?
     let playbackURL: URL?
     let youtubeVideoID: String?
 
@@ -13,6 +14,7 @@ struct VideoItem: Identifiable, Hashable {
         title: String,
         channel: String,
         subtitle: String,
+        thumbnailURL: URL? = nil,
         playbackURL: URL? = nil,
         youtubeVideoID: String? = nil
     ) {
@@ -20,16 +22,23 @@ struct VideoItem: Identifiable, Hashable {
         self.title = title
         self.channel = channel
         self.subtitle = subtitle
+        self.thumbnailURL = thumbnailURL
         self.playbackURL = playbackURL
         self.youtubeVideoID = youtubeVideoID
     }
 
-    static func youtube(videoID: String) -> VideoItem {
+    static func youtube(
+        videoID: String,
+        title: String = "YouTube video",
+        channel: String = "YouTube",
+        subtitle: String = ""
+    ) -> VideoItem {
         VideoItem(
             id: "youtube-\(videoID)",
-            title: "YouTube video",
-            channel: "YouTube",
-            subtitle: videoID,
+            title: title,
+            channel: channel,
+            subtitle: subtitle.isEmpty ? videoID : subtitle,
+            thumbnailURL: URL(string: "https://i.ytimg.com/vi/\(videoID)/hqdefault.jpg"),
             youtubeVideoID: videoID
         )
     }
