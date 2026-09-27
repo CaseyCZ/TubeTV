@@ -3,6 +3,7 @@ import SwiftUI
 struct HomeView: View {
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @State private var sections: [YouTubeHomeSection] = []
+    @State private var loadingSectionIDs = Set<String>()
     @State private var isLoading = true
     @State private var errorMessage: String?
 
@@ -41,8 +42,20 @@ struct HomeView: View {
                                         languageCode: appLanguage
                                     )
                                     : section.title,
-                                videos: section.videos
-                            )
+                                videos: section.videos,
+                                isLoadingMore:
+                                    loadingSectionIDs
+                                        .contains(
+                                            section.id
+                                        )
+                            ) {
+                                Task {
+                                    await loadMore(
+                                        sectionID:
+                                            section.id
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -84,7 +97,8 @@ struct HomeView: View {
                             "recommended",
                             languageCode: appLanguage
                         ),
-                        videos: videos
+                        videos: videos,
+                        continuationToken: nil
                     )
                 ]
             }
@@ -99,24 +113,123 @@ struct HomeView: View {
             errorMessage = error.localizedDescription
         }
     }
+
+    @MainActor
+    private func loadMore(
+        sectionID: String
+    ) async {
+        guard !loadingSectionIDs
+                .contains(sectionID),
+              let index =
+                sections.firstIndex(
+                    where: {
+                        $0.id == sectionID
+                    }
+                ),
+              let token =
+                sections[index]
+                    .continuationToken,
+              !token.isEmpty else {
+            return
+        }
+
+        loadingSectionIDs.insert(sectionID)
+        defer {
+            loadingSectionIDs.remove(sectionID)
+        }
+
+        do {
+            let result =
+                try await InnerTubeService.shared
+                    .continueHomeSection(
+                        token
+                    )
+
+            var seen = Set(
+                sections[index]
+                    .videos
+                    .map(\.id)
+            )
+            let newVideos =
+                result.videos.filter {
+                    seen.insert($0.id).inserted
+                }
+
+            let nextToken =
+                result.continuationToken
+
+            sections[index] =
+                YouTubeHomeSection(
+                    id:
+                        sections[index].id,
+                    title:
+                        sections[index].title,
+                    videos:
+                        sections[index].videos
+                        + newVideos,
+                    continuationToken:
+                        nextToken == token
+                            && newVideos.isEmpty
+                        ? nil
+                        : nextToken
+                )
+        } catch {
+            errorMessage =
+                error.localizedDescription
+        }
+    }
 }
 
 struct VideoRow: View {
     let title: String
     let videos: [VideoItem]
+    var isLoadingMore = false
+    var onLoadMore: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             Text(title)
                 .font(.title2.bold())
 
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(
+                .horizontal,
+                showsIndicators: false
+            ) {
                 LazyHStack(spacing: 28) {
-                    ForEach(videos) { video in
-                        NavigationLink(value: video) {
-                            VideoCard(video: video)
+                    ForEach(
+                        videos.indices,
+                        id: \.self
+                    ) { index in
+                        let video =
+                            videos[index]
+
+                        NavigationLink(
+                            value: video
+                        ) {
+                            VideoCard(
+                                video: video
+                            )
                         }
                         .buttonStyle(.card)
+                        .onAppear {
+                            let threshold =
+                                max(
+                                    0,
+                                    videos.count - 4
+                                )
+
+                            if index >= threshold {
+                                onLoadMore?()
+                            }
+                        }
+                    }
+
+                    if isLoadingMore {
+                        ProgressView()
+                            .frame(
+                                width: 96,
+                                height: 236
+                            )
                     }
                 }
             }

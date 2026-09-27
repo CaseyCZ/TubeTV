@@ -12,6 +12,7 @@ struct YouTubeHomeSection: Identifiable, Hashable {
     let id: String
     let title: String
     let videos: [VideoItem]
+    let continuationToken: String?
 }
 
 struct YouTubeChannelPage: Identifiable, Hashable {
@@ -115,6 +116,25 @@ actor InnerTubeService {
             }
     }
 
+    func continueHomeSection(
+        _ continuationToken: String
+    ) async throws -> (
+        videos: [VideoItem],
+        continuationToken: String?
+    ) {
+        let root = try await browse(
+            nil,
+            continuation: continuationToken,
+            requireAuthentication: false,
+            includeVisitorData: true
+        )
+
+        return (
+            Self.extractVideos(from: root),
+            Self.nextContinuationToken(from: root)
+        )
+    }
+
     func videos(for kind: AccountFeedKind) async throws -> [VideoItem] {
         let root = try await browse(kind.browseID)
         return Self.extractVideos(from: root)
@@ -152,8 +172,9 @@ actor InnerTubeService {
     }
 
     private func browse(
-        _ browseID: String,
+        _ browseID: String?,
         params: String? = nil,
+        continuation: String? = nil,
         requireAuthentication: Bool = true,
         includeVisitorData: Bool = false
     ) async throws -> Any {
@@ -195,9 +216,20 @@ actor InnerTubeService {
         var payload: [String: Any] = [
             "context": [
                 "client": client
-            ],
-            "browseId": browseID
+            ]
         ]
+
+        if let continuation,
+           !continuation.isEmpty {
+            payload["continuation"] =
+                continuation
+        } else if let browseID,
+                  !browseID.isEmpty {
+            payload["browseId"] =
+                browseID
+        } else {
+            throw InnerTubeError.invalidResponse
+        }
 
         if let params, !params.isEmpty {
             payload["params"] = params
@@ -302,8 +334,14 @@ actor InnerTubeService {
             browseVisitorData = visitor
         }
 
+        let requestID =
+            browseID
+            ?? (continuation == nil
+                ? "unknown"
+                : "continuation")
+
         logger.notice(
-            "Browse client=\(useWebClient ? "WEB" : "TV", privacy: .public) id=\(browseID, privacy: .public) status=\(http.statusCode, privacy: .public)"
+            "Browse client=\(useWebClient ? "WEB" : "TV", privacy: .public) id=\(requestID, privacy: .public) status=\(http.statusCode, privacy: .public)"
         )
 
         return root
@@ -492,7 +530,11 @@ actor InnerTubeService {
                     id:
                         "home-\(index)-\(videos[0].id)",
                     title: title,
-                    videos: videos
+                    videos: videos,
+                    continuationToken:
+                        nextContinuationToken(
+                            from: shelf
+                        )
                 )
             )
         }
@@ -511,7 +553,11 @@ actor InnerTubeService {
             YouTubeHomeSection(
                 id: "home-feed",
                 title: "",
-                videos: videos
+                videos: videos,
+                continuationToken:
+                    nextContinuationToken(
+                        from: root
+                    )
             )
         ]
     }
@@ -546,6 +592,52 @@ actor InnerTubeService {
                 )
             }
         }
+    }
+
+    private static func nextContinuationToken(
+        from node: Any
+    ) -> String? {
+        if let dictionary = node as? [String: Any] {
+            if let data =
+                    dictionary[
+                        "nextContinuationData"
+                    ] as? [String: Any],
+               let token =
+                    data["continuation"] as? String,
+               !token.isEmpty {
+                return token
+            }
+
+            if let command =
+                    dictionary[
+                        "continuationCommand"
+                    ] as? [String: Any],
+               let token =
+                    command["token"] as? String,
+               !token.isEmpty {
+                return token
+            }
+
+            for value in dictionary.values {
+                if let token =
+                        nextContinuationToken(
+                            from: value
+                        ) {
+                    return token
+                }
+            }
+        } else if let array = node as? [Any] {
+            for value in array {
+                if let token =
+                        nextContinuationToken(
+                            from: value
+                        ) {
+                    return token
+                }
+            }
+        }
+
+        return nil
     }
 
     private static func rendererDiagnostics(
