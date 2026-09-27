@@ -1328,7 +1328,11 @@ actor InnerTubeService {
             ? "https://www.youtube.com/youtubei/v1/browse"
             : "https://youtubei.googleapis.com/youtubei/v1/browse"
 
-        var components = URLComponents(string: endpoint)!
+        guard var components = URLComponents(
+            string: endpoint
+        ) else {
+            throw InnerTubeError.invalidResponse
+        }
 
         if useWebClient {
             components.queryItems = [
