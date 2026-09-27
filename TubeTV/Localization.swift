@@ -190,6 +190,12 @@ enum L10n {
             "adaptive_fallback": "Vyšší kvalita nešla spojit, přehrávám kompatibilní variantu.",
             "quality_change_error": "Změna kvality",
             "loading_languages": "Načítám dostupné jazyky…",
+            "demo_player_title": "TubeTV – test nativního přehrávače",
+            "demo_player_subtitle": "Apple HLS test stream",
+            "demo_youtube_title": "Vyzkoušet skutečné YouTube video",
+            "demo_youtube_subtitle": "V Hledat vlož YouTube URL nebo 11znakové video ID",
+            "demo_captions_title": "Automatické titulky",
+            "demo_captions_subtitle": "Preferovaný jazyk titulků vybereš v Nastavení",
             "test": "TEST"
         ],
         "de": [
