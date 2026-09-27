@@ -24,6 +24,9 @@ No XcodeGen or generated workspace is required.
 - Channels work signed-in through InnerTube and signed-out through the public YouTube page
 - Native AVPlayer playback
 - SmartTube-style authenticated YouTube TV / InnerTube player after sign-in
+- SmartTube-style ad filtering: ad placements are never turned into playable media
+- Direct content video/audio streams are preferred over ad-bearing player manifests
+- Ad-aware client fallback chain: signed TV → VisionOS → Android VR → iOS → YouTubeKit
 - Automatic fallback to YouTubeKit when the authenticated player does not return a compatible stream
 - Direct YouTube stream extraction through YouTubeKit
 - Adaptive video + audio playback path for higher resolutions
@@ -81,3 +84,22 @@ Playback stream extraction currently uses:
 - [YouTubeKit](https://github.com/alexeichhorn/YouTubeKit) 0.4.8
 
 YouTubeKit supports tvOS and exposes direct video/audio stream URLs for native playback.
+
+
+## Ads / ad filtering
+
+TubeTV follows the same high-level principle as SmartTube: the app has no playback path that intentionally renders YouTube ad placements.
+
+The player response may contain fields such as `adPlacements`, `playerAds`, `adSlots` and `adBreakHeartbeatParams`. TubeTV inspects these fields but does not convert them into AVPlayer items.
+
+Playback order:
+
+1. Signed-in YouTube TV / InnerTube direct content formats.
+2. VisionOS direct content formats.
+3. Android VR direct content formats.
+4. iOS direct content formats.
+5. YouTubeKit direct stream extraction.
+
+HLS is only a last-resort fallback and is rejected when the same player response contains advertising metadata and no independent direct content stream is available.
+
+This is intentionally separate from SponsorBlock, which handles sponsor messages embedded inside the creator's video itself.
