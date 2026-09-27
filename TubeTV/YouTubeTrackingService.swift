@@ -231,9 +231,11 @@ actor YouTubeTrackingService {
         authorization: String,
         final: Bool
     ) async throws {
-        var components = URLComponents(
+        guard var components = URLComponents(
             string: "https://www.youtube.com/api/stats/playback"
-        )!
+        ) else {
+            throw YouTubeTrackingError.invalidPlayerResponse
+        }
 
         var items = [
             URLQueryItem(name: "ns", value: "yt"),
@@ -271,9 +273,11 @@ actor YouTubeTrackingService {
         authorization: String,
         final: Bool
     ) async throws {
-        var components = URLComponents(
+        guard var components = URLComponents(
             string: "https://www.youtube.com/api/stats/watchtime"
-        )!
+        ) else {
+            throw YouTubeTrackingError.invalidPlayerResponse
+        }
 
         var items = [
             URLQueryItem(name: "ns", value: "yt"),
