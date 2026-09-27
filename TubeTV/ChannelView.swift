@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ChannelView: View {
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     let channelID: String
     let fallbackTitle: String
 
@@ -53,7 +54,7 @@ struct ChannelView: View {
                         }
 
                         if isLoading {
-                            ProgressView("Načítám kanál…")
+                            ProgressView(L10n.text("loading_channel", languageCode: appLanguage))
                         }
                     }
                 }
@@ -65,7 +66,7 @@ struct ChannelView: View {
 
                 if let videos = page?.videos,
                    !videos.isEmpty {
-                    Text("Videa")
+                    Text(L10n.text("videos", languageCode: appLanguage))
                         .font(.title2.bold())
 
                     LazyVGrid(
@@ -109,7 +110,7 @@ struct ChannelView: View {
             }
 
             if page?.videos.isEmpty == true {
-                errorMessage = "Kanál nevrátil žádná dostupná videa."
+                errorMessage = L10n.text("channel_no_videos", languageCode: appLanguage)
             }
         } catch {
             errorMessage = error.localizedDescription
