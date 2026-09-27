@@ -6,9 +6,46 @@ private enum CIVideoSmokeConfiguration {
         ProcessInfo.processInfo.environment["TUBETV_CI_VIDEO_ID"]
     }
 
+    static var directURL: URL? {
+        guard let raw =
+            ProcessInfo.processInfo.environment[
+                "TUBETV_CI_DIRECT_URL"
+            ] else {
+            return nil
+        }
+
+        return URL(string: raw)
+    }
+
     static var enabled: Bool {
-        ProcessInfo.processInfo.environment["TUBETV_CI_VIDEO_SMOKE"] == "1"
-            && videoID != nil
+        ProcessInfo.processInfo.environment[
+            "TUBETV_CI_VIDEO_SMOKE"
+        ] == "1"
+    }
+}
+
+private struct CIDirectVideoSmokeView: View {
+    let url: URL
+
+    private let logger = Logger(
+        subsystem: "cz.caseycz.tubetv",
+        category: "CI"
+    )
+
+    var body: some View {
+        NativePlayerView(
+            source: .direct(url),
+            youtubeVideoID: nil,
+            initialQuality: "Auto",
+            captionsEnabled: false,
+            captionLanguage: "en",
+            allowCaptionTranslation: false
+        )
+        .task {
+            logger.notice(
+                "TUBETV_DIRECT_VIDEO_STARTED url=\(url.absoluteString, privacy: .public)"
+            )
+        }
     }
 }
 
@@ -82,7 +119,14 @@ struct TubeTVApp: App {
     var body: some Scene {
         WindowGroup {
             if CIVideoSmokeConfiguration.enabled,
-               let videoID = CIVideoSmokeConfiguration.videoID {
+               let directURL =
+                CIVideoSmokeConfiguration.directURL {
+                CIDirectVideoSmokeView(
+                    url: directURL
+                )
+            } else if CIVideoSmokeConfiguration.enabled,
+                      let videoID =
+                        CIVideoSmokeConfiguration.videoID {
                 CIVideoSmokeView(videoID: videoID)
             } else {
                 RootView()
