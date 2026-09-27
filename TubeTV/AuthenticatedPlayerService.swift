@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 
 enum AuthenticatedPlayerError: LocalizedError {
@@ -29,6 +30,7 @@ private struct InnerTubeFormat {
     let fps: Int?
     let bitrate: Int?
     let hasAudio: Bool
+    let isHDR: Bool
 
     var isVideo: Bool {
         mimeType.hasPrefix("video/")
@@ -61,6 +63,22 @@ private struct InnerTubeFormat {
             mimeType.contains("mp4a")
             || mimeType.hasPrefix("audio/mp4")
         )
+    }
+
+    var codecPriority: Int {
+        if mimeType.contains("hvc1") || mimeType.contains("hev1") {
+            return 0
+        }
+
+        if mimeType.contains("avc1") {
+            return 1
+        }
+
+        if mimeType.contains("av01") {
+            return 2
+        }
+
+        return 9
     }
 }
 
@@ -252,7 +270,8 @@ actor AuthenticatedPlayerService {
                 fps: item["fps"] as? Int,
                 bitrate: item["bitrate"] as? Int,
                 hasAudio: item["audioQuality"] != nil
-                    || item["audioChannels"] != nil
+                    || item["audioChannels"] != nil,
+                isHDR: Self.isHDRFormat(item)
             )
         }
     }
@@ -293,18 +312,57 @@ actor AuthenticatedPlayerService {
         let leftHeight = lhs.height ?? 0
         let rightHeight = rhs.height ?? 0
 
-        if leftHeight == rightHeight {
-            let leftFPS = lhs.fps ?? 0
-            let rightFPS = rhs.fps ?? 0
+        if leftHeight != rightHeight {
+            return leftHeight > rightHeight
+        }
 
-            if leftFPS == rightFPS {
-                return (lhs.bitrate ?? 0) > (rhs.bitrate ?? 0)
-            }
+        let leftFPS = lhs.fps ?? 0
+        let rightFPS = rhs.fps ?? 0
 
+        if leftFPS != rightFPS {
             return leftFPS > rightFPS
         }
 
-        return leftHeight > rightHeight
+        if lhs.isHDR != rhs.isHDR {
+            if AVPlayer.eligibleForHDRPlayback {
+                return lhs.isHDR
+            }
+
+            return !lhs.isHDR
+        }
+
+        if lhs.codecPriority != rhs.codecPriority {
+            return lhs.codecPriority < rhs.codecPriority
+        }
+
+        return (lhs.bitrate ?? 0) > (rhs.bitrate ?? 0)
+    }
+
+    private static func isHDRFormat(
+        _ item: [String: Any]
+    ) -> Bool {
+        if let colorInfo = item["colorInfo"] as? [String: Any] {
+            let text = colorInfo.description.lowercased()
+
+            if text.contains("2084")
+                || text.contains("2100")
+                || text.contains("hdr")
+                || text.contains("hlg")
+                || text.contains("pq") {
+                return true
+            }
+        }
+
+        if let mimeType = item["mimeType"] as? String {
+            let lowered = mimeType.lowercased()
+
+            if lowered.contains("dvh1")
+                || lowered.contains("dvhe") {
+                return true
+            }
+        }
+
+        return false
     }
 
     private static func requestedHeight(for preference: String) -> Int? {
