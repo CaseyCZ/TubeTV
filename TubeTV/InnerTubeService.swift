@@ -582,6 +582,11 @@ actor InnerTubeService {
             bootstrap: bootstrap
         )
 
+        NotificationCenter.default.post(
+            name: .youtubePlaylistsDidChange,
+            object: nil
+        )
+
         logger.notice(
             "Playlist membership add=\(add, privacy: .public) playlist=\(playlistID, privacy: .public) video=\(videoID, privacy: .public)"
         )
@@ -636,6 +641,11 @@ actor InnerTubeService {
             payload: payload,
             authorization: authorization,
             bootstrap: bootstrap
+        )
+
+        NotificationCenter.default.post(
+            name: .youtubePlaylistsDidChange,
+            object: nil
         )
 
         logger.notice(
@@ -1052,6 +1062,11 @@ actor InnerTubeService {
               ) else {
             throw InnerTubeError.invalidResponse
         }
+
+        NotificationCenter.default.post(
+            name: .youtubeSubscriptionsDidChange,
+            object: nil
+        )
 
         logger.notice(
             "Subscription action=\(action, privacy: .public) channel=\(channelID, privacy: .public) status=\(http.statusCode, privacy: .public)"
