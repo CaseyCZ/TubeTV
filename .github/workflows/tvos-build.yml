@@ -45,6 +45,19 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build | tee simulator-build.log
 
+      - name: Build Release for Apple TV device
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project TubeTV.xcodeproj \
+            -scheme TubeTV \
+            -configuration Release \
+            -sdk appletvos \
+            -destination 'generic/platform=tvOS' \
+            -derivedDataPath "$PWD/DerivedData-Device" \
+            CODE_SIGNING_ALLOWED=NO \
+            build | tee device-release-build.log
+
       - name: Select and boot Apple TV simulator
         id: simulator
         run: |
@@ -235,6 +248,7 @@ jobs:
           if-no-files-found: warn
           path: |
             simulator-build.log
+            device-release-build.log
             simulator-launch.txt
             tubetv-simulator.png
             tubetv-simulator.log
