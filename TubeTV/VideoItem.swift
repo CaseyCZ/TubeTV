@@ -8,6 +8,7 @@ struct VideoItem: Identifiable, Hashable {
     let thumbnailURL: URL?
     let playbackURL: URL?
     let youtubeVideoID: String?
+    let channelID: String?
 
     init(
         id: String,
@@ -16,7 +17,8 @@ struct VideoItem: Identifiable, Hashable {
         subtitle: String,
         thumbnailURL: URL? = nil,
         playbackURL: URL? = nil,
-        youtubeVideoID: String? = nil
+        youtubeVideoID: String? = nil,
+        channelID: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -25,13 +27,15 @@ struct VideoItem: Identifiable, Hashable {
         self.thumbnailURL = thumbnailURL
         self.playbackURL = playbackURL
         self.youtubeVideoID = youtubeVideoID
+        self.channelID = channelID
     }
 
     static func youtube(
         videoID: String,
         title: String = "YouTube video",
         channel: String = "YouTube",
-        subtitle: String = ""
+        subtitle: String = "",
+        channelID: String? = nil
     ) -> VideoItem {
         VideoItem(
             id: "youtube-\(videoID)",
@@ -39,7 +43,8 @@ struct VideoItem: Identifiable, Hashable {
             channel: channel,
             subtitle: subtitle.isEmpty ? videoID : subtitle,
             thumbnailURL: URL(string: "https://i.ytimg.com/vi/\(videoID)/hqdefault.jpg"),
-            youtubeVideoID: videoID
+            youtubeVideoID: videoID,
+            channelID: channelID
         )
     }
 }
