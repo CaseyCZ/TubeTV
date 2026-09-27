@@ -7,8 +7,11 @@ struct ChannelView: View {
 
     @State private var page: YouTubeChannelPage?
     @State private var continuationToken: String?
+    @State private var isSignedIn = false
+    @State private var isSubscribed: Bool?
     @State private var isLoading = true
     @State private var isLoadingMore = false
+    @State private var isUpdatingSubscription = false
     @State private var errorMessage: String?
 
     var body: some View {
@@ -53,6 +56,32 @@ struct ChannelView: View {
                                 .foregroundStyle(.secondary)
                                 .lineLimit(4)
                                 .frame(maxWidth: 1200, alignment: .leading)
+                        }
+
+                        if isSignedIn,
+                           let isSubscribed {
+                            Button {
+                                Task {
+                                    await toggleSubscription()
+                                }
+                            } label: {
+                                Label(
+                                    L10n.text(
+                                        isSubscribed
+                                            ? "unsubscribe_channel"
+                                            : "subscribe_channel",
+                                        languageCode:
+                                            appLanguage
+                                    ),
+                                    systemImage:
+                                        isSubscribed
+                                            ? "checkmark.circle.fill"
+                                            : "plus.circle.fill"
+                                )
+                            }
+                            .disabled(
+                                isUpdatingSubscription
+                            )
                         }
 
                         if isLoading {
@@ -127,7 +156,12 @@ struct ChannelView: View {
         defer { isLoading = false }
 
         do {
-            if await SmartTubeAuthService.shared.signedIn() {
+            isSignedIn =
+                await SmartTubeAuthService.shared
+                    .signedIn()
+            isSubscribed = nil
+
+            if isSignedIn {
                 do {
                     let result =
                         try await InnerTubeService.shared
@@ -138,6 +172,8 @@ struct ChannelView: View {
                     page = result.page
                     continuationToken =
                         result.continuationToken
+                    isSubscribed =
+                        result.isSubscribed
                 } catch {
                     page =
                         try await YouTubeService.shared
@@ -145,6 +181,7 @@ struct ChannelView: View {
                                 channelID
                             )
                     continuationToken = nil
+                    isSubscribed = nil
                 }
             } else {
                 page =
@@ -153,6 +190,7 @@ struct ChannelView: View {
                             channelID
                         )
                 continuationToken = nil
+                isSubscribed = nil
             }
 
             if page?.videos.isEmpty == true {
@@ -160,6 +198,38 @@ struct ChannelView: View {
             }
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func toggleSubscription() async {
+        guard isSignedIn,
+              let current =
+                isSubscribed,
+              !isUpdatingSubscription
+        else {
+            return
+        }
+
+        isUpdatingSubscription = true
+        errorMessage = nil
+        defer {
+            isUpdatingSubscription = false
+        }
+
+        do {
+            let next = !current
+
+            try await InnerTubeService.shared
+                .setChannelSubscription(
+                    channelID: channelID,
+                    subscribed: next
+                )
+
+            isSubscribed = next
+        } catch {
+            errorMessage =
+                error.localizedDescription
         }
     }
 

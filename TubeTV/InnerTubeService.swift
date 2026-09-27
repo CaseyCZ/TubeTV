@@ -356,7 +356,8 @@ actor InnerTubeService {
         _ channelID: String
     ) async throws -> (
         page: YouTubeChannelPage,
-        continuationToken: String?
+        continuationToken: String?,
+        isSubscribed: Bool?
     ) {
         let root = try await browse(
             channelID,
@@ -373,7 +374,149 @@ actor InnerTubeService {
                 avatarURL: metadata.avatarURL,
                 videos: Self.extractVideos(from: root)
             ),
-            Self.nextContinuationToken(from: root)
+            Self.nextContinuationToken(from: root),
+            Self.channelSubscriptionState(
+                from: root
+            )
+        )
+    }
+
+    func setChannelSubscription(
+        channelID: String,
+        subscribed: Bool
+    ) async throws {
+        guard !channelID.isEmpty else {
+            throw InnerTubeError.invalidResponse
+        }
+
+        let authorization =
+            try await SmartTubeAuthService.shared
+                .authorizationHeader()
+        let bootstrap =
+            try await SmartTubeAuthService.shared
+                .bootstrap()
+
+        var client: [String: Any] = [
+            "hl": L10n.currentLanguageCode,
+            "gl": "CZ",
+            "clientName":
+                SmartTubeAuthService
+                    .tvClientName,
+            "clientVersion":
+                SmartTubeAuthService
+                    .tvClientVersion
+        ]
+
+        if let visitorData =
+                bootstrap.visitorData,
+           !visitorData.isEmpty {
+            client["visitorData"] =
+                visitorData
+        }
+
+        let payload: [String: Any] = [
+            "context": [
+                "client": client
+            ],
+            "channelIds": [channelID],
+            "params": ""
+        ]
+
+        let action =
+            subscribed
+                ? "subscribe"
+                : "unsubscribe"
+
+        guard let url = URL(
+            string:
+                "https://www.youtube.com/youtubei/v1/subscription/\(action)"
+        ) else {
+            throw InnerTubeError.invalidResponse
+        }
+
+        var request = URLRequest(
+            url: url
+        )
+        request.httpMethod = "POST"
+        request.timeoutInterval = 25
+        request.setValue(
+            "application/json",
+            forHTTPHeaderField:
+                "Content-Type"
+        )
+        request.setValue(
+            SmartTubeAuthService
+                .tvUserAgent,
+            forHTTPHeaderField:
+                "User-Agent"
+        )
+        request.setValue(
+            SmartTubeAuthService
+                .tvReferer,
+            forHTTPHeaderField:
+                "Referer"
+        )
+        request.setValue(
+            authorization,
+            forHTTPHeaderField:
+                "Authorization"
+        )
+        request.setValue(
+            "7",
+            forHTTPHeaderField:
+                "X-YouTube-Client-Name"
+        )
+        request.setValue(
+            SmartTubeAuthService
+                .tvClientVersion,
+            forHTTPHeaderField:
+                "X-YouTube-Client-Version"
+        )
+
+        if let visitorData =
+                bootstrap.visitorData,
+           !visitorData.isEmpty {
+            request.setValue(
+                visitorData,
+                forHTTPHeaderField:
+                    "X-Goog-Visitor-Id"
+            )
+        }
+
+        if let pageID =
+                await SmartTubeAuthService
+                    .shared
+                    .selectedPageID(),
+           !pageID.isEmpty {
+            request.setValue(
+                pageID,
+                forHTTPHeaderField:
+                    "X-Goog-Pageid"
+            )
+        }
+
+        request.httpBody =
+            try JSONSerialization
+                .data(
+                    withJSONObject:
+                        payload
+                )
+
+        let (_, response) =
+            try await URLSession.shared
+                .data(for: request)
+
+        guard let http =
+                response
+                    as? HTTPURLResponse,
+              (200..<300).contains(
+                http.statusCode
+              ) else {
+            throw InnerTubeError.invalidResponse
+        }
+
+        logger.notice(
+            "Subscription action=\(action, privacy: .public) channel=\(channelID, privacy: .public) status=\(http.statusCode, privacy: .public)"
         )
     }
 
@@ -1381,6 +1524,46 @@ actor InnerTubeService {
                 collectDictionaries(from: value, into: &output)
             }
         }
+    }
+
+    private static func channelSubscriptionState(
+        from node: Any
+    ) -> Bool? {
+        if let dictionary =
+                node as? [String: Any] {
+            if let renderer =
+                    dictionary[
+                        "subscribeButtonRenderer"
+                    ] as? [String: Any],
+               let subscribed =
+                    renderer[
+                        "subscribed"
+                    ] as? Bool {
+                return subscribed
+            }
+
+            for value
+                in dictionary.values {
+                if let state =
+                    channelSubscriptionState(
+                        from: value
+                    ) {
+                    return state
+                }
+            }
+        } else if let array =
+                    node as? [Any] {
+            for value in array {
+                if let state =
+                    channelSubscriptionState(
+                        from: value
+                    ) {
+                    return state
+                }
+            }
+        }
+
+        return nil
     }
 
     private static func findChannelID(in node: Any) -> String? {
