@@ -1,12 +1,18 @@
 import AVFoundation
 import Foundation
+import OSLog
 import VideoToolbox
 
 private struct AlternativePlayerClient {
     let name: String
     let version: String
+    let innerTubeName: String
     let userAgent: String
+    let referer: String?
+    let clientScreen: String
+    let supportXhr: Bool
     let extraClientFields: [String: Any]
+    let thirdParty: [String: Any]?
 }
 
 private struct AlternativeFormat {
@@ -29,15 +35,22 @@ private struct AlternativeFormat {
         guard isVideo else { return false }
 
         if mimeType.contains("avc1") {
-            return VTIsHardwareDecodeSupported(kCMVideoCodecType_H264)
+            return VTIsHardwareDecodeSupported(
+                kCMVideoCodecType_H264
+            )
         }
 
-        if mimeType.contains("hvc1") || mimeType.contains("hev1") {
-            return VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC)
+        if mimeType.contains("hvc1")
+            || mimeType.contains("hev1") {
+            return VTIsHardwareDecodeSupported(
+                kCMVideoCodecType_HEVC
+            )
         }
 
         if mimeType.contains("av01") {
-            return VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1)
+            return VTIsHardwareDecodeSupported(
+                kCMVideoCodecType_AV1
+            )
         }
 
         return false
@@ -56,43 +69,93 @@ private struct AlternativeFormat {
 actor AlternativePlayerService {
     static let shared = AlternativePlayerService()
 
+    private let logger = Logger(
+        subsystem: "cz.caseycz.tubetv",
+        category: "PlayerResolver"
+    )
+
+    // Keep this aligned with SmartTube MediaServiceCore.
+    // SmartTube currently marks VISIONOS as "no url formats" and
+    // uses TV_DOWNGRADED as the first useful direct-URL fallback.
     private let clients: [AlternativePlayerClient] = [
         AlternativePlayerClient(
-            name: "VISIONOS",
-            version: "1.02",
+            name: "TVHTML5",
+            version: "5.20260901",
+            innerTubeName: "7",
             userAgent:
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15",
+                "Mozilla/5.0 (DirectFB; Linux x86_64) Cobalt/4.13031-qa (unlike Gecko) Starboard/1",
+            referer: "https://www.youtube.com/tv",
+            clientScreen: "WATCH",
+            supportXhr: false,
+            extraClientFields: [:],
+            thirdParty: nil
+        ),
+        AlternativePlayerClient(
+            name: "WEB",
+            version: "2.20260907.06.00",
+            innerTubeName: "1",
+            userAgent:
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            referer: "https://www.youtube.com",
+            clientScreen: "WATCH",
+            supportXhr: true,
+            extraClientFields: [
+                "browserName": "Chrome",
+                "browserVersion": "124.0.0.0"
+            ],
+            thirdParty: nil
+        ),
+        AlternativePlayerClient(
+            name: "WEB_EMBEDDED_PLAYER",
+            version: "2.20260908.01.00",
+            innerTubeName: "56",
+            userAgent:
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.5 Safari/605.1.15,gzip(gfe)",
+            referer: "https://www.youtube.com",
+            clientScreen: "EMBED",
+            supportXhr: true,
+            extraClientFields: [
+                "browserName": "Safari",
+                "browserVersion": "15.5"
+            ],
+            thirdParty: [
+                "embedUrl": "https://www.reddit.com/"
+            ]
+        ),
+        AlternativePlayerClient(
+            name: "iOS",
+            version: "21.26.4",
+            innerTubeName: "5",
+            userAgent:
+                "com.google.ios.youtube/21.26.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)",
+            referer: nil,
+            clientScreen: "WATCH",
+            supportXhr: true,
             extraClientFields: [
                 "deviceMake": "Apple",
-                "deviceModel": "RealityDevice17,1",
-                "osName": "visionOS",
-                "osVersion": "26.5.23O471"
-            ]
+                "deviceModel": "iPhone16,2",
+                "osName": "iPhone",
+                "osVersion": "18.3.2.22D82"
+            ],
+            thirdParty: nil
         ),
         AlternativePlayerClient(
             name: "ANDROID_VR",
             version: "1.65.10",
+            innerTubeName: "28",
             userAgent:
                 "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
+            referer: nil,
+            clientScreen: "WATCH",
+            supportXhr: true,
             extraClientFields: [
                 "androidSdkVersion": 32,
                 "osName": "Android",
                 "osVersion": "12",
                 "deviceMake": "Oculus",
                 "deviceModel": "Quest 3"
-            ]
-        ),
-        AlternativePlayerClient(
-            name: "iOS",
-            version: "21.26.4",
-            userAgent:
-                "com.google.ios.youtube/21.26.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)",
-            extraClientFields: [
-                "deviceMake": "Apple",
-                "deviceModel": "iPhone16,2",
-                "osName": "iPhone",
-                "osVersion": "18.3.2.22D82"
-            ]
+            ],
+            thirdParty: nil
         )
     ]
 
@@ -100,7 +163,8 @@ actor AlternativePlayerService {
         videoID: String,
         preferredQuality: String
     ) async throws -> PlaybackSource {
-        var lastError: Error = StreamResolverError.noPlayableStream
+        var lastError: Error =
+            StreamResolverError.noPlayableStream
 
         for client in clients {
             do {
@@ -109,10 +173,16 @@ actor AlternativePlayerService {
                     preferredQuality: preferredQuality,
                     client: client
                 ) {
+                    logger.notice(
+                        "Resolved with client=\(client.name, privacy: .public) version=\(client.version, privacy: .public)"
+                    )
                     return source
                 }
             } catch {
                 lastError = error
+                logger.error(
+                    "Client failed client=\(client.name, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
+                )
             }
         }
 
@@ -124,33 +194,56 @@ actor AlternativePlayerService {
         preferredQuality: String,
         client: AlternativePlayerClient
     ) async throws -> PlaybackSource? {
+        let bootstrap =
+            try? await SmartTubeAuthService.shared.bootstrap()
+        let visitorData = bootstrap?.visitorData
+
         var clientFields: [String: Any] = [
             "clientName": client.name,
             "clientVersion": client.version,
+            "clientScreen": client.clientScreen,
             "userAgent": client.userAgent,
             "acceptLanguage": L10n.currentLanguageCode,
             "acceptRegion": "CZ",
-            "utcOffsetMinutes": TimeZone.current.secondsFromGMT() / 60
+            "utcOffsetMinutes":
+                TimeZone.current.secondsFromGMT() / 60
         ]
+
+        if let visitorData, !visitorData.isEmpty {
+            clientFields["visitorData"] = visitorData
+        }
 
         for (key, value) in client.extraClientFields {
             clientFields[key] = value
         }
 
+        var context: [String: Any] = [
+            "client": clientFields,
+            "user": [
+                "enableSafetyMode": false,
+                "lockedSafetyMode": false
+            ]
+        ]
+
+        if let thirdParty = client.thirdParty {
+            context["thirdParty"] = thirdParty
+        }
+
         let payload: [String: Any] = [
-            "context": [
-                "client": clientFields,
-                "user": [
-                    "enableSafetyMode": false,
-                    "lockedSafetyMode": false
-                ]
-            ],
+            "context": context,
             "videoId": videoID,
+            "cpn": Self.generateCPN(),
             "racyCheckOk": true,
             "contentCheckOk": true,
             "playbackContext": [
                 "contentPlaybackContext": [
-                    "html5Preference": "HTML5_PREF_WANTS"
+                    "html5Preference": "HTML5_PREF_WANTS",
+                    "lactMilliseconds": 60_000,
+                    "isInlinePlaybackNoAd": true
+                ],
+                "devicePlaybackCapabilities": [
+                    "supportsVp9Encoding": true,
+                    "supportXhr": client.supportXhr
                 ]
             ]
         ]
@@ -162,7 +255,7 @@ actor AlternativePlayerService {
             )!
         )
         request.httpMethod = "POST"
-        request.timeoutInterval = 15
+        request.timeoutInterval = 20
         request.setValue(
             "application/json",
             forHTTPHeaderField: "Content-Type"
@@ -172,9 +265,28 @@ actor AlternativePlayerService {
             forHTTPHeaderField: "User-Agent"
         )
         request.setValue(
+            client.innerTubeName,
+            forHTTPHeaderField: "X-Youtube-Client-Name"
+        )
+        request.setValue(
             client.version,
             forHTTPHeaderField: "X-Youtube-Client-Version"
         )
+
+        if let referer = client.referer {
+            request.setValue(
+                referer,
+                forHTTPHeaderField: "Referer"
+            )
+        }
+
+        if let visitorData, !visitorData.isEmpty {
+            request.setValue(
+                visitorData,
+                forHTTPHeaderField: "X-Goog-Visitor-Id"
+            )
+        }
+
         request.httpBody = try JSONSerialization.data(
             withJSONObject: payload
         )
@@ -188,12 +300,25 @@ actor AlternativePlayerService {
               let root = try JSONSerialization.jsonObject(
                 with: data
               ) as? [String: Any] else {
+            logger.error(
+                "Invalid player response client=\(client.name, privacy: .public)"
+            )
             return nil
         }
 
-        if let playability = root["playabilityStatus"] as? [String: Any],
-           let status = playability["status"] as? String,
-           status != "OK" {
+        let playability =
+            root["playabilityStatus"] as? [String: Any]
+        let status =
+            playability?["status"] as? String
+            ?? "UNKNOWN"
+        let reason =
+            playability?["reason"] as? String
+            ?? ""
+
+        guard status == "OK" else {
+            logger.notice(
+                "Unplayable client=\(client.name, privacy: .public) status=\(status, privacy: .public) reason=\(reason, privacy: .public)"
+            )
             return nil
         }
 
@@ -201,7 +326,12 @@ actor AlternativePlayerService {
             AdFilteringPolicy.inspectPlayerResponse(root)
 
         guard let streaming =
-            AdFilteringPolicy.contentStreamingData(from: root) else {
+            AdFilteringPolicy.contentStreamingData(
+                from: root
+            ) else {
+            logger.notice(
+                "No streamingData client=\(client.name, privacy: .public)"
+            )
             return nil
         }
 
@@ -212,6 +342,10 @@ actor AlternativePlayerService {
 
         let adaptive = formats(
             from: streaming["adaptiveFormats"]
+        )
+
+        logger.notice(
+            "Formats client=\(client.name, privacy: .public) combined=\(combined.count, privacy: .public) adaptive=\(adaptive.count, privacy: .public) ads=\(adMetadata.containsAdvertisingMetadata, privacy: .public)"
         )
 
         let fallback = bestCombined(
@@ -228,7 +362,8 @@ actor AlternativePlayerService {
         let audios = adaptive
             .filter { $0.isNativeAudio }
             .sorted {
-                ($0.bitrate ?? 0) > ($1.bitrate ?? 0)
+                ($0.bitrate ?? 0)
+                    > ($1.bitrate ?? 0)
             }
 
         if let audio = audios.first {
@@ -266,7 +401,8 @@ actor AlternativePlayerService {
             adMetadata: adMetadata,
             hasDirectContentFormats: hasDirectContent
         ),
-        let rawHLS = streaming["hlsManifestUrl"] as? String,
+        let rawHLS =
+            streaming["hlsManifestUrl"] as? String,
         let hls = URL(string: rawHLS) {
             return .direct(hls)
         }
@@ -284,7 +420,8 @@ actor AlternativePlayerService {
         return list.compactMap { item in
             guard let rawURL = item["url"] as? String,
                   let url = URL(string: rawURL),
-                  let mime = item["mimeType"] as? String else {
+                  let mime =
+                    item["mimeType"] as? String else {
                 return nil
             }
 
@@ -311,7 +448,9 @@ actor AlternativePlayerService {
 
         if let requestedHeight {
             return native
-                .filter { $0.height == requestedHeight }
+                .filter {
+                    $0.height == requestedHeight
+                }
                 .max {
                     ($0.bitrate ?? 0)
                         < ($1.bitrate ?? 0)
@@ -349,7 +488,8 @@ actor AlternativePlayerService {
             return leftFPS > rightFPS
         }
 
-        return (lhs.bitrate ?? 0) > (rhs.bitrate ?? 0)
+        return (lhs.bitrate ?? 0)
+            > (rhs.bitrate ?? 0)
     }
 
     private func requestedHeight(
@@ -365,5 +505,21 @@ actor AlternativePlayerService {
         default:
             return nil
         }
+    }
+
+    private static func generateCPN() -> String {
+        let alphabet = Array(
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+        )
+        var generator =
+            SystemRandomNumberGenerator()
+
+        return String(
+            (0..<16).map { _ in
+                alphabet.randomElement(
+                    using: &generator
+                )!
+            }
+        )
     }
 }
