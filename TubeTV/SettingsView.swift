@@ -147,7 +147,7 @@ struct SettingsView: View {
                                     .tag(profile.id)
                                 }
                             }
-                            .onChange(of: selectedProfileID) { newValue in
+                            .onChange(of: selectedProfileID) { _, newValue in
                                 guard let profile = profiles.first(
                                     where: { $0.id == newValue }
                                 ) else {
