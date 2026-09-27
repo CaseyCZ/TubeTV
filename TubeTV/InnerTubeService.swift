@@ -82,7 +82,10 @@ actor InnerTubeService {
 
     private var browseVisitorData: String?
 
-    func homeSections() async throws -> [YouTubeHomeSection] {
+    func homePage() async throws -> (
+        sections: [YouTubeHomeSection],
+        continuationToken: String?
+    ) {
         // SmartTube uses the TV Home browse id ("default") when signed in.
         // Anonymous Home stays on WEB + FEwhat_to_watch.
         let isSignedIn =
@@ -102,15 +105,26 @@ actor InnerTubeService {
             Self.rendererDiagnostics(from: root)
         let sections =
             Self.extractHomeSections(from: root)
+        let continuationToken =
+            Self.homeSectionListContinuationToken(
+                from: root
+            )
 
         logger.notice(
             "Home renderer diagnostics=\(diagnostics, privacy: .public)"
         )
         logger.notice(
-            "Home parsed sections=\(sections.count, privacy: .public) videos=\(sections.reduce(0) { $0 + $1.videos.count }, privacy: .public)"
+            "Home parsed sections=\(sections.count, privacy: .public) videos=\(sections.reduce(0) { $0 + $1.videos.count }, privacy: .public) hasNext=\(continuationToken != nil, privacy: .public)"
         )
 
-        return sections
+        return (
+            sections,
+            continuationToken
+        )
+    }
+
+    func homeSections() async throws -> [YouTubeHomeSection] {
+        try await homePage().sections
     }
 
     func homeVideos() async throws -> [VideoItem] {
@@ -122,6 +136,27 @@ actor InnerTubeService {
             .filter {
                 seen.insert($0.id).inserted
             }
+    }
+
+    func continueHomePage(
+        _ continuationToken: String
+    ) async throws -> (
+        sections: [YouTubeHomeSection],
+        continuationToken: String?
+    ) {
+        let root = try await browse(
+            nil,
+            continuation: continuationToken,
+            requireAuthentication: false,
+            includeVisitorData: true
+        )
+
+        return (
+            Self.extractHomeSections(from: root),
+            Self.homeSectionListContinuationToken(
+                from: root
+            )
+        )
     }
 
     func continueHomeSection(
@@ -600,6 +635,49 @@ actor InnerTubeService {
                 )
             }
         }
+    }
+
+    private static func homeSectionListContinuationToken(
+        from node: Any
+    ) -> String? {
+        if let dictionary = node as? [String: Any] {
+            for key in [
+                "sectionListRenderer",
+                "sectionListContinuation"
+            ] {
+                if let renderer =
+                        dictionary[key]
+                        as? [String: Any],
+                   let continuations =
+                        renderer["continuations"],
+                   let token =
+                        nextContinuationToken(
+                            from: continuations
+                        ) {
+                    return token
+                }
+            }
+
+            for value in dictionary.values {
+                if let token =
+                        homeSectionListContinuationToken(
+                            from: value
+                        ) {
+                    return token
+                }
+            }
+        } else if let array = node as? [Any] {
+            for value in array {
+                if let token =
+                        homeSectionListContinuationToken(
+                            from: value
+                        ) {
+                    return token
+                }
+            }
+        }
+
+        return nil
     }
 
     private static func nextContinuationToken(

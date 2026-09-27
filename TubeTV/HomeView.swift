@@ -8,6 +8,8 @@ struct HomeView: View {
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @State private var sections: [YouTubeHomeSection] = []
     @State private var loadingSectionIDs = Set<String>()
+    @State private var homeContinuationToken: String?
+    @State private var isLoadingMoreHomeSections = false
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var lastLoadedAt: Date?
@@ -114,9 +116,13 @@ struct HomeView: View {
             do {
                 // SmartTube uses the TV InnerTube Home for signed-in
                 // and anonymous browsing.
-                sections =
+                let page =
                     try await InnerTubeService.shared
-                        .homeSections()
+                        .homePage()
+
+                sections = page.sections
+                homeContinuationToken =
+                    page.continuationToken
             } catch {
                 // Keep the public web parser only as a last-resort fallback.
                 let videos =
@@ -133,6 +139,7 @@ struct HomeView: View {
                         continuationToken: nil
                     )
                 ]
+                homeContinuationToken = nil
             }
 
             if sections.allSatisfy({ $0.videos.isEmpty }) {
@@ -142,9 +149,66 @@ struct HomeView: View {
                 )
             } else {
                 lastLoadedAt = Date()
+
+                if homeContinuationToken != nil {
+                    Task {
+                        await loadRemainingHomeSections()
+                    }
+                }
             }
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func loadRemainingHomeSections() async {
+        guard !isLoadingMoreHomeSections else {
+            return
+        }
+
+        isLoadingMoreHomeSections = true
+        defer {
+            isLoadingMoreHomeSections = false
+        }
+
+        while let token = homeContinuationToken,
+              !token.isEmpty {
+            do {
+                let result =
+                    try await InnerTubeService.shared
+                        .continueHomePage(
+                            token
+                        )
+
+                var seen = Set(
+                    sections.map(\.id)
+                )
+                let newSections =
+                    result.sections.filter {
+                        seen.insert($0.id).inserted
+                    }
+
+                sections.append(
+                    contentsOf: newSections
+                )
+
+                let nextToken =
+                    result.continuationToken
+
+                if nextToken == token
+                    && newSections.isEmpty {
+                    homeContinuationToken = nil
+                    break
+                }
+
+                homeContinuationToken =
+                    nextToken
+            } catch {
+                errorMessage =
+                    error.localizedDescription
+                break
+            }
         }
     }
 
