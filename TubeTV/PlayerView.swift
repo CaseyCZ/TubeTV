@@ -169,6 +169,12 @@ final class NativePlayerModel: ObservableObject {
     private var trackingObserver: Any?
     private var trackingContext: YouTubeTrackingContext?
     private var ciSmokeVerificationScheduled = false
+    private var failedClientProfiles = Set<String>()
+
+    private let playbackLogger = Logger(
+        subsystem: "cz.caseycz.tubetv",
+        category: "PlaybackFailover"
+    )
 
     private let ciLogger = Logger(
         subsystem: "cz.caseycz.tubetv",
@@ -200,42 +206,154 @@ final class NativePlayerModel: ObservableObject {
         didPrepare = true
         isPreparing = true
         errorMessage = nil
+        failedClientProfiles.removeAll()
 
-        do {
-            let item = try await makePlayerItem(from: currentSource)
-            player.replaceCurrentItem(with: item)
-            await updateFormatInfo(from: item)
-            isPreparing = false
-            play()
-            startCaptionLoadingIfNeeded()
-            startHistoryTrackingIfNeeded()
-            loadCaptionOptions()
-            scheduleCISmokeVerificationIfNeeded()
-        } catch {
-            if let fallbackSource = fallbackSource(from: currentSource) {
-                do {
-                    let fallbackItem = try await makePlayerItem(
-                        from: fallbackSource
-                    )
-                    player.replaceCurrentItem(with: fallbackItem)
-                    currentSource = fallbackSource
-                    await updateFormatInfo(from: fallbackItem)
-                    isPreparing = false
-                    errorMessage = L10n.text("adaptive_fallback")
-                    play()
-                    startCaptionLoadingIfNeeded()
-                    startHistoryTrackingIfNeeded()
-                    loadCaptionOptions()
-                    scheduleCISmokeVerificationIfNeeded()
-                } catch {
-                    isPreparing = false
-                    errorMessage = error.localizedDescription
-                }
-            } else {
+        await prepareWithFailover(
+            startingFrom: currentSource
+        )
+    }
+
+    private func prepareWithFailover(
+        startingFrom initialSource: PlaybackSource
+    ) async {
+        var nextSource: PlaybackSource? = initialSource
+        var attemptedSources = Set<PlaybackSource>()
+        var lastError: Error =
+            StreamResolverError.noPlayableStream
+
+        for attempt in 1...10 {
+            guard let source = nextSource,
+                  !attemptedSources.contains(source) else {
+                break
+            }
+
+            attemptedSources.insert(source)
+            let profile =
+                source.clientProfile ?? "UNTAGGED"
+
+            playbackLogger.notice(
+                "Attempt=\(attempt, privacy: .public) profile=\(profile, privacy: .public)"
+            )
+
+            do {
+                try await activateAndVerify(
+                    source
+                )
+
+                currentSource = source
                 isPreparing = false
-                errorMessage = error.localizedDescription
+                errorMessage = nil
+
+                playbackLogger.notice(
+                    "READY profile=\(profile, privacy: .public)"
+                )
+
+                startCaptionLoadingIfNeeded()
+                startHistoryTrackingIfNeeded()
+                loadCaptionOptions()
+                scheduleCISmokeVerificationIfNeeded()
+                return
+            } catch {
+                lastError = error
+                player.pause()
+
+                playbackLogger.error(
+                    "FAILED profile=\(profile, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
+                )
+
+                if let localFallback =
+                    fallbackSource(from: source),
+                   !attemptedSources.contains(
+                    localFallback
+                   ) {
+                    nextSource = localFallback
+                    continue
+                }
+
+                guard let youtubeVideoID,
+                      let failedProfile =
+                        source.clientProfile else {
+                    nextSource = nil
+                    break
+                }
+
+                failedClientProfiles.insert(
+                    failedProfile
+                )
+
+                do {
+                    nextSource =
+                        try await StreamResolver
+                            .resolveYouTubeVideo(
+                                videoID:
+                                    youtubeVideoID,
+                                preferredQuality:
+                                    activeQuality,
+                                excludingProfiles:
+                                    failedClientProfiles
+                            )
+                } catch {
+                    lastError = error
+                    nextSource = nil
+                }
             }
         }
+
+        isPreparing = false
+        errorMessage =
+            lastError.localizedDescription
+    }
+
+    private func activateAndVerify(
+        _ source: PlaybackSource
+    ) async throws {
+        let item =
+            try await makePlayerItem(
+                from: source
+            )
+
+        currentSource = source
+        player.replaceCurrentItem(
+            with: item
+        )
+        play()
+
+        try await waitUntilReadyToPlay(
+            item
+        )
+
+        await updateFormatInfo(
+            from: item
+        )
+    }
+
+    private func waitUntilReadyToPlay(
+        _ item: AVPlayerItem
+    ) async throws {
+        for _ in 0..<100 {
+            switch item.status {
+            case .readyToPlay:
+                return
+
+            case .failed:
+                throw item.error
+                    ?? StreamResolverError
+                        .noPlayableStream
+
+            case .unknown:
+                break
+
+            @unknown default:
+                break
+            }
+
+            try await Task.sleep(
+                nanoseconds: 100_000_000
+            )
+        }
+
+        throw StreamResolverError
+            .noPlayableStream
     }
 
     func pause() {
