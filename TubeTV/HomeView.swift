@@ -61,7 +61,16 @@ struct HomeView: View {
         defer { isLoading = false }
 
         do {
-            videos = try await YouTubeService.shared.home()
+            if await SmartTubeAuthService.shared.signedIn() {
+                do {
+                    videos = try await InnerTubeService.shared.homeVideos()
+                } catch {
+                    // Keep Home usable even if YouTube changes the signed TV feed.
+                    videos = try await YouTubeService.shared.home()
+                }
+            } else {
+                videos = try await YouTubeService.shared.home()
+            }
 
             if videos.isEmpty {
                 errorMessage = "YouTube nevrátil žádná videa."
