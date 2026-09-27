@@ -121,7 +121,6 @@
 			buildPhases = (
 				A00000000000000000000501 /* Sources */,
 				A00000000000000000000201 /* Frameworks */,
-				A00000000000000000000602 /* Render tvOS Icon */,
 				A00000000000000000000601 /* Resources */,
 			);
 			buildRules = (
@@ -183,35 +182,6 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
-/* Begin PBXShellScriptBuildPhase section */
-		A00000000000000000000602 /* Render tvOS Icon */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-				"$(SRCROOT)/scripts/render-tvos-icon.swift",
-			);
-			name = "Render tvOS Icon";
-			outputPaths = (
-				"$(SRCROOT)/TubeTV/Assets.xcassets/App Icon & Top Shelf Image.brandassets/Contents.json",
-				"$(SRCROOT)/TubeTV/Assets.xcassets/App Icon & Top Shelf Image.brandassets/App Icon.imagestack/Front.imagestacklayer/Content.imageset/front@1x.png",
-				"$(SRCROOT)/TubeTV/Assets.xcassets/App Icon & Top Shelf Image.brandassets/App Icon.imagestack/Front.imagestacklayer/Content.imageset/front@2x.png",
-				"$(SRCROOT)/TubeTV/Assets.xcassets/App Icon & Top Shelf Image.brandassets/App Icon.imagestack/Middle.imagestacklayer/Content.imageset/middle@1x.png",
-				"$(SRCROOT)/TubeTV/Assets.xcassets/App Icon & Top Shelf Image.brandassets/App Icon.imagestack/Middle.imagestacklayer/Content.imageset/middle@2x.png",
-				"$(SRCROOT)/TubeTV/Assets.xcassets/App Icon & Top Shelf Image.brandassets/App Icon.imagestack/Back.imagestacklayer/Content.imageset/back@1x.png",
-				"$(SRCROOT)/TubeTV/Assets.xcassets/App Icon & Top Shelf Image.brandassets/App Icon.imagestack/Back.imagestacklayer/Content.imageset/back@2x.png",
-				"$(SRCROOT)/TubeTV/Assets.xcassets/App Icon & Top Shelf Image.brandassets/App Icon - App Store.imagestack/Front.imagestacklayer/Content.imageset/front.png",
-				"$(SRCROOT)/TubeTV/Assets.xcassets/App Icon & Top Shelf Image.brandassets/App Icon - App Store.imagestack/Middle.imagestacklayer/Content.imageset/middle.png",
-				"$(SRCROOT)/TubeTV/Assets.xcassets/App Icon & Top Shelf Image.brandassets/App Icon - App Store.imagestack/Back.imagestacklayer/Content.imageset/back.png",
-				"$(SRCROOT)/TubeTV/Assets.xcassets/App Icon & Top Shelf Image.brandassets/Top Shelf Image.imageset/top-shelf.png",
-				"$(SRCROOT)/TubeTV/Assets.xcassets/App Icon & Top Shelf Image.brandassets/Top Shelf Image Wide.imageset/top-shelf-wide.png",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "set -e\n/usr/bin/xcrun --sdk macosx swift \"$SRCROOT/scripts/render-tvos-icon.swift\" \"$SRCROOT/TubeTV/Assets.xcassets/App Icon & Top Shelf Image.brandassets\"\n";
-		};
-/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		A00000000000000000000501 /* Sources */ = {
