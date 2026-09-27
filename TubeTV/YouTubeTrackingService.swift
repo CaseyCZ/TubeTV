@@ -184,6 +184,16 @@ actor YouTubeTrackingService {
             let almostFinished = duration - position < duration * 0.05
             let shouldFinish = final || almostFinished
 
+            if shouldFinish {
+                try await createRecord(
+                    context: context,
+                    position: duration,
+                    duration: duration,
+                    authorization: authorization,
+                    final: true
+                )
+            }
+
             try await updateWatchTime(
                 context: context,
                 oldPosition: shouldFinish ? duration : oldPosition,
