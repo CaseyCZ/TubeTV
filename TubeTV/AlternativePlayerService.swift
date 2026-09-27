@@ -172,10 +172,6 @@ actor AlternativePlayerService {
             forHTTPHeaderField: "User-Agent"
         )
         request.setValue(
-            client.name,
-            forHTTPHeaderField: "X-Youtube-Client-Name"
-        )
-        request.setValue(
             client.version,
             forHTTPHeaderField: "X-Youtube-Client-Version"
         )
@@ -353,7 +349,7 @@ actor AlternativePlayerService {
             return leftFPS > rightFPS
         }
 
-        return ($0.bitrate ?? 0) > ($1.bitrate ?? 0)
+        return (lhs.bitrate ?? 0) > (rhs.bitrate ?? 0)
     }
 
     private func requestedHeight(
