@@ -127,6 +127,10 @@ enum L10n {
             "demo_youtube_subtitle": "Paste a YouTube URL or 11-character video ID in Search",
             "demo_captions_title": "Automatic subtitles",
             "demo_captions_subtitle": "Choose your preferred subtitle language in Settings",
+            "invalid_video_id": "Invalid YouTube video ID.",
+            "no_playable_stream": "No Apple TV-compatible stream was found for this video.",
+            "youtube_network_blocked": "YouTube is temporarily blocking this network. Disable your VPN, try a different VPN server, or wait a few minutes and try again.",
+            "youtube_sign_in_required": "This video is age-restricted or requires sign-in to watch.",
             "test": "TEST"
         ],
         "cs": [
@@ -206,6 +210,10 @@ enum L10n {
             "demo_youtube_subtitle": "V Hledat vlož YouTube URL nebo 11znakové video ID",
             "demo_captions_title": "Automatické titulky",
             "demo_captions_subtitle": "Preferovaný jazyk titulků vybereš v Nastavení",
+            "invalid_video_id": "Neplatné YouTube video ID.",
+            "no_playable_stream": "Pro toto video se nepodařilo najít stream přehratelný na Apple TV.",
+            "youtube_network_blocked": "YouTube tuto síť dočasně blokuje. Vypni VPN, zkus jiný VPN server nebo několik minut počkej a zkus to znovu.",
+            "youtube_sign_in_required": "Toto video je věkově omezené nebo vyžaduje přihlášení.",
             "test": "TEST"
         ],
         "de": [
@@ -242,7 +250,11 @@ enum L10n {
             "youtube_profile": "YouTube-Profil",
             "refresh_profiles": "Profile aktualisieren",
             "sign_out": "Abmelden",
-            "sign_in": "Bei YouTube anmelden"
+            "sign_in": "Bei YouTube anmelden",
+            "invalid_video_id": "Ungültige YouTube-Video-ID.",
+            "no_playable_stream": "Für dieses Video wurde kein mit Apple TV kompatibler Stream gefunden.",
+            "youtube_network_blocked": "YouTube blockiert dieses Netzwerk vorübergehend. Deaktiviere dein VPN, wechsle den VPN-Server oder versuche es in einigen Minuten erneut.",
+            "youtube_sign_in_required": "Dieses Video ist altersbeschränkt oder erfordert eine Anmeldung."
         ],
         "pl": [
             "home": "Strona główna",
@@ -278,7 +290,11 @@ enum L10n {
             "youtube_profile": "Profil YouTube",
             "refresh_profiles": "Odśwież profile",
             "sign_out": "Wyloguj",
-            "sign_in": "Zaloguj do YouTube"
+            "sign_in": "Zaloguj do YouTube",
+            "invalid_video_id": "Nieprawidłowy identyfikator filmu YouTube.",
+            "no_playable_stream": "Nie znaleziono strumienia zgodnego z Apple TV.",
+            "youtube_network_blocked": "YouTube tymczasowo blokuje tę sieć. Wyłącz VPN, zmień serwer VPN lub spróbuj ponownie za kilka minut.",
+            "youtube_sign_in_required": "Ten film ma ograniczenie wiekowe lub wymaga zalogowania."
         ],
         "sk": [
             "home": "Domov",
@@ -314,7 +330,11 @@ enum L10n {
             "youtube_profile": "YouTube profil",
             "refresh_profiles": "Obnoviť profily",
             "sign_out": "Odhlásiť účet",
-            "sign_in": "Prihlásiť YouTube účet"
+            "sign_in": "Prihlásiť YouTube účet",
+            "invalid_video_id": "Neplatné ID videa YouTube.",
+            "no_playable_stream": "Pre toto video sa nenašiel stream kompatibilný s Apple TV.",
+            "youtube_network_blocked": "YouTube túto sieť dočasne blokuje. Vypni VPN, skús iný VPN server alebo počkaj niekoľko minút a skús to znova.",
+            "youtube_sign_in_required": "Toto video je vekovo obmedzené alebo vyžaduje prihlásenie."
         ]
     ]
 }
