@@ -11,15 +11,15 @@ enum AuthenticatedPlayerError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notSignedIn:
-            return "YouTube účet není přihlášen."
+            return L10n.text("authenticated_player_not_signed_in")
         case .invalidResponse:
-            return "YouTube player vrátil neplatnou odpověď."
+            return L10n.text("authenticated_player_invalid_response")
         case .unplayable(let reason):
             return reason.isEmpty
-                ? "Video není pro tento účet dostupné."
+                ? L10n.text("authenticated_player_unavailable")
                 : reason
         case .noPlayableStream:
-            return "Přihlášený YouTube player nevrátil stream vhodný pro Apple TV."
+            return L10n.text("authenticated_player_no_stream")
         }
     }
 }
