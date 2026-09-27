@@ -63,8 +63,14 @@ actor YouTubeTrackingService {
             "contentCheckOk": true
         ]
 
+        guard let playerURL = URL(
+            string: "https://www.youtube.com/youtubei/v1/player?prettyPrint=false"
+        ) else {
+            throw YouTubeTrackingError.invalidPlayerResponse
+        }
+
         var request = URLRequest(
-            url: URL(string: "https://www.youtube.com/youtubei/v1/player?prettyPrint=false")!
+            url: playerURL
         )
         request.httpMethod = "POST"
         request.timeoutInterval = 25
@@ -246,8 +252,12 @@ actor YouTubeTrackingService {
         }
 
         components.queryItems = items
+        guard let url = components.url else {
+            throw YouTubeTrackingError.invalidPlayerResponse
+        }
+
         try await performTrackingRequest(
-            url: components.url!,
+            url: url,
             authorization: authorization,
             visitorData: context.visitorData
         )
@@ -284,8 +294,12 @@ actor YouTubeTrackingService {
         }
 
         components.queryItems = items
+        guard let url = components.url else {
+            throw YouTubeTrackingError.invalidPlayerResponse
+        }
+
         try await performTrackingRequest(
-            url: components.url!,
+            url: url,
             authorization: authorization,
             visitorData: context.visitorData
         )
@@ -342,7 +356,8 @@ actor YouTubeTrackingService {
 
         return String(
             (0..<16).map { _ in
-                alphabet.randomElement(using: &generator)!
+                alphabet.randomElement(using: &generator)
+                    ?? "A"
             }
         )
     }
