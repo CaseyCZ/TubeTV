@@ -18,6 +18,9 @@
 		A00000000000000000000109 /* CaptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000009 /* CaptionService.swift */; };
 		A00000000000000000000110 /* StreamResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000011 /* StreamResolver.swift */; };
 		A00000000000000000000111 /* YouTubeKit in Frameworks */ = {isa = PBXBuildFile; productRef = A00000000000000000000B01 /* YouTubeKit */; };
+		A00000000000000000000112 /* SmartTubeAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000012 /* SmartTubeAuthService.swift */; };
+		A00000000000000000000113 /* InnerTubeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000013 /* InnerTubeService.swift */; };
+		A00000000000000000000114 /* AccountViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000014 /* AccountViews.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,6 +35,9 @@
 		A00000000000000000000009 /* CaptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/CaptionService.swift; sourceTree = SOURCE_ROOT; };
 		A00000000000000000000010 /* TubeTV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TubeTV.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A00000000000000000000011 /* StreamResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/StreamResolver.swift; sourceTree = SOURCE_ROOT; };
+		A00000000000000000000012 /* SmartTubeAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/SmartTubeAuthService.swift; sourceTree = SOURCE_ROOT; };
+		A00000000000000000000013 /* InnerTubeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/InnerTubeService.swift; sourceTree = SOURCE_ROOT; };
+		A00000000000000000000014 /* AccountViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeTV/AccountViews.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -67,6 +73,9 @@
 				A00000000000000000000008 /* YouTubeService.swift */,
 				A00000000000000000000009 /* CaptionService.swift */,
 				A00000000000000000000011 /* StreamResolver.swift */,
+				A00000000000000000000012 /* SmartTubeAuthService.swift */,
+				A00000000000000000000013 /* InnerTubeService.swift */,
+				A00000000000000000000014 /* AccountViews.swift */,
 			);
 			name = Sources;
 			sourceTree = "<group>";
@@ -163,6 +172,9 @@
 				A00000000000000000000108 /* YouTubeService.swift in Sources */,
 				A00000000000000000000109 /* CaptionService.swift in Sources */,
 				A00000000000000000000110 /* StreamResolver.swift in Sources */,
+				A00000000000000000000112 /* SmartTubeAuthService.swift in Sources */,
+				A00000000000000000000113 /* InnerTubeService.swift in Sources */,
+				A00000000000000000000114 /* AccountViews.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
