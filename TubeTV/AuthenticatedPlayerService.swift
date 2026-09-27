@@ -212,6 +212,11 @@ actor AuthenticatedPlayerService {
             ?? ""
 
         let adMetadata = AdFilteringPolicy.inspectPlayerResponse(root)
+        let videoDetails =
+            root["videoDetails"] as? [String: Any]
+        let isLive =
+            videoDetails?["isLive"] as? Bool
+            ?? false
 
         guard let streaming = AdFilteringPolicy.contentStreamingData(
             from: root
@@ -282,7 +287,11 @@ actor AuthenticatedPlayerService {
             referer: "https://www.youtube.com/tv",
             clientProfile: "TV_AUTH",
             availableHeights: availableHeights,
-            audioTracks: audioTracks
+            audioTracks: audioTracks,
+            isLive: isLive,
+            advertisingMetadataDetected:
+                adMetadata
+                    .containsAdvertisingMetadata
         )
 
         if let audio = audios.first {

@@ -18,6 +18,8 @@ struct PlaybackRequestHeaders: Hashable {
     let clientProfile: String?
     let availableHeights: [Int]
     let audioTracks: [PlaybackAudioTrack]
+    let isLive: Bool
+    let advertisingMetadataDetected: Bool
 
     init(
         userAgent: String,
@@ -25,7 +27,9 @@ struct PlaybackRequestHeaders: Hashable {
         origin: String? = nil,
         clientProfile: String? = nil,
         availableHeights: [Int] = [],
-        audioTracks: [PlaybackAudioTrack] = []
+        audioTracks: [PlaybackAudioTrack] = [],
+        isLive: Bool = false,
+        advertisingMetadataDetected: Bool = false
     ) {
         self.userAgent = userAgent
         self.referer = referer
@@ -35,6 +39,9 @@ struct PlaybackRequestHeaders: Hashable {
             Set(availableHeights.filter { $0 > 0 })
         ).sorted(by: >)
         self.audioTracks = audioTracks
+        self.isLive = isLive
+        self.advertisingMetadataDetected =
+            advertisingMetadataDetected
     }
 
     var dictionary: [String: String] {
@@ -70,6 +77,78 @@ enum PlaybackSource: Hashable {
             return headers.clientProfile
 
         case .direct, .adaptive:
+            return nil
+        }
+    }
+
+    var diagnosticSourceKind: String {
+        switch self {
+        case .direct(let url),
+             .directWithHeaders(
+                let url,
+                _
+             ):
+            let raw =
+                url.absoluteString
+                    .lowercased()
+
+            if url.pathExtension
+                    .lowercased()
+                    == "m3u8"
+                || raw.contains(
+                    "hls_playlist"
+                )
+                || raw.contains(
+                    "/manifest/"
+                ) {
+                return "HLS"
+            }
+
+            return "DIRECT"
+
+        case .adaptive,
+             .adaptiveWithHeaders:
+            return "ADAPTIVE"
+        }
+    }
+
+    var diagnosticIsLive: Bool? {
+        switch self {
+        case .directWithHeaders(
+            _,
+            let headers
+        ),
+        .adaptiveWithHeaders(
+            _,
+            _,
+            _,
+            let headers
+        ):
+            return headers.isLive
+
+        case .direct,
+             .adaptive:
+            return nil
+        }
+    }
+
+    var diagnosticAdvertisingMetadataDetected: Bool? {
+        switch self {
+        case .directWithHeaders(
+            _,
+            let headers
+        ),
+        .adaptiveWithHeaders(
+            _,
+            _,
+            _,
+            let headers
+        ):
+            return headers
+                .advertisingMetadataDetected
+
+        case .direct,
+             .adaptive:
             return nil
         }
     }

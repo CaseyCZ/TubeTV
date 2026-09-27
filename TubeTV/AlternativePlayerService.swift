@@ -702,6 +702,13 @@ actor AlternativePlayerService {
                 .inspectPlayerResponse(
                     root
                 )
+        let videoDetails =
+            root["videoDetails"]
+                as? [String: Any]
+        let isLive =
+            videoDetails?["isLive"]
+                as? Bool
+            ?? false
 
         guard let streaming =
             AdFilteringPolicy
@@ -816,7 +823,11 @@ actor AlternativePlayerService {
             origin: client.origin,
             clientProfile: client.profile,
             availableHeights: availableHeights,
-            audioTracks: audioTracks
+            audioTracks: audioTracks,
+            isLive: isLive,
+            advertisingMetadataDetected:
+                adMetadata
+                    .containsAdvertisingMetadata
         )
 
         logger.notice(

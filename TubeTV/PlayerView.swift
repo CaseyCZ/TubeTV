@@ -281,6 +281,25 @@ final class NativePlayerModel: ObservableObject {
                 isPreparing = false
                 errorMessage = nil
 
+                let live =
+                    source.diagnosticIsLive
+                        .map(String.init)
+                    ?? "unknown"
+                let ads =
+                    source
+                        .diagnosticAdvertisingMetadataDetected
+                        .map(String.init)
+                    ?? "unknown"
+                let sourceKind =
+                    source.diagnosticSourceKind
+                let videoID =
+                    youtubeVideoID
+                    ?? "none"
+
+                playbackLogger.notice(
+                    "PLAYBACK_DIAG videoID=\(videoID, privacy: .public) live=\(live, privacy: .public) source=\(sourceKind, privacy: .public) profile=\(profile, privacy: .public) ads=\(ads, privacy: .public)"
+                )
+
                 playbackLogger.notice(
                     "READY profile=\(profile, privacy: .public)"
                 )
