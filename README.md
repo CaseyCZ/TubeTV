@@ -40,6 +40,9 @@ No XcodeGen or generated workspace is required.
 - SmartTube-style YouTube account history tracking with playback/watchtime updates
 - Multiple YouTube / Brand Account profile selection via X-Goog-Pageid
 - Settings for automatic captions and translation
+- In-player settings panel for quality, subtitles and playback speed
+- Live quality switching while preserving the current playback position
+- Full YouTube subtitle language list with native tracks and automatic translations
 
 ### In progress / next
 
