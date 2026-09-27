@@ -153,10 +153,14 @@ actor AuthenticatedPlayerService {
             ]
         ]
 
+        guard let playerURL = URL(
+            string: "https://www.youtube.com/youtubei/v1/player?prettyPrint=false"
+        ) else {
+            throw AuthenticatedPlayerError.invalidResponse
+        }
+
         var request = URLRequest(
-            url: URL(
-                string: "https://www.youtube.com/youtubei/v1/player?prettyPrint=false"
-            )!
+            url: playerURL
         )
         request.httpMethod = "POST"
         request.timeoutInterval = 25
