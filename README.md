@@ -103,3 +103,13 @@ Playback order:
 HLS is only a last-resort fallback and is rejected when the same player response contains advertising metadata and no independent direct content stream is available.
 
 This is intentionally separate from SponsorBlock, which handles sponsor messages embedded inside the creator's video itself.
+
+
+## Languages
+
+- English is the default app language.
+- The interface language is selectable in Settings.
+- Initial UI languages: English, Czech, German, Polish and Slovak.
+- App language and subtitle language are independent settings.
+- YouTube metadata requests follow the selected app language.
+- Subtitle tracks and automatic translation keep their own preferred-language setting.
