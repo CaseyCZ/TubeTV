@@ -363,7 +363,13 @@ actor AuthenticatedPlayerService {
         if let requestedHeight,
            let exact = appleFormats
             .filter({ $0.height == requestedHeight })
-            .max(by: { ($0.bitrate ?? 0) < ($1.bitrate ?? 0) }) {
+            .max(by: {
+                if ($0.fps ?? 0) != ($1.fps ?? 0) {
+                    return ($0.fps ?? 0) < ($1.fps ?? 0)
+                }
+
+                return ($0.bitrate ?? 0) < ($1.bitrate ?? 0)
+            }) {
             return exact
         }
 
@@ -371,11 +377,18 @@ actor AuthenticatedPlayerService {
             let leftHeight = $0.height ?? 0
             let rightHeight = $1.height ?? 0
 
-            if leftHeight == rightHeight {
-                return ($0.bitrate ?? 0) < ($1.bitrate ?? 0)
+            if leftHeight != rightHeight {
+                return leftHeight < rightHeight
             }
 
-            return leftHeight < rightHeight
+            let leftFPS = $0.fps ?? 0
+            let rightFPS = $1.fps ?? 0
+
+            if leftFPS != rightFPS {
+                return leftFPS < rightFPS
+            }
+
+            return ($0.bitrate ?? 0) < ($1.bitrate ?? 0)
         }
     }
 
