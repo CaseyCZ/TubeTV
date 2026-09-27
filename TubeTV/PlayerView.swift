@@ -212,18 +212,25 @@ final class NativePlayerModel: ObservableObject {
             loadCaptionOptions()
             scheduleCISmokeVerificationIfNeeded()
         } catch {
-            if case let .adaptive(_, _, fallback?) = currentSource {
-                let fallbackItem = AVPlayerItem(url: fallback)
-                player.replaceCurrentItem(with: fallbackItem)
-                currentSource = .direct(fallback)
-                await updateFormatInfo(from: fallbackItem)
-                isPreparing = false
-                errorMessage = L10n.text("adaptive_fallback")
-                play()
-                startCaptionLoadingIfNeeded()
-                startHistoryTrackingIfNeeded()
-                loadCaptionOptions()
-                scheduleCISmokeVerificationIfNeeded()
+            if let fallbackSource = fallbackSource(from: currentSource) {
+                do {
+                    let fallbackItem = try await makePlayerItem(
+                        from: fallbackSource
+                    )
+                    player.replaceCurrentItem(with: fallbackItem)
+                    currentSource = fallbackSource
+                    await updateFormatInfo(from: fallbackItem)
+                    isPreparing = false
+                    errorMessage = L10n.text("adaptive_fallback")
+                    play()
+                    startCaptionLoadingIfNeeded()
+                    startHistoryTrackingIfNeeded()
+                    loadCaptionOptions()
+                    scheduleCISmokeVerificationIfNeeded()
+                } catch {
+                    isPreparing = false
+                    errorMessage = error.localizedDescription
+                }
             } else {
                 isPreparing = false
                 errorMessage = error.localizedDescription
@@ -573,6 +580,29 @@ final class NativePlayerModel: ObservableObject {
         }
     }
 
+    private func fallbackSource(
+        from source: PlaybackSource
+    ) -> PlaybackSource? {
+        switch source {
+        case .adaptive(_, _, let fallback?):
+            return .direct(fallback)
+
+        case .adaptiveWithHeaders(
+            _,
+            _,
+            let fallback?,
+            let headers
+        ):
+            return .directWithHeaders(
+                fallback,
+                headers
+            )
+
+        default:
+            return nil
+        }
+    }
+
     private func makePlayerItem(
         from source: PlaybackSource
     ) async throws -> AVPlayerItem {
@@ -580,66 +610,129 @@ final class NativePlayerModel: ObservableObject {
         case .direct(let url):
             return AVPlayerItem(url: url)
 
-        case .adaptive(let videoURL, let audioURL, _):
-            let videoAsset = AVURLAsset(url: videoURL)
-            let audioAsset = AVURLAsset(url: audioURL)
-
-            async let loadedVideoTracks =
-                videoAsset.loadTracks(withMediaType: .video)
-            async let loadedAudioTracks =
-                audioAsset.loadTracks(withMediaType: .audio)
-            async let loadedVideoDuration =
-                videoAsset.load(.duration)
-            async let loadedAudioDuration =
-                audioAsset.load(.duration)
-
-            let videoTracks = try await loadedVideoTracks
-            let audioTracks = try await loadedAudioTracks
-            let videoDuration = try await loadedVideoDuration
-            let audioDuration = try await loadedAudioDuration
-
-            guard let sourceVideoTrack = videoTracks.first,
-                  let sourceAudioTrack = audioTracks.first else {
-                throw StreamResolverError.noPlayableStream
-            }
-
-            let duration = CMTimeCompare(
-                videoDuration,
-                audioDuration
-            ) <= 0 ? videoDuration : audioDuration
-
-            let composition = AVMutableComposition()
-
-            guard let videoTrack = composition.addMutableTrack(
-                withMediaType: .video,
-                preferredTrackID: kCMPersistentTrackID_Invalid
-            ),
-            let audioTrack = composition.addMutableTrack(
-                withMediaType: .audio,
-                preferredTrackID: kCMPersistentTrackID_Invalid
-            ) else {
-                throw StreamResolverError.noPlayableStream
-            }
-
-            let range = CMTimeRange(
-                start: .zero,
-                duration: duration
+        case .directWithHeaders(
+            let url,
+            let headers
+        ):
+            return AVPlayerItem(
+                asset: makeURLAsset(
+                    url: url,
+                    headers: headers
+                )
             )
 
-            try videoTrack.insertTimeRange(
-                range,
-                of: sourceVideoTrack,
-                at: .zero
-            )
-            try audioTrack.insertTimeRange(
-                range,
-                of: sourceAudioTrack,
-                at: .zero
+        case .adaptive(
+            let videoURL,
+            let audioURL,
+            _
+        ):
+            return try await makeAdaptivePlayerItem(
+                videoURL: videoURL,
+                audioURL: audioURL,
+                headers: nil
             )
 
-            return AVPlayerItem(asset: composition)
+        case .adaptiveWithHeaders(
+            let videoURL,
+            let audioURL,
+            _,
+            let headers
+        ):
+            return try await makeAdaptivePlayerItem(
+                videoURL: videoURL,
+                audioURL: audioURL,
+                headers: headers
+            )
         }
     }
+
+    private func makeURLAsset(
+        url: URL,
+        headers: PlaybackRequestHeaders?
+    ) -> AVURLAsset {
+        guard let headers else {
+            return AVURLAsset(url: url)
+        }
+
+        return AVURLAsset(
+            url: url,
+            options: [
+                "AVURLAssetHTTPHeaderFieldsKey":
+                    headers.dictionary
+            ]
+        )
+    }
+
+    private func makeAdaptivePlayerItem(
+        videoURL: URL,
+        audioURL: URL,
+        headers: PlaybackRequestHeaders?
+    ) async throws -> AVPlayerItem {
+        let videoAsset = makeURLAsset(
+            url: videoURL,
+            headers: headers
+        )
+        let audioAsset = makeURLAsset(
+            url: audioURL,
+            headers: headers
+        )
+
+        async let loadedVideoTracks =
+            videoAsset.loadTracks(withMediaType: .video)
+        async let loadedAudioTracks =
+            audioAsset.loadTracks(withMediaType: .audio)
+        async let loadedVideoDuration =
+            videoAsset.load(.duration)
+        async let loadedAudioDuration =
+            audioAsset.load(.duration)
+
+        let videoTracks = try await loadedVideoTracks
+        let audioTracks = try await loadedAudioTracks
+        let videoDuration = try await loadedVideoDuration
+        let audioDuration = try await loadedAudioDuration
+
+        guard let sourceVideoTrack = videoTracks.first,
+              let sourceAudioTrack = audioTracks.first else {
+            throw StreamResolverError.noPlayableStream
+        }
+
+        let duration = CMTimeCompare(
+            videoDuration,
+            audioDuration
+        ) <= 0 ? videoDuration : audioDuration
+
+        let composition = AVMutableComposition()
+
+        guard let videoTrack = composition.addMutableTrack(
+            withMediaType: .video,
+            preferredTrackID: kCMPersistentTrackID_Invalid
+        ),
+        let audioTrack = composition.addMutableTrack(
+            withMediaType: .audio,
+            preferredTrackID: kCMPersistentTrackID_Invalid
+        ) else {
+            throw StreamResolverError.noPlayableStream
+        }
+
+        let range = CMTimeRange(
+            start: .zero,
+            duration: duration
+        )
+
+        try videoTrack.insertTimeRange(
+            range,
+            of: sourceVideoTrack,
+            at: .zero
+        )
+        try audioTrack.insertTimeRange(
+            range,
+            of: sourceAudioTrack,
+            at: .zero
+        )
+
+        return AVPlayerItem(asset: composition)
+    }
+
 }
 
 private enum PlayerSettingsPage {
