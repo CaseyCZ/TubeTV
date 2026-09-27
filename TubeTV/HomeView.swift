@@ -13,6 +13,7 @@ struct HomeView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var lastLoadedAt: Date?
+    @State private var homeLoadGeneration = UUID()
 
     var body: some View {
         NavigationStack {
@@ -83,7 +84,25 @@ struct HomeView: View {
                     await refreshHomeIfStale()
                 }
             }
+            .onReceive(
+                NotificationCenter.default.publisher(
+                    for: .youtubeAccountDidChange
+                )
+            ) { _ in
+                Task {
+                    await reloadHomeForAccountChange()
+                }
+            }
         }
+    }
+
+    @MainActor
+    private func reloadHomeForAccountChange() async {
+        lastLoadedAt = nil
+        homeContinuationToken = nil
+        loadingSectionIDs.removeAll()
+
+        await loadHome(force: true)
     }
 
     @MainActor
@@ -108,9 +127,20 @@ struct HomeView: View {
     ) async {
         guard force || sections.isEmpty else { return }
 
+        let generation = UUID()
+        homeLoadGeneration = generation
+
+        if force {
+            isLoadingMoreHomeSections = false
+        }
+
         isLoading = true
         errorMessage = nil
-        defer { isLoading = false }
+        defer {
+            if generation == homeLoadGeneration {
+                isLoading = false
+            }
+        }
 
         do {
             do {
@@ -120,6 +150,11 @@ struct HomeView: View {
                     try await InnerTubeService.shared
                         .homePage()
 
+                guard generation
+                        == homeLoadGeneration else {
+                    return
+                }
+
                 sections = page.sections
                 homeContinuationToken =
                     page.continuationToken
@@ -127,6 +162,11 @@ struct HomeView: View {
                 // Keep the public web parser only as a last-resort fallback.
                 let videos =
                     try await YouTubeService.shared.home()
+
+                guard generation
+                        == homeLoadGeneration else {
+                    return
+                }
 
                 sections = [
                     YouTubeHomeSection(
@@ -152,7 +192,9 @@ struct HomeView: View {
 
                 if homeContinuationToken != nil {
                     Task {
-                        await loadRemainingHomeSections()
+                        await loadRemainingHomeSections(
+                            generation: generation
+                        )
                     }
                 }
             }
@@ -162,8 +204,11 @@ struct HomeView: View {
     }
 
     @MainActor
-    private func loadRemainingHomeSections() async {
-        guard !isLoadingMoreHomeSections else {
+    private func loadRemainingHomeSections(
+        generation: UUID
+    ) async {
+        guard generation == homeLoadGeneration,
+              !isLoadingMoreHomeSections else {
             return
         }
 
@@ -180,6 +225,11 @@ struct HomeView: View {
                         .continueHomePage(
                             token
                         )
+
+                guard generation
+                        == homeLoadGeneration else {
+                    break
+                }
 
                 var seen = Set(
                     sections.map(\.id)

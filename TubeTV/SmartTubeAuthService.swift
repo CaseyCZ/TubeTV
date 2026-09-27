@@ -1,6 +1,13 @@
 import Foundation
 import Security
 
+extension Notification.Name {
+    static let youtubeAccountDidChange =
+        Notification.Name(
+            "TubeTV.YouTubeAccountDidChange"
+        )
+}
+
 struct TVClientCredentials: Hashable {
     let clientID: String
     let clientSecret: String
@@ -300,7 +307,11 @@ actor SmartTubeAuthService {
             let token = try JSONDecoder().decode(TVTokenResponse.self, from: response)
 
             if let refreshToken = token.refreshToken {
-                saveTokenResponse(token, refreshToken: refreshToken)
+                saveTokenResponse(
+                    token,
+                    refreshToken: refreshToken
+                )
+                postAccountChange()
                 return
             }
 
@@ -461,18 +472,54 @@ actor SmartTubeAuthService {
     }
 
     func selectAccount(_ profile: YouTubeAccountProfile) {
-        if let pageID = profile.pageID, !pageID.isEmpty {
-            UserDefaults.standard.set(pageID, forKey: selectedPageIDKey)
+        let previousPageID =
+            selectedPageID()
+        let nextPageID =
+            profile.pageID
+                .flatMap {
+                    $0.isEmpty
+                    ? nil
+                    : $0
+                }
+
+        if let nextPageID {
+            UserDefaults.standard.set(
+                nextPageID,
+                forKey: selectedPageIDKey
+            )
         } else {
-            UserDefaults.standard.removeObject(forKey: selectedPageIDKey)
+            UserDefaults.standard.removeObject(
+                forKey: selectedPageIDKey
+            )
+        }
+
+        if previousPageID != nextPageID {
+            postAccountChange()
         }
     }
 
     func signOut() {
+        let hadAccount =
+            signedIn()
+            || selectedPageID() != nil
+
         TubeTVKeychain.delete(refreshTokenKey)
         TubeTVKeychain.delete(accessTokenKey)
         TubeTVKeychain.delete(accessTokenExpiryKey)
-        UserDefaults.standard.removeObject(forKey: selectedPageIDKey)
+        UserDefaults.standard.removeObject(
+            forKey: selectedPageIDKey
+        )
+
+        if hadAccount {
+            postAccountChange()
+        }
+    }
+
+    private func postAccountChange() {
+        NotificationCenter.default.post(
+            name: .youtubeAccountDidChange,
+            object: nil
+        )
     }
 
     private func refreshAccessToken() async throws -> String {
