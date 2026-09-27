@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SearchView: View {
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @State private var query = ""
     @State private var results: [VideoItem] = []
     @State private var isSearching = false
@@ -17,11 +18,11 @@ struct SearchView: View {
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 28) {
-                Text("Hledat")
+                Text(L10n.text("search", languageCode: appLanguage))
                     .font(.largeTitle.bold())
 
                 HStack(spacing: 18) {
-                    TextField("Hledat na YouTube nebo vložit URL / video ID", text: $query)
+                    TextField(L10n.text("search_placeholder", languageCode: appLanguage), text: $query)
                         .textFieldStyle(.roundedBorder)
                         .onSubmit {
                             Task { await runSearch() }
@@ -34,7 +35,7 @@ struct SearchView: View {
                             if isSearching {
                                 ProgressView()
                             } else {
-                                Label("Hledat", systemImage: "magnifyingglass")
+                                Label(L10n.text("search", languageCode: appLanguage), systemImage: "magnifyingglass")
                             }
                         }
                         .disabled(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSearching)
@@ -43,7 +44,7 @@ struct SearchView: View {
 
                 if let videoID = directVideoID {
                     NavigationLink(value: VideoItem.youtube(videoID: videoID)) {
-                        Label("Přehrát vložené YouTube video", systemImage: "play.rectangle.fill")
+                        Label(L10n.text("play_pasted_video", languageCode: appLanguage), systemImage: "play.rectangle.fill")
                             .font(.title2.bold())
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -92,7 +93,7 @@ struct SearchView: View {
             results = try await YouTubeService.shared.search(query: trimmed)
 
             if results.isEmpty {
-                errorMessage = "YouTube nevrátil žádná videa."
+                errorMessage = L10n.text("youtube_no_videos", languageCode: appLanguage)
             }
         } catch {
             results = []
