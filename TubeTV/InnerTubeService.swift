@@ -516,6 +516,62 @@ actor InnerTubeService {
         )
     }
 
+    func createPlaylist(
+        named name: String,
+        adding videoID: String
+    ) async throws {
+        let trimmedName =
+            name.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+
+        guard !trimmedName.isEmpty,
+              !videoID.isEmpty else {
+            throw InnerTubeError.invalidResponse
+        }
+
+        let authorization =
+            try await SmartTubeAuthService.shared
+                .authorizationHeader()
+        let bootstrap =
+            try await SmartTubeAuthService.shared
+                .bootstrap()
+
+        var client: [String: Any] = [
+            "hl": L10n.currentLanguageCode,
+            "gl": "CZ",
+            "clientName": Self.webClientName,
+            "clientVersion":
+                Self.webClientVersion
+        ]
+
+        if let visitorData =
+                bootstrap.visitorData,
+           !visitorData.isEmpty {
+            client["visitorData"] =
+                visitorData
+        }
+
+        let payload: [String: Any] = [
+            "context": [
+                "client": client
+            ],
+            "title": trimmedName,
+            "videoIds": [videoID]
+        ]
+
+        _ = try await signedWebPost(
+            path: "playlist/create",
+            payload: payload,
+            authorization: authorization,
+            bootstrap: bootstrap
+        )
+
+        logger.notice(
+            "Playlist created name=\(trimmedName, privacy: .public) video=\(videoID, privacy: .public)"
+        )
+    }
+
     func videoLikeStatus(
         _ videoID: String
     ) async throws -> YouTubeLikeStatus {
@@ -1980,6 +2036,112 @@ actor InnerTubeService {
         )
         request.setValue(
             SmartTubeAuthService.tvClientVersion,
+            forHTTPHeaderField:
+                "X-YouTube-Client-Version"
+        )
+
+        if let visitorData =
+                bootstrap.visitorData,
+           !visitorData.isEmpty {
+            request.setValue(
+                visitorData,
+                forHTTPHeaderField:
+                    "X-Goog-Visitor-Id"
+            )
+        }
+
+        if let pageID =
+                await SmartTubeAuthService
+                    .shared
+                    .selectedPageID(),
+           !pageID.isEmpty {
+            request.setValue(
+                pageID,
+                forHTTPHeaderField:
+                    "X-Goog-Pageid"
+            )
+        }
+
+        request.httpBody =
+            try JSONSerialization.data(
+                withJSONObject: payload
+            )
+
+        let (data, response) =
+            try await URLSession.shared
+                .data(for: request)
+
+        guard let http =
+                response as? HTTPURLResponse,
+              (200..<300).contains(
+                http.statusCode
+              ) else {
+            throw InnerTubeError.invalidResponse
+        }
+
+        if data.isEmpty {
+            return [:]
+        }
+
+        guard let root =
+                try JSONSerialization
+                    .jsonObject(
+                        with: data
+                    ) as? [String: Any]
+        else {
+            throw InnerTubeError.invalidResponse
+        }
+
+        return root
+    }
+
+    private func signedWebPost(
+        path: String,
+        payload: [String: Any],
+        authorization: String,
+        bootstrap: TVBootstrap
+    ) async throws -> [String: Any] {
+        var components = URLComponents(
+            string:
+                "https://www.youtube.com/youtubei/v1/\(path)"
+        )
+
+        components?.queryItems = [
+            URLQueryItem(
+                name: "key",
+                value: Self.webAPIKey
+            )
+        ]
+
+        guard let url = components?.url else {
+            throw InnerTubeError.invalidResponse
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 25
+        request.setValue(
+            "application/json",
+            forHTTPHeaderField:
+                "Content-Type"
+        )
+        request.setValue(
+            "https://www.youtube.com",
+            forHTTPHeaderField:
+                "Origin"
+        )
+        request.setValue(
+            authorization,
+            forHTTPHeaderField:
+                "Authorization"
+        )
+        request.setValue(
+            Self.webClientNameID,
+            forHTTPHeaderField:
+                "X-YouTube-Client-Name"
+        )
+        request.setValue(
+            Self.webClientVersion,
             forHTTPHeaderField:
                 "X-YouTube-Client-Version"
         )

@@ -188,6 +188,7 @@ final class NativePlayerModel: ObservableObject {
         [YouTubePlaylistMembership] = []
     @Published private(set) var isLoadingPlaylists = false
     @Published private(set) var updatingPlaylistID: String?
+    @Published private(set) var isCreatingPlaylist = false
 
     private var currentSource: PlaybackSource
     private let youtubeVideoID: String?
@@ -531,6 +532,54 @@ final class NativePlayerModel: ObservableObject {
             playlistMemberships = []
             errorMessage =
                 error.localizedDescription
+        }
+    }
+
+    func createPlaylist(
+        named name: String
+    ) async -> Bool {
+        guard let youtubeVideoID,
+              !isCreatingPlaylist else {
+            return false
+        }
+
+        let trimmed =
+            name.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+
+        guard !trimmed.isEmpty else {
+            return false
+        }
+
+        guard await SmartTubeAuthService.shared
+            .signedIn() else {
+            errorMessage =
+                L10n.text(
+                    "sign_in_hint"
+                )
+            return false
+        }
+
+        isCreatingPlaylist = true
+        errorMessage = nil
+        defer {
+            isCreatingPlaylist = false
+        }
+
+        do {
+            try await InnerTubeService.shared
+                .createPlaylist(
+                    named: trimmed,
+                    adding: youtubeVideoID
+                )
+
+            await loadPlaylistMemberships()
+            return true
+        } catch {
+            errorMessage =
+                error.localizedDescription
+            return false
         }
     }
 
@@ -2037,6 +2086,7 @@ private struct PlayerSettingsOverlay: View {
     @ObservedObject var model: NativePlayerModel
     @Binding var page: PlayerSettingsPage
     @Binding var isPresented: Bool
+    @State private var newPlaylistName = ""
 
     var body: some View {
         HStack {
@@ -2401,6 +2451,55 @@ private struct PlayerSettingsOverlay: View {
     private var playlistsPage: some View {
         ScrollView {
             VStack(spacing: 12) {
+                HStack(spacing: 12) {
+                    TextField(
+                        L10n.text(
+                            "new_playlist_name",
+                            languageCode:
+                                appLanguage
+                        ),
+                        text: $newPlaylistName
+                    )
+
+                    Button {
+                        let name =
+                            newPlaylistName
+
+                        Task {
+                            if await model
+                                .createPlaylist(
+                                    named: name
+                                ) {
+                                newPlaylistName = ""
+                            }
+                        }
+                    } label: {
+                        if model.isCreatingPlaylist {
+                            ProgressView()
+                        } else {
+                            Label(
+                                L10n.text(
+                                    "create_playlist",
+                                    languageCode:
+                                        appLanguage
+                                ),
+                                systemImage:
+                                    "plus"
+                            )
+                        }
+                    }
+                    .disabled(
+                        newPlaylistName
+                            .trimmingCharacters(
+                                in:
+                                    .whitespacesAndNewlines
+                            )
+                            .isEmpty
+                        || model.isCreatingPlaylist
+                    )
+                }
+                .padding(.bottom, 8)
+
                 if model.isLoadingPlaylists {
                     ProgressView(
                         L10n.text(
