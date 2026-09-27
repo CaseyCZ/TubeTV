@@ -34,7 +34,7 @@ struct RootView: View {
     var body: some View {
         HStack(spacing: 0) {
             sidebar
-                .frame(width: 390)
+                .frame(width: 460)
 
             Group {
                 switch selection {

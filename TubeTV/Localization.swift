@@ -117,6 +117,16 @@ enum L10n {
             "signed_out": "YouTube account signed out.",
             "profile_error": "Profiles",
             "subtitles_preferred_status": "Subtitles",
+            "no_playback_source": "This video does not have a playable source yet.",
+            "adaptive_fallback": "Higher quality could not be combined. Playing a compatible version.",
+            "quality_change_error": "Quality change",
+            "loading_languages": "Loading available languages…",
+            "demo_player_title": "TubeTV – native player test",
+            "demo_player_subtitle": "Apple HLS test stream",
+            "demo_youtube_title": "Try a real YouTube video",
+            "demo_youtube_subtitle": "Paste a YouTube URL or 11-character video ID in Search",
+            "demo_captions_title": "Automatic subtitles",
+            "demo_captions_subtitle": "Choose your preferred subtitle language in Settings",
             "test": "TEST"
         ],
         "cs": [
