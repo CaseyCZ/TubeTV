@@ -27,7 +27,10 @@ struct HomeView: View {
                     }
 
                     if videos.isEmpty && !isLoading {
-                        VideoRow(title: "TubeTV", videos: VideoItem.demo)
+                        VideoRow(
+                            title: "TubeTV",
+                            videos: VideoItem.demo(languageCode: appLanguage)
+                        )
                     } else {
                         VideoRow(
                             title: L10n.text("recommended", languageCode: appLanguage),
