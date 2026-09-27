@@ -9,6 +9,7 @@ struct AccountFeedView: View {
     @State private var isLoading = true
     @State private var isLoadingMore = false
     @State private var errorMessage: String?
+    @State private var isSignedIn = false
 
     var body: some View {
         NavigationStack {
@@ -33,8 +34,10 @@ struct AccountFeedView: View {
                             )
                             .foregroundStyle(.red)
 
-                            Text(L10n.text("sign_in_hint", languageCode: appLanguage))
-                                .foregroundStyle(.secondary)
+                            if !isSignedIn {
+                                Text(L10n.text("sign_in_hint", languageCode: appLanguage))
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
 
@@ -104,6 +107,15 @@ struct AccountFeedView: View {
                     await load()
                 }
             }
+            .onReceive(
+                NotificationCenter.default.publisher(
+                    for: .youtubeAccountDidChange
+                )
+            ) { _ in
+                Task {
+                    await load()
+                }
+            }
         }
     }
 
@@ -111,6 +123,9 @@ struct AccountFeedView: View {
     private func load() async {
         isLoading = true
         errorMessage = nil
+        isSignedIn =
+            await SmartTubeAuthService.shared
+                .signedIn()
         defer { isLoading = false }
 
         do {
@@ -236,6 +251,7 @@ struct PlaylistsView: View {
     @State private var isLoading = true
     @State private var isLoadingMore = false
     @State private var errorMessage: String?
+    @State private var isSignedIn = false
 
     var body: some View {
         NavigationStack {
@@ -260,8 +276,10 @@ struct PlaylistsView: View {
                             )
                             .foregroundStyle(.red)
 
-                            Text(L10n.text("sign_in_hint", languageCode: appLanguage))
-                                .foregroundStyle(.secondary)
+                            if !isSignedIn {
+                                Text(L10n.text("sign_in_hint", languageCode: appLanguage))
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
 
@@ -323,6 +341,15 @@ struct PlaylistsView: View {
                     await load()
                 }
             }
+            .onReceive(
+                NotificationCenter.default.publisher(
+                    for: .youtubeAccountDidChange
+                )
+            ) { _ in
+                Task {
+                    await load()
+                }
+            }
         }
     }
 
@@ -330,6 +357,9 @@ struct PlaylistsView: View {
     private func load() async {
         isLoading = true
         errorMessage = nil
+        isSignedIn =
+            await SmartTubeAuthService.shared
+                .signedIn()
         defer { isLoading = false }
 
         do {
@@ -628,6 +658,7 @@ struct SubscribedChannelsView: View {
     @State private var channels: [YouTubeSubscribedChannel] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
+    @State private var isSignedIn = false
 
     var body: some View {
         NavigationStack {
@@ -665,13 +696,15 @@ struct SubscribedChannelsView: View {
                             )
                             .foregroundStyle(.red)
 
-                            Text(
-                                L10n.text(
-                                    "sign_in_hint",
-                                    languageCode: appLanguage
+                            if !isSignedIn {
+                                Text(
+                                    L10n.text(
+                                        "sign_in_hint",
+                                        languageCode: appLanguage
+                                    )
                                 )
-                            )
-                            .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondary)
+                            }
                         }
                     }
 
@@ -772,6 +805,15 @@ struct SubscribedChannelsView: View {
                     await load()
                 }
             }
+            .onReceive(
+                NotificationCenter.default.publisher(
+                    for: .youtubeAccountDidChange
+                )
+            ) { _ in
+                Task {
+                    await load()
+                }
+            }
         }
     }
 
@@ -779,6 +821,9 @@ struct SubscribedChannelsView: View {
     private func load() async {
         isLoading = true
         errorMessage = nil
+        isSignedIn =
+            await SmartTubeAuthService.shared
+                .signedIn()
         defer { isLoading = false }
 
         do {
