@@ -222,6 +222,37 @@ actor InnerTubeService {
         )
     }
 
+    func historyPage() async throws -> (
+        videos: [VideoItem],
+        continuationToken: String?
+    ) {
+        let root = try await browse(
+            AccountFeedKind.history.browseID
+        )
+
+        return (
+            Self.extractVideos(from: root),
+            Self.nextContinuationToken(from: root)
+        )
+    }
+
+    func continueHistory(
+        _ continuationToken: String
+    ) async throws -> (
+        videos: [VideoItem],
+        continuationToken: String?
+    ) {
+        let root = try await browse(
+            nil,
+            continuation: continuationToken
+        )
+
+        return (
+            Self.extractVideos(from: root),
+            Self.nextContinuationToken(from: root)
+        )
+    }
+
     func playlists() async throws -> [YouTubePlaylistItem] {
         let root = try await browse("FEplaylist_aggregation")
         return Self.extractPlaylists(from: root)

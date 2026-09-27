@@ -53,26 +53,28 @@ struct AccountFeedView: View {
                             }
                             .buttonStyle(.card)
                             .onAppear {
-                                guard kind == .subscriptions else {
-                                    return
-                                }
-
                                 let threshold =
                                     max(
                                         0,
                                         videos.count - 4
                                     )
 
-                                if index >= threshold {
-                                    Task {
+                                guard index >= threshold else {
+                                    return
+                                }
+
+                                Task {
+                                    switch kind {
+                                    case .subscriptions:
                                         await loadMoreSubscriptions()
+                                    case .history:
+                                        await loadMoreHistory()
                                     }
                                 }
                             }
                         }
 
-                        if kind == .subscriptions
-                            && isLoadingMore {
+                        if isLoadingMore {
                             ProgressView()
                                 .frame(
                                     width: 420,
@@ -99,7 +101,8 @@ struct AccountFeedView: View {
         defer { isLoading = false }
 
         do {
-            if kind == .subscriptions {
+            switch kind {
+            case .subscriptions:
                 let page =
                     try await InnerTubeService.shared
                         .subscriptionsPage()
@@ -107,11 +110,15 @@ struct AccountFeedView: View {
                 videos = page.videos
                 continuationToken =
                     page.continuationToken
-            } else {
-                videos =
+
+            case .history:
+                let page =
                     try await InnerTubeService.shared
-                        .videos(for: kind)
-                continuationToken = nil
+                        .historyPage()
+
+                videos = page.videos
+                continuationToken =
+                    page.continuationToken
             }
 
             if videos.isEmpty {
@@ -142,30 +149,70 @@ struct AccountFeedView: View {
                         token
                     )
 
-            var seen = Set(
-                videos.map(\.id)
+            append(
+                page.videos,
+                nextToken: page.continuationToken,
+                previousToken: token
             )
-            let newVideos =
-                page.videos.filter {
-                    seen.insert($0.id).inserted
-                }
-
-            videos.append(
-                contentsOf: newVideos
-            )
-
-            let nextToken =
-                page.continuationToken
-
-            continuationToken =
-                nextToken == token
-                    && newVideos.isEmpty
-                ? nil
-                : nextToken
         } catch {
             errorMessage =
                 error.localizedDescription
         }
+    }
+
+    @MainActor
+    private func loadMoreHistory() async {
+        guard kind == .history,
+              !isLoadingMore,
+              let token = continuationToken,
+              !token.isEmpty else {
+            return
+        }
+
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+
+        do {
+            let page =
+                try await InnerTubeService.shared
+                    .continueHistory(
+                        token
+                    )
+
+            append(
+                page.videos,
+                nextToken: page.continuationToken,
+                previousToken: token
+            )
+        } catch {
+            errorMessage =
+                error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func append(
+        _ incoming: [VideoItem],
+        nextToken: String?,
+        previousToken: String
+    ) {
+        var seen = Set(
+            videos.map(\.id)
+        )
+        let newVideos =
+            incoming.filter {
+                seen.insert($0.id).inserted
+            }
+
+        videos.append(
+            contentsOf: newVideos
+        )
+
+        continuationToken =
+            nextToken == previousToken
+                && newVideos.isEmpty
+            ? nil
+            : nextToken
     }
 }
 
