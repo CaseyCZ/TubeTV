@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 struct YouTubePlaylistItem: Identifiable, Hashable {
     let id: String
@@ -61,12 +62,34 @@ enum InnerTubeError: LocalizedError {
 actor InnerTubeService {
     static let shared = InnerTubeService()
 
+    private static let webClientName = "WEB"
+    private static let webClientVersion = "2.20260907.06.00"
+    private static let webClientNameID = "1"
+    private static let webAPIKey =
+        "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
+
+    private let logger = Logger(
+        subsystem: "cz.caseycz.tubetv",
+        category: "InnerTube"
+    )
+
+    private var browseVisitorData: String?
+
     func homeVideos() async throws -> [VideoItem] {
+        // SmartTubeIOS uses WEB + FEwhat_to_watch for anonymous Home
+        // and TVHTML5 for the authenticated personalised Home.
         let root = try await browse(
-            "default",
-            requireAuthentication: false
+            "FEwhat_to_watch",
+            requireAuthentication: false,
+            includeVisitorData: true
         )
-        return Self.extractVideos(from: root)
+        let videos = Self.extractVideos(from: root)
+
+        logger.notice(
+            "Home parsed videos=\(videos.count, privacy: .public)"
+        )
+
+        return videos
     }
 
     func videos(for kind: AccountFeedKind) async throws -> [VideoItem] {
@@ -108,7 +131,8 @@ actor InnerTubeService {
     private func browse(
         _ browseID: String,
         params: String? = nil,
-        requireAuthentication: Bool = true
+        requireAuthentication: Bool = true,
+        includeVisitorData: Bool = false
     ) async throws -> Any {
         let isSignedIn = await SmartTubeAuthService.shared.signedIn()
 
@@ -116,44 +140,39 @@ actor InnerTubeService {
             throw InnerTubeError.notSignedIn
         }
 
-        let bootstrap = try? await SmartTubeAuthService.shared.bootstrap()
+        let useWebClient = !isSignedIn && !requireAuthentication
         let authorization = isSignedIn
             ? try await SmartTubeAuthService.shared.authorizationHeader()
             : nil
 
-        let offsetMinutes = TimeZone.current.secondsFromGMT() / 60
+        let bootstrap = isSignedIn
+            ? try? await SmartTubeAuthService.shared.bootstrap()
+            : nil
 
-        var client: [String: Any] = [
-            "clientName": SmartTubeAuthService.tvClientName,
-            "clientVersion": SmartTubeAuthService.tvClientVersion,
-            "clientScreen": "WATCH",
-            "userAgent": SmartTubeAuthService.tvUserAgent,
-            "acceptLanguage": L10n.currentLanguageCode,
-            "acceptRegion": "CZ",
-            "utcOffsetMinutes": offsetMinutes,
-            "webpSupport": false,
-            "animatedWebpSupport": true,
-            "tvAppInfo": [
-                "appQuality": "TV_APP_QUALITY_FULL_ANIMATION",
-                "zylonLeftNav": true
+        let client: [String: Any]
+
+        if useWebClient {
+            // Mirrors SmartTubeIOS webClientContext for anonymous Home.
+            client = [
+                "hl": "en",
+                "gl": "US",
+                "clientName": Self.webClientName,
+                "clientVersion": Self.webClientVersion
             ]
-        ]
-
-        if let visitorData = bootstrap?.visitorData,
-           !visitorData.isEmpty {
-            client["visitorData"] = visitorData
+        } else {
+            // Authenticated browse is bound to the TV OAuth client.
+            client = [
+                "hl": L10n.currentLanguageCode,
+                "gl": "CZ",
+                "clientName": SmartTubeAuthService.tvClientName,
+                "clientVersion": SmartTubeAuthService.tvClientVersion
+            ]
         }
 
         var payload: [String: Any] = [
             "context": [
-                "client": client,
-                "user": [
-                    "enableSafetyMode": false,
-                    "lockedSafetyMode": false
-                ]
+                "client": client
             ],
-            "racyCheckOk": true,
-            "contentCheckOk": true,
             "browseId": browseID
         ]
 
@@ -161,59 +180,110 @@ actor InnerTubeService {
             payload["params"] = params
         }
 
-        var components = URLComponents(
-            string: "https://www.youtube.com/youtubei/v1/browse"
-        )!
-        components.queryItems = [
-            URLQueryItem(name: "prettyPrint", value: "false")
-        ]
+        if includeVisitorData {
+            let visitor =
+                browseVisitorData
+                ?? bootstrap?.visitorData
 
-        var request = URLRequest(url: components.url!)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 25
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(
-            SmartTubeAuthService.tvUserAgent,
-            forHTTPHeaderField: "User-Agent"
-        )
-        request.setValue(
-            SmartTubeAuthService.tvReferer,
-            forHTTPHeaderField: "Referer"
-        )
-        if let authorization {
-            request.setValue(
-                authorization,
-                forHTTPHeaderField: "Authorization"
-            )
+            if let visitor, !visitor.isEmpty {
+                payload["visitorData"] = visitor
+            }
         }
 
-        if isSignedIn,
-           let pageID = await SmartTubeAuthService.shared.selectedPageID(),
-           !pageID.isEmpty {
-            request.setValue(
-                pageID,
-                forHTTPHeaderField: "X-Goog-Pageid"
-            )
+        let endpoint = useWebClient
+            ? "https://www.youtube.com/youtubei/v1/browse"
+            : "https://youtubei.googleapis.com/youtubei/v1/browse"
+
+        var components = URLComponents(string: endpoint)!
+
+        if useWebClient {
+            components.queryItems = [
+                URLQueryItem(
+                    name: "key",
+                    value: Self.webAPIKey
+                )
+            ]
         }
 
-        if let visitorData = bootstrap?.visitorData,
-           !visitorData.isEmpty {
-            request.setValue(
-                visitorData,
-                forHTTPHeaderField: "X-Goog-Visitor-Id"
-            )
-        }
-
-        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let http = response as? HTTPURLResponse,
-              (200..<300).contains(http.statusCode) else {
+        guard let url = components.url else {
             throw InnerTubeError.invalidResponse
         }
 
-        return try JSONSerialization.jsonObject(with: data)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 25
+        request.setValue(
+            "application/json",
+            forHTTPHeaderField: "Content-Type"
+        )
+
+        if useWebClient {
+            request.setValue(
+                "https://www.youtube.com",
+                forHTTPHeaderField: "Origin"
+            )
+            request.setValue(
+                Self.webClientNameID,
+                forHTTPHeaderField: "X-YouTube-Client-Name"
+            )
+            request.setValue(
+                Self.webClientVersion,
+                forHTTPHeaderField: "X-YouTube-Client-Version"
+            )
+        } else {
+            request.setValue(
+                "7",
+                forHTTPHeaderField: "X-YouTube-Client-Name"
+            )
+            request.setValue(
+                SmartTubeAuthService.tvClientVersion,
+                forHTTPHeaderField: "X-YouTube-Client-Version"
+            )
+
+            if let authorization {
+                request.setValue(
+                    authorization,
+                    forHTTPHeaderField: "Authorization"
+                )
+            }
+
+            if let pageID =
+                await SmartTubeAuthService.shared.selectedPageID(),
+               !pageID.isEmpty {
+                request.setValue(
+                    pageID,
+                    forHTTPHeaderField: "X-Goog-Pageid"
+                )
+            }
+        }
+
+        request.httpBody =
+            try JSONSerialization.data(withJSONObject: payload)
+
+        let (data, response) =
+            try await URLSession.shared.data(for: request)
+
+        guard let http = response as? HTTPURLResponse,
+              (200..<300).contains(http.statusCode),
+              let root = try JSONSerialization.jsonObject(
+                with: data
+              ) as? [String: Any] else {
+            throw InnerTubeError.invalidResponse
+        }
+
+        if let responseContext =
+                root["responseContext"] as? [String: Any],
+           let visitor =
+                responseContext["visitorData"] as? String,
+           !visitor.isEmpty {
+            browseVisitorData = visitor
+        }
+
+        logger.notice(
+            "Browse client=\(useWebClient ? "WEB" : "TV", privacy: .public) id=\(browseID, privacy: .public) status=\(http.statusCode, privacy: .public)"
+        )
+
+        return root
     }
 
     private static func channelMetadata(
