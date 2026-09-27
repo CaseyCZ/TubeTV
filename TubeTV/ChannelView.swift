@@ -98,7 +98,15 @@ struct ChannelView: View {
         defer { isLoading = false }
 
         do {
-            page = try await InnerTubeService.shared.channel(channelID)
+            if await SmartTubeAuthService.shared.signedIn() {
+                do {
+                    page = try await InnerTubeService.shared.channel(channelID)
+                } catch {
+                    page = try await YouTubeService.shared.channel(channelID)
+                }
+            } else {
+                page = try await YouTubeService.shared.channel(channelID)
+            }
 
             if page?.videos.isEmpty == true {
                 errorMessage = "Kanál nevrátil žádná dostupná videa."
