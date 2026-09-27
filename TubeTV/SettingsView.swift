@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 
 struct SettingsView: View {
@@ -23,6 +24,17 @@ struct SettingsView: View {
                         Text("1440p").tag("1440p")
                         Text("4K / 2160p").tag("2160p")
                     }
+
+                    Label(
+                        AVPlayer.eligibleForHDRPlayback
+                            ? "HDR výstup je dostupný"
+                            : "HDR výstup aktuálně není dostupný",
+                        systemImage:
+                            AVPlayer.eligibleForHDRPlayback
+                                ? "sparkles.tv"
+                                : "tv.slash"
+                    )
+                    .foregroundStyle(.secondary)
                 }
 
                 Section("Titulky") {
