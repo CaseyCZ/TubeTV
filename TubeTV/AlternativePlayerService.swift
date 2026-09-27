@@ -128,7 +128,7 @@ actor AlternativePlayerService {
             "clientName": client.name,
             "clientVersion": client.version,
             "userAgent": client.userAgent,
-            "acceptLanguage": "cs",
+            "acceptLanguage": L10n.currentLanguageCode,
             "acceptRegion": "CZ",
             "utcOffsetMinutes": TimeZone.current.secondsFromGMT() / 60
         ]
