@@ -7,6 +7,14 @@ struct YouTubePlaylistItem: Identifiable, Hashable {
     let thumbnailURL: URL?
 }
 
+struct YouTubeChannelPage: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let description: String
+    let avatarURL: URL?
+    let videos: [VideoItem]
+}
+
 enum AccountFeedKind: String, CaseIterable, Identifiable {
     case subscriptions = "Odběry"
     case history = "Historie"
@@ -73,7 +81,27 @@ actor InnerTubeService {
         return Self.extractVideos(from: root)
     }
 
-    private func browse(_ browseID: String) async throws -> Any {
+    func channel(_ channelID: String) async throws -> YouTubeChannelPage {
+        let root = try await browse(
+            channelID,
+            params: "EgZ2aWRlb3PyBgQKAjoA"
+        )
+
+        let metadata = Self.channelMetadata(from: root)
+
+        return YouTubeChannelPage(
+            id: channelID,
+            title: metadata.title ?? "YouTube kanál",
+            description: metadata.description ?? "",
+            avatarURL: metadata.avatarURL,
+            videos: Self.extractVideos(from: root)
+        )
+    }
+
+    private func browse(
+        _ browseID: String,
+        params: String? = nil
+    ) async throws -> Any {
         guard await SmartTubeAuthService.shared.signedIn() else {
             throw InnerTubeError.notSignedIn
         }
@@ -104,7 +132,7 @@ actor InnerTubeService {
             client["visitorData"] = visitorData
         }
 
-        let payload: [String: Any] = [
+        var payload: [String: Any] = [
             "context": [
                 "client": client,
                 "user": [
@@ -116,6 +144,10 @@ actor InnerTubeService {
             "contentCheckOk": true,
             "browseId": browseID
         ]
+
+        if let params, !params.isEmpty {
+            payload["params"] = params
+        }
 
         var components = URLComponents(
             string: "https://www.youtube.com/youtubei/v1/browse"
@@ -167,6 +199,35 @@ actor InnerTubeService {
         }
 
         return try JSONSerialization.jsonObject(with: data)
+    }
+
+    private static func channelMetadata(
+        from node: Any
+    ) -> (title: String?, description: String?, avatarURL: URL?) {
+        if let dictionary = node as? [String: Any] {
+            if let renderer = dictionary["channelMetadataRenderer"] as? [String: Any] {
+                let title = renderer["title"] as? String
+                let description = renderer["description"] as? String
+                let avatarURL = thumbnailURL(from: renderer["avatar"])
+                return (title, description, avatarURL)
+            }
+
+            for value in dictionary.values {
+                let result = channelMetadata(from: value)
+                if result.title != nil || result.description != nil || result.avatarURL != nil {
+                    return result
+                }
+            }
+        } else if let array = node as? [Any] {
+            for value in array {
+                let result = channelMetadata(from: value)
+                if result.title != nil || result.description != nil || result.avatarURL != nil {
+                    return result
+                }
+            }
+        }
+
+        return (nil, nil, nil)
     }
 
     private static func extractVideos(from root: Any) -> [VideoItem] {
