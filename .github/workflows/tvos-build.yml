@@ -111,7 +111,8 @@ jobs:
           xcrun simctl terminate "$UDID" cz.caseycz.tubetv || true
 
           SIMCTL_CHILD_TUBETV_CI_VIDEO_SMOKE=1 \
-          SIMCTL_CHILD_TUBETV_CI_VIDEO_ID=jNQXAC9IVRw \
+          # Same regression video SmartTubeIOS uses to exercise Android fallback on Simulator.
+          SIMCTL_CHILD_TUBETV_CI_VIDEO_ID=Dy9ki9Q5nXs \
             xcrun simctl launch "$UDID" cz.caseycz.tubetv \
             > video-smoke-launch.txt
 
