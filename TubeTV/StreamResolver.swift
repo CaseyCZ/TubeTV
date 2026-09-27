@@ -46,14 +46,68 @@ enum PlaybackSource: Hashable {
 enum StreamResolverError: LocalizedError {
     case invalidVideoID
     case noPlayableStream
+    case ipBlocked(String)
+    case signInRequired
 
     var errorDescription: String? {
         switch self {
         case .invalidVideoID:
-            return "Neplatné YouTube video ID."
+            return L10n.text("invalid_video_id")
         case .noPlayableStream:
-            return "Pro toto video se nepodařilo najít stream přehratelný na Apple TV."
+            return L10n.text("no_playable_stream")
+        case .ipBlocked:
+            return L10n.text("youtube_network_blocked")
+        case .signInRequired:
+            return L10n.text("youtube_sign_in_required")
         }
+    }
+
+    static func playabilityError(
+        status: String,
+        reason: String
+    ) -> StreamResolverError? {
+        let lowerReason = reason.lowercased()
+
+        // Match SmartTubeIOS IPBlockDetectionTests. This must run
+        // before generic LOGIN_REQUIRED handling because YouTube uses
+        // LOGIN_REQUIRED for "Sign in to confirm you're not a bot".
+        let ipBlockKeywords = [
+            "your ip",
+            "ip address",
+            "vpn",
+            "proxy",
+            "bot",
+            "sign in to confirm"
+        ]
+
+        if ipBlockKeywords.contains(
+            where: { lowerReason.contains($0) }
+        ) {
+            return .ipBlocked(reason)
+        }
+
+        let signInStatuses: Set<String> = [
+            "LOGIN_REQUIRED",
+            "AGE_VERIFICATION_REQUIRED",
+            "AGE_CHECK_REQUIRED"
+        ]
+
+        let signInKeywords = [
+            "sign in",
+            "age-restricted",
+            "age restricted",
+            "18+",
+            "age verification"
+        ]
+
+        if signInStatuses.contains(status)
+            || signInKeywords.contains(
+                where: { lowerReason.contains($0) }
+            ) {
+            return .signInRequired
+        }
+
+        return nil
     }
 }
 
@@ -66,14 +120,24 @@ enum StreamResolver {
             throw StreamResolverError.invalidVideoID
         }
 
+        var meaningfulError: StreamResolverError?
+
         if await SmartTubeAuthService.shared.signedIn() {
             do {
                 return try await AuthenticatedPlayerService.shared.resolve(
                     videoID: videoID,
                     preferredQuality: preferredQuality
                 )
+            } catch let error as StreamResolverError {
+                if case .ipBlocked = error {
+                    // SmartTubeIOS short-circuits IP blocks because repeated
+                    // /player requests can prolong the network block.
+                    throw error
+                }
+
+                meaningfulError = error
             } catch {
-                // Continue with alternative ad-free player clients.
+                // Continue with the same unauthenticated fallbacks SmartTube uses.
             }
         }
 
@@ -82,32 +146,60 @@ enum StreamResolver {
                 videoID: videoID,
                 preferredQuality: preferredQuality
             )
+        } catch let error as StreamResolverError {
+            if case .ipBlocked = error {
+                throw error
+            }
+
+            if case .signInRequired = error {
+                // Do not let YouTubeKit replace a useful sign-in/age-gate
+                // diagnosis with a generic extraction error.
+                throw error
+            }
+
+            meaningfulError = error
         } catch {
             // Final direct-stream fallback.
         }
 
-        let streams = try await YouTube(videoID: videoID).streams
+        do {
+            let streams = try await YouTube(videoID: videoID).streams
 
-        let combined = streams
-            .filterVideoAndAudio()
-            .filter { $0.isNativelyPlayable }
+            let combined = streams
+                .filterVideoAndAudio()
+                .filter { $0.isNativelyPlayable }
 
-        let fallbackURL = bestVideoStream(combined)?.url
+            let fallbackURL = bestVideoStream(combined)?.url
 
-        let videoOnly = streams
-            .filterVideoOnly()
-            .filter { $0.isNativelyPlayable }
+            let videoOnly = streams
+                .filterVideoOnly()
+                .filter { $0.isNativelyPlayable }
 
-        let audioOnly = streams
-            .filterAudioOnly()
-            .filter { $0.isNativelyPlayable }
+            let audioOnly = streams
+                .filterAudioOnly()
+                .filter { $0.isNativelyPlayable }
 
-        if let requestedHeight = requestedHeight(for: preferredQuality) {
-            if let video = bestVideoStream(
-                videoOnly,
-                requestedHeight: requestedHeight
-            ),
-               let audio = audioOnly.highestAudioBitrateStream() {
+            if let requestedHeight = requestedHeight(for: preferredQuality) {
+                if let video = bestVideoStream(
+                    videoOnly,
+                    requestedHeight: requestedHeight
+                ),
+                   let audio = audioOnly.highestAudioBitrateStream() {
+                    return .adaptive(
+                        video: video.url,
+                        audio: audio.url,
+                        fallback: fallbackURL
+                    )
+                }
+
+                if let exactCombined = bestVideoStream(
+                    combined,
+                    requestedHeight: requestedHeight
+                ) {
+                    return .direct(exactCombined.url)
+                }
+            } else if let video = bestVideoStream(videoOnly),
+                      let audio = audioOnly.highestAudioBitrateStream() {
                 return .adaptive(
                     video: video.url,
                     audio: audio.url,
@@ -115,26 +207,20 @@ enum StreamResolver {
                 )
             }
 
-            if let exactCombined = bestVideoStream(
-                combined,
-                requestedHeight: requestedHeight
-            ) {
-                return .direct(exactCombined.url)
+            guard let fallbackURL else {
+                throw meaningfulError
+                    ?? StreamResolverError.noPlayableStream
             }
-        } else if let video = bestVideoStream(videoOnly),
-                  let audio = audioOnly.highestAudioBitrateStream() {
-            return .adaptive(
-                video: video.url,
-                audio: audio.url,
-                fallback: fallbackURL
-            )
+
+            return .direct(fallbackURL)
+        } catch {
+            if let meaningfulError {
+                throw meaningfulError
+            }
+
+            throw error
         }
 
-        guard let fallbackURL else {
-            throw StreamResolverError.noPlayableStream
-        }
-
-        return .direct(fallbackURL)
     }
 
     private static func bestVideoStream(
