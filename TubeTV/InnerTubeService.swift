@@ -27,6 +27,23 @@ struct YouTubeSearchTile: Identifiable, Hashable {
     let thumbnailURL: URL?
 }
 
+enum YouTubeSearchResultItem: Identifiable, Hashable {
+    case video(VideoItem)
+    case channel(YouTubeSubscribedChannel)
+    case playlist(YouTubePlaylistItem)
+
+    var id: String {
+        switch self {
+        case .video(let video):
+            return "video-\(video.id)"
+        case .channel(let channel):
+            return "channel-\(channel.id)"
+        case .playlist(let playlist):
+            return "playlist-\(playlist.id)"
+        }
+    }
+}
+
 struct YouTubeHomeSection: Identifiable, Hashable {
     let id: String
     let title: String
@@ -207,7 +224,7 @@ actor InnerTubeService {
     func searchPage(
         _ query: String
     ) async throws -> (
-        videos: [VideoItem],
+        items: [YouTubeSearchResultItem],
         continuationToken: String?
     ) {
         let trimmed =
@@ -226,7 +243,9 @@ actor InnerTubeService {
             )
 
         return (
-            Self.extractVideos(from: root),
+            Self.extractSearchResultItems(
+                from: root
+            ),
             Self.nextContinuationToken(
                 from: root
             )
@@ -236,7 +255,7 @@ actor InnerTubeService {
     func continueSearch(
         _ continuationToken: String
     ) async throws -> (
-        videos: [VideoItem],
+        items: [YouTubeSearchResultItem],
         continuationToken: String?
     ) {
         let root =
@@ -247,7 +266,9 @@ actor InnerTubeService {
             )
 
         return (
-            Self.extractVideos(from: root),
+            Self.extractSearchResultItems(
+                from: root
+            ),
             Self.nextContinuationToken(
                 from: root
             )
@@ -1208,7 +1229,7 @@ actor InnerTubeService {
         }
 
         logger.notice(
-            "Search client=TV continuation=\(continuation != nil, privacy: .public) videos=\(Self.extractVideos(from: root).count, privacy: .public)"
+            "Search client=TV continuation=\(continuation != nil, privacy: .public) items=\(Self.extractSearchResultItems(from: root).count, privacy: .public)"
         )
 
         return root
@@ -1417,6 +1438,174 @@ actor InnerTubeService {
         }
 
         return (nil, nil, nil)
+    }
+
+    private static func extractSearchResultItems(
+        from root: Any
+    ) -> [YouTubeSearchResultItem] {
+        var dictionaries: [[String: Any]] = []
+        collectDictionaries(
+            from: root,
+            into: &dictionaries
+        )
+
+        var seen = Set<String>()
+        var result: [YouTubeSearchResultItem] = []
+
+        for dictionary in dictionaries {
+            guard let renderer =
+                    dictionary["tileRenderer"]
+                    as? [String: Any],
+                  let contentType =
+                    renderer["contentType"]
+                    as? String else {
+                continue
+            }
+
+            switch contentType {
+            case "TILE_CONTENT_TYPE_VIDEO":
+                guard let video =
+                        extractVideos(
+                            from: renderer
+                        ).first else {
+                    continue
+                }
+
+                let identity =
+                    "video-\(video.id)"
+                guard seen.insert(identity).inserted else {
+                    continue
+                }
+
+                result.append(
+                    .video(video)
+                )
+
+            case "TILE_CONTENT_TYPE_CHANNEL":
+                let channelID =
+                    (renderer["contentId"] as? String)
+                    ?? findChannelID(
+                        in: renderer
+                    )
+
+                guard let channelID,
+                      channelID.hasPrefix("UC")
+                else {
+                    continue
+                }
+
+                let title =
+                    firstText(
+                        in: renderer,
+                        keys: [
+                            "title",
+                            "headline",
+                            "primaryText"
+                        ]
+                    )
+                    ?? metadataTexts(
+                        from: renderer
+                    ).first
+                    ?? "YouTube"
+
+                let channel =
+                    YouTubeSubscribedChannel(
+                        id: channelID,
+                        title: title,
+                        thumbnailURL:
+                            firstThumbnailURL(
+                                in: renderer
+                            )
+                    )
+                let identity =
+                    "channel-\(channel.id)"
+                guard seen.insert(identity).inserted else {
+                    continue
+                }
+
+                result.append(
+                    .channel(channel)
+                )
+
+            case "TILE_CONTENT_TYPE_PLAYLIST":
+                let directID =
+                    renderer["contentId"]
+                        as? String
+                let browseID =
+                    nested(
+                        renderer,
+                        path: [
+                            "onSelectCommand",
+                            "browseEndpoint",
+                            "browseId"
+                        ]
+                    ) as? String
+                let playlistID =
+                    (browseID?.hasPrefix("VL") == true)
+                        ? browseID
+                        : directID
+
+                guard let playlistID,
+                      !playlistID.isEmpty else {
+                    continue
+                }
+
+                let title =
+                    firstText(
+                        in: renderer,
+                        keys: [
+                            "title",
+                            "headline",
+                            "primaryText"
+                        ]
+                    )
+                    ?? "YouTube playlist"
+
+                let metadata =
+                    metadataTexts(
+                        from: renderer
+                    )
+                    .filter {
+                        !$0.isEmpty
+                            && $0 != title
+                    }
+
+                let playlist =
+                    YouTubePlaylistItem(
+                        id: playlistID,
+                        title: title,
+                        subtitle:
+                            metadata.first
+                            ?? "",
+                        thumbnailURL:
+                            firstThumbnailURL(
+                                in: renderer
+                            )
+                    )
+                let identity =
+                    "playlist-\(playlist.id)"
+                guard seen.insert(identity).inserted else {
+                    continue
+                }
+
+                result.append(
+                    .playlist(playlist)
+                )
+
+            default:
+                continue
+            }
+        }
+
+        if result.isEmpty {
+            return extractVideos(
+                from: root
+            ).map {
+                .video($0)
+            }
+        }
+
+        return result
     }
 
     private static func extractVideos(from root: Any) -> [VideoItem] {

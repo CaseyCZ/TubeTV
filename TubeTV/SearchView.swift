@@ -5,7 +5,7 @@ struct SearchView: View {
 
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @State private var query = ""
-    @State private var results: [VideoItem] = []
+    @State private var results: [YouTubeSearchResultItem] = []
     @State private var continuationToken: String?
     @State private var isSearching = false
     @State private var isLoadingMore = false
@@ -23,9 +23,13 @@ struct SearchView: View {
         StreamResolver.videoID(from: query)
     }
 
-    private var visibleResults: [VideoItem] {
+    private var visibleResults: [YouTubeSearchResultItem] {
         query.isEmpty
-            ? VideoItem.demo(languageCode: appLanguage)
+            ? VideoItem.demo(
+                languageCode: appLanguage
+            ).map {
+                .video($0)
+            }
             : results
     }
 
@@ -78,14 +82,11 @@ struct SearchView: View {
                             visibleResults.indices,
                             id: \.self
                         ) { index in
-                            let video =
+                            let item =
                                 visibleResults[index]
 
-                            NavigationLink(value: video) {
-                                VideoCard(video: video)
-                            }
-                            .buttonStyle(.card)
-                            .onAppear {
+                            searchResultView(item)
+                                .onAppear {
                                 guard !query.isEmpty,
                                       index
                                         >= max(
@@ -143,6 +144,98 @@ struct SearchView: View {
         }
     }
 
+    @ViewBuilder
+    private func searchResultView(
+        _ item: YouTubeSearchResultItem
+    ) -> some View {
+        switch item {
+        case .video(let video):
+            NavigationLink(value: video) {
+                VideoCard(video: video)
+            }
+            .buttonStyle(.card)
+
+        case .channel(let channel):
+            NavigationLink {
+                ChannelView(
+                    channelID: channel.id,
+                    fallbackTitle:
+                        channel.title
+                )
+            } label: {
+                VStack(spacing: 14) {
+                    Group {
+                        if let url =
+                                channel.thumbnailURL {
+                            AsyncImage(url: url) {
+                                phase in
+                                switch phase {
+                                case .success(
+                                    let image
+                                ):
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                case .empty:
+                                    ProgressView()
+                                default:
+                                    Image(
+                                        systemName:
+                                            "person.crop.circle.fill"
+                                    )
+                                    .resizable()
+                                    .scaledToFit()
+                                    .foregroundStyle(
+                                        .secondary
+                                    )
+                                }
+                            }
+                        } else {
+                            Image(
+                                systemName:
+                                    "person.crop.circle.fill"
+                            )
+                            .resizable()
+                            .scaledToFit()
+                            .foregroundStyle(
+                                .secondary
+                            )
+                        }
+                    }
+                    .frame(
+                        width: 210,
+                        height: 210
+                    )
+                    .clipShape(Circle())
+
+                    Text(channel.title)
+                        .font(.headline)
+                        .lineLimit(2)
+                        .multilineTextAlignment(
+                            .center
+                        )
+                }
+                .frame(
+                    minWidth: 300,
+                    minHeight: 280
+                )
+            }
+            .buttonStyle(.card)
+
+        case .playlist(let playlist):
+            NavigationLink {
+                PlaylistDetailView(
+                    playlist: playlist
+                )
+            } label: {
+                PlaylistCard(
+                    playlist: playlist
+                )
+            }
+            .buttonStyle(.card)
+        }
+    }
+
     @MainActor
     private func runSearch() async {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -169,7 +262,7 @@ struct SearchView: View {
                 return
             }
 
-            results = page.videos
+            results = page.items
             continuationToken =
                 page.continuationToken
 
@@ -225,15 +318,15 @@ struct SearchView: View {
             var seen = Set(
                 results.map(\.id)
             )
-            let newVideos =
-                page.videos.filter {
+            let newItems =
+                page.items.filter {
                     seen.insert(
                         $0.id
                     ).inserted
                 }
 
             results.append(
-                contentsOf: newVideos
+                contentsOf: newItems
             )
 
             let nextToken =
@@ -241,7 +334,7 @@ struct SearchView: View {
 
             continuationToken =
                 nextToken == token
-                    && newVideos.isEmpty
+                    && newItems.isEmpty
                 ? nil
                 : nextToken
         } catch {
