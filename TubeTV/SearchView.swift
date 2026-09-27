@@ -23,7 +23,6 @@ struct SearchView: View {
 
                 HStack(spacing: 18) {
                     TextField(L10n.text("search_placeholder", languageCode: appLanguage), text: $query)
-                        .textFieldStyle(.roundedBorder)
                         .onSubmit {
                             Task { await runSearch() }
                         }
