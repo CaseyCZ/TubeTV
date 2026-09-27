@@ -1,5 +1,8 @@
 # TubeTV
 
+![tvOS Build](https://github.com/CaseyCZ/TubeTV/actions/workflows/tvos-build.yml/badge.svg?branch=Master)
+
+
 Native Apple TV (tvOS) YouTube client experiment built with **Swift + SwiftUI**.
 
 TubeTV is an independent project and is not affiliated with YouTube, Google, or SmartTube.
