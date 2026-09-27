@@ -184,16 +184,6 @@ final class NativePlayerModel: ObservableObject {
         self.allowCaptionTranslation = allowCaptionTranslation
     }
 
-    deinit {
-        if let timeObserver {
-            player.removeTimeObserver(timeObserver)
-        }
-
-        if let trackingObserver {
-            player.removeTimeObserver(trackingObserver)
-        }
-    }
-
     func prepareAndPlay() async {
         guard !didPrepare else {
             play()
@@ -235,6 +225,21 @@ final class NativePlayerModel: ObservableObject {
     func pause() {
         sendHistoryProgress()
         player.pause()
+    }
+
+    func cleanup() {
+        sendHistoryProgress()
+        player.pause()
+
+        if let timeObserver {
+            player.removeTimeObserver(timeObserver)
+            self.timeObserver = nil
+        }
+
+        if let trackingObserver {
+            player.removeTimeObserver(trackingObserver)
+            self.trackingObserver = nil
+        }
     }
 
     func play() {
@@ -393,7 +398,9 @@ final class NativePlayerModel: ObservableObject {
             forInterval: interval,
             queue: .main
         ) { [weak self] _ in
-            self?.sendHistoryProgress()
+            Task { @MainActor [weak self] in
+                self?.sendHistoryProgress()
+            }
         }
     }
 
@@ -459,17 +466,20 @@ final class NativePlayerModel: ObservableObject {
             forInterval: interval,
             queue: .main
         ) { [weak self] time in
-            guard let self else { return }
-
             let seconds = time.seconds
 
-            guard seconds.isFinite,
-                  self.captionsAreEnabled else {
-                self.currentCaption = ""
-                return
-            }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
 
-            self.currentCaption = self.captionText(at: seconds) ?? ""
+                guard seconds.isFinite,
+                      self.captionsAreEnabled else {
+                    self.currentCaption = ""
+                    return
+                }
+
+                self.currentCaption =
+                    self.captionText(at: seconds) ?? ""
+            }
         }
     }
 
@@ -693,7 +703,7 @@ struct NativePlayerView: View {
             await model.prepareAndPlay()
         }
         .onDisappear {
-            model.pause()
+            model.cleanup()
         }
         .onExitCommand {
             if showSettings {
