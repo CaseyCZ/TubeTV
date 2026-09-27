@@ -81,6 +81,15 @@ actor YouTubeTrackingService {
             authorization,
             forHTTPHeaderField: "Authorization"
         )
+
+        if let pageID = await SmartTubeAuthService.shared.selectedPageID(),
+           !pageID.isEmpty {
+            request.setValue(
+                pageID,
+                forHTTPHeaderField: "X-Goog-Pageid"
+            )
+        }
+
         request.setValue("7", forHTTPHeaderField: "X-Youtube-Client-Name")
         request.setValue(
             SmartTubeAuthService.tvClientVersion,
@@ -112,13 +121,13 @@ actor YouTubeTrackingService {
             throw YouTubeTrackingError.trackingDataUnavailable
         }
 
-        let query = Dictionary(
-            uniqueKeysWithValues: (components.queryItems ?? []).compactMap {
-                item -> (String, String)? in
-                guard let value = item.value else { return nil }
-                return (item.name, value)
+        var query: [String: String] = [:]
+
+        for item in components.queryItems ?? [] {
+            if let value = item.value {
+                query[item.name] = value
             }
-        )
+        }
 
         guard let eventID = query["ei"],
               let vm = query["vm"],
@@ -289,6 +298,14 @@ actor YouTubeTrackingService {
             authorization,
             forHTTPHeaderField: "Authorization"
         )
+
+        if let pageID = await SmartTubeAuthService.shared.selectedPageID(),
+           !pageID.isEmpty {
+            request.setValue(
+                pageID,
+                forHTTPHeaderField: "X-Goog-Pageid"
+            )
+        }
 
         if let visitorData, !visitorData.isEmpty {
             request.setValue(
