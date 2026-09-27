@@ -1,18 +1,18 @@
 import Foundation
 
 enum YouTubeServiceError: LocalizedError {
-    case invalidSearchURL
+    case invalidURL
     case invalidResponse
     case initialDataNotFound
 
     var errorDescription: String? {
         switch self {
-        case .invalidSearchURL:
-            return "Nepodařilo se sestavit YouTube vyhledávání."
+        case .invalidURL:
+            return "Nepodařilo se sestavit požadavek na YouTube."
         case .invalidResponse:
             return "YouTube vrátil neplatnou odpověď."
         case .initialDataNotFound:
-            return "Nepodařilo se načíst výsledky YouTube. Struktura stránky se mohla změnit."
+            return "Nepodařilo se načíst data YouTube. Struktura stránky se mohla změnit."
         }
     }
 }
@@ -21,7 +21,17 @@ actor YouTubeService {
     static let shared = YouTubeService()
 
     func home() async throws -> [VideoItem] {
-        VideoItem.demo
+        var components = URLComponents(string: "https://www.youtube.com/")
+        components?.queryItems = [
+            URLQueryItem(name: "hl", value: "cs"),
+            URLQueryItem(name: "gl", value: "CZ")
+        ]
+
+        guard let url = components?.url else {
+            throw YouTubeServiceError.invalidURL
+        }
+
+        return try await fetchVideos(from: url)
     }
 
     func search(query: String) async throws -> [VideoItem] {
@@ -36,17 +46,16 @@ actor YouTubeService {
         ]
 
         guard let url = components?.url else {
-            throw YouTubeServiceError.invalidSearchURL
+            throw YouTubeServiceError.invalidURL
         }
 
+        return try await fetchVideos(from: url)
+    }
+
+    private func fetchVideos(from url: URL) async throws -> [VideoItem] {
         var request = URLRequest(url: url)
         request.timeoutInterval = 20
-        request.setValue(
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140 Safari/537.36",
-            forHTTPHeaderField: "User-Agent"
-        )
-        request.setValue("cs-CZ,cs;q=0.9,en;q=0.7", forHTTPHeaderField: "Accept-Language")
-        request.setValue("CONSENT=YES+cb.20210328-17-p0.en+FX+667", forHTTPHeaderField: "Cookie")
+        Self.applyYouTubeHeaders(to: &request)
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -102,7 +111,7 @@ actor YouTubeService {
                 )
             )
 
-            if videos.count >= 40 {
+            if videos.count >= 60 {
                 break
             }
         }
@@ -161,6 +170,15 @@ actor YouTubeService {
         }
 
         return nil
+    }
+
+    private static func applyYouTubeHeaders(to request: inout URLRequest) {
+        request.setValue(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140 Safari/537.36",
+            forHTTPHeaderField: "User-Agent"
+        )
+        request.setValue("cs-CZ,cs;q=0.9,en;q=0.7", forHTTPHeaderField: "Accept-Language")
+        request.setValue("CONSENT=YES+cb.20210328-17-p0.en+FX+667", forHTTPHeaderField: "Cookie")
     }
 
     private static func extractInitialData(from html: String) -> Data? {
