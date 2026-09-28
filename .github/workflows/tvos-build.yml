@@ -74,6 +74,22 @@ jobs:
 
           test -d "$PWD/TubeTV.xcarchive/Products/Applications/TubeTV.app"
 
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          rm -rf Payload TubeTV-unsigned.ipa
+          mkdir -p Payload
+          cp -R "$PWD/TubeTV.xcarchive/Products/Applications/TubeTV.app" Payload/
+          zip -qry TubeTV-unsigned.ipa Payload
+          test -f TubeTV-unsigned.ipa
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v7
+        with:
+          name: TubeTV-unsigned
+          path: TubeTV-unsigned.ipa
+          if-no-files-found: error
+
       - name: Select and boot Apple TV simulator
         id: simulator
         run: |
