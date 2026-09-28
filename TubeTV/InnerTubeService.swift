@@ -2304,23 +2304,23 @@ actor InnerTubeService {
     private static func int64Value(
         _ value: Any?
     ) -> Int64? {
-        if let value as? Int {
+        if let value = value as? Int {
             return Int64(value)
         }
 
-        if let value as? Int64 {
+        if let value = value as? Int64 {
             return value
         }
 
-        if let value as? Double {
+        if let value = value as? Double {
             return Int64(value)
         }
 
-        if let value as? NSNumber {
+        if let value = value as? NSNumber {
             return value.int64Value
         }
 
-        if let value as? String {
+        if let value = value as? String {
             return Int64(value)
         }
 
