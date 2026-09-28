@@ -118,6 +118,20 @@ struct VideoDetailView: View {
         .task {
             await preparePlayback()
         }
+        .onAppear {
+            NotificationCenter.default.post(
+                name:
+                    .tubeTVPlayerVisibilityChanged,
+                object: true
+            )
+        }
+        .onDisappear {
+            NotificationCenter.default.post(
+                name:
+                    .tubeTVPlayerVisibilityChanged,
+                object: false
+            )
+        }
     }
 
     @MainActor
