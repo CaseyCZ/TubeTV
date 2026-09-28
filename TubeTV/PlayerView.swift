@@ -668,6 +668,49 @@ final class NativePlayerModel: ObservableObject {
         .joined(separator: " • ")
     }
 
+    var isCurrentLive: Bool {
+        currentSource.diagnosticIsLive == true
+    }
+
+    func goToLiveEdge() async {
+        guard isCurrentLive,
+              let item = player.currentItem,
+              let rangeValue =
+                item.seekableTimeRanges.last
+        else {
+            return
+        }
+
+        let range =
+            rangeValue.timeRangeValue
+        let liveEdge =
+            CMTimeRangeGetEnd(range)
+        let target =
+            CMTimeSubtract(
+                liveEdge,
+                CMTime(
+                    seconds: 15,
+                    preferredTimescale: 600
+                )
+            )
+
+        await seek(
+            to:
+                CMTimeCompare(
+                    target,
+                    range.start
+                ) >= 0
+                ? target
+                : liveEdge
+        )
+
+        play()
+
+        playbackLogger.notice(
+            "Seeked to live edge"
+        )
+    }
+
     var supportsVideoReactions: Bool {
         youtubeVideoID != nil
     }
@@ -1474,8 +1517,12 @@ final class NativePlayerModel: ObservableObject {
                     localFallback
                         .clientProfile
 
-                if savedSeconds.isFinite,
-                   savedSeconds > 0 {
+                if localFallback
+                        .diagnosticIsLive
+                        == true {
+                    await goToLiveEdge()
+                } else if savedSeconds.isFinite,
+                          savedSeconds > 0 {
                     await seek(
                         to: savedTime
                     )
@@ -1525,13 +1572,18 @@ final class NativePlayerModel: ObservableObject {
                     nextSource
             )
 
-            if errorMessage == nil,
-               savedSeconds.isFinite,
-               savedSeconds > 0 {
-                await seek(
-                    to: savedTime
-                )
-                play()
+            if errorMessage == nil {
+                if currentSource
+                    .diagnosticIsLive
+                    == true {
+                    await goToLiveEdge()
+                } else if savedSeconds.isFinite,
+                          savedSeconds > 0 {
+                    await seek(
+                        to: savedTime
+                    )
+                    play()
+                }
             }
 
             playbackLogger.notice(
@@ -1736,8 +1788,12 @@ final class NativePlayerModel: ObservableObject {
                 newItem
             )
 
-            if savedSeconds.isFinite,
-               savedSeconds > 0 {
+            if newSource
+                    .diagnosticIsLive
+                    == true {
+                await goToLiveEdge()
+            } else if savedSeconds.isFinite,
+                      savedSeconds > 0 {
                 await seek(to: oldTime)
             }
 
@@ -1852,8 +1908,12 @@ final class NativePlayerModel: ObservableObject {
                 newItem
             )
 
-            if savedSeconds.isFinite,
-               savedSeconds > 0 {
+            if newSource
+                    .diagnosticIsLive
+                    == true {
+                await goToLiveEdge()
+            } else if savedSeconds.isFinite,
+                      savedSeconds > 0 {
                 await seek(to: oldTime)
             }
 
@@ -3237,6 +3297,52 @@ private struct PlayerSettingsOverlay: View {
                             .canPlayNextVideo
                     )
                 }
+            }
+
+            if model.isCurrentLive {
+                Button {
+                    Task {
+                        await model.goToLiveEdge()
+                    }
+                } label: {
+                    HStack(spacing: 14) {
+                        Image(
+                            systemName:
+                                "dot.radiowaves.left.and.right"
+                        )
+
+                        VStack(
+                            alignment:
+                                .leading,
+                            spacing: 3
+                        ) {
+                            Text(
+                                L10n.text(
+                                    "go_live",
+                                    languageCode:
+                                        appLanguage
+                                )
+                            )
+                            .font(.headline)
+
+                            Text(
+                                L10n.text(
+                                    "go_live_hint",
+                                    languageCode:
+                                        appLanguage
+                                )
+                            )
+                            .font(.caption)
+                            .foregroundStyle(
+                                .secondary
+                            )
+                        }
+
+                        Spacer()
+                    }
+                    .padding(.vertical, 8)
+                }
+                .buttonStyle(.bordered)
             }
 
             if model.supportsChannelActions,
