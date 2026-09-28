@@ -3512,9 +3512,21 @@ struct NativePlayerView: View {
                     isPresented: $showSettings
                 )
                 .transition(.move(edge: .trailing).combined(with: .opacity))
+            } else {
+                Color.clear
+                    .frame(width: 1, height: 1)
+                    .focusable()
+                    .focused(
+                        $playerControlFocus,
+                        equals: .settings
+                    )
+                    .onMoveCommand(
+                        perform:
+                            handlePlayerMoveCommand
+                    )
+                    .accessibilityHidden(true)
             }
         }
-        .focusable(!showSettings)
         .animation(.easeInOut(duration: 0.2), value: showSettings)
         .animation(
             .easeInOut(duration: 0.18),
@@ -3533,15 +3545,21 @@ struct NativePlayerView: View {
 
             revealTransportControls()
         }
-        .onMoveCommand(
-            perform:
-                showSettings
-                ? nil
-                : handlePlayerMoveCommand
-        )
         .task {
             revealTransportControls()
+            await Task.yield()
+            playerControlFocus = .settings
             await model.prepareAndPlay()
+        }
+        .onChange(of: showSettings) { _, isShowingSettings in
+            if isShowingSettings {
+                playerControlFocus = nil
+            } else {
+                Task { @MainActor in
+                    await Task.yield()
+                    playerControlFocus = .settings
+                }
+            }
         }
         .onDisappear {
             controlsHideTask?.cancel()
@@ -3867,6 +3885,7 @@ private struct PlayerSettingsOverlay: View {
             .padding(30)
             .frame(width: 620)
             .frame(maxHeight: .infinity)
+            .focusSection()
             .background(.ultraThinMaterial)
         }
         .ignoresSafeArea()
