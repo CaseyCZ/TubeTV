@@ -293,6 +293,7 @@ final class NativePlayerModel: ObservableObject {
     @Published private(set) var updatingPlaylistID: String?
     @Published private(set) var isCreatingPlaylist = false
     @Published private(set) var suggestedVideos: [VideoItem] = []
+    @Published private(set) var chapters: [YouTubeChapter] = []
     @Published private(set) var isSwitchingVideo = false
     @Published private(set) var currentVideoTitle: String
     @Published private(set) var currentChannelTitle: String
@@ -459,7 +460,7 @@ final class NativePlayerModel: ObservableObject {
                 }
 
                 Task {
-                    await loadSuggestionsIfNeeded()
+                    await loadWatchNextMetadataIfNeeded()
                 }
 
                 Task {
@@ -884,27 +885,76 @@ final class NativePlayerModel: ObservableObject {
         }
     }
 
-    private func loadSuggestionsIfNeeded()
+    private func loadWatchNextMetadataIfNeeded()
         async {
         guard let youtubeVideoID else {
             suggestedVideos = []
+            chapters = []
             return
         }
 
         do {
-            suggestedVideos =
+            let metadata =
                 try await InnerTubeService
                     .shared
-                    .watchNextVideos(
+                    .watchNextMetadata(
                         youtubeVideoID
                     )
-        } catch {
-            suggestedVideos = []
+
+            guard self.youtubeVideoID
+                    == youtubeVideoID
+            else {
+                return
+            }
+
+            suggestedVideos =
+                metadata.videos
+            chapters =
+                metadata.chapters
 
             playbackLogger.notice(
-                "Suggestions load failed video=\(youtubeVideoID, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
+                "WatchNext metadata loaded video=\(youtubeVideoID, privacy: .public) suggestions=\(metadata.videos.count, privacy: .public) chapters=\(metadata.chapters.count, privacy: .public)"
+            )
+        } catch {
+            guard self.youtubeVideoID
+                    == youtubeVideoID
+            else {
+                return
+            }
+
+            suggestedVideos = []
+            chapters = []
+
+            playbackLogger.notice(
+                "WatchNext metadata failed video=\(youtubeVideoID, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
             )
         }
+    }
+
+    func jumpToChapter(
+        _ chapter: YouTubeChapter
+    ) async {
+        guard !isPreparing,
+              !isSwitchingVideo
+        else {
+            return
+        }
+
+        let target =
+            CMTime(
+                seconds:
+                    Double(
+                        chapter.startTimeMs
+                    ) / 1_000,
+                preferredTimescale: 600
+            )
+
+        await seek(to: target)
+        play()
+
+        playbackLogger.notice(
+            "Chapter seek title=\(chapter.title, privacy: .public) startMs=\(chapter.startTimeMs, privacy: .public)"
+        )
     }
 
     private func switchToVideo(
@@ -957,6 +1007,7 @@ final class NativePlayerModel: ObservableObject {
         likeStatus = nil
         playlistMemberships = []
         suggestedVideos = []
+        chapters = []
         failedClientProfiles.removeAll()
         isSubscribed = nil
         isLoadingChannelState = false
@@ -2936,6 +2987,7 @@ private enum PlayerSettingsPage {
     case audio
     case speed
     case playlists
+    case chapters
 }
 
 private enum PlayerControlFocus: Hashable {
@@ -3173,6 +3225,8 @@ private struct PlayerSettingsOverlay: View {
                     speedPage
                 case .playlists:
                     playlistsPage
+                case .chapters:
+                    chaptersPage
                 }
 
                 Spacer()
@@ -3217,6 +3271,12 @@ private struct PlayerSettingsOverlay: View {
             return L10n.text(
                 "save_to_playlist",
                 languageCode: appLanguage
+            )
+        case .chapters:
+            return L10n.text(
+                "chapters",
+                languageCode:
+                    appLanguage
             )
         }
     }
@@ -3463,6 +3523,22 @@ private struct PlayerSettingsOverlay: View {
                 }
             }
 
+            if !model.chapters.isEmpty {
+                settingsButton(
+                    title: L10n.text(
+                        "chapters",
+                        languageCode:
+                            appLanguage
+                    ),
+                    value:
+                        "\(model.chapters.count)",
+                    icon:
+                        "list.bullet.rectangle"
+                ) {
+                    page = .chapters
+                }
+            }
+
             settingsButton(
                 title: L10n.text("quality", languageCode: appLanguage),
                 value: model.currentPlaybackDescription,
@@ -3527,6 +3603,92 @@ private struct PlayerSettingsOverlay: View {
                 icon: "speedometer"
             ) {
                 page = .speed
+            }
+        }
+    }
+
+    private var chaptersPage: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                ForEach(model.chapters) {
+                    chapter in
+                    Button {
+                        Task {
+                            await model
+                                .jumpToChapter(
+                                    chapter
+                                )
+                            page = .root
+                        }
+                    } label: {
+                        HStack(spacing: 14) {
+                            if let thumbnailURL =
+                                    chapter
+                                        .thumbnailURL {
+                                AsyncImage(
+                                    url:
+                                        thumbnailURL
+                                ) { phase in
+                                    switch phase {
+                                    case .success(
+                                        let image
+                                    ):
+                                        image
+                                            .resizable()
+                                            .scaledToFill()
+                                    default:
+                                        Rectangle()
+                                            .fill(
+                                                .white
+                                                    .opacity(
+                                                        0.08
+                                                    )
+                                            )
+                                    }
+                                }
+                                .frame(
+                                    width: 112,
+                                    height: 63
+                                )
+                                .clipShape(
+                                    RoundedRectangle(
+                                        cornerRadius:
+                                            8
+                                    )
+                                )
+                            }
+
+                            VStack(
+                                alignment:
+                                    .leading,
+                                spacing: 4
+                            ) {
+                                Text(
+                                    chapter.title
+                                )
+                                .font(.headline)
+                                .lineLimit(2)
+
+                                Text(
+                                    chapterTime(
+                                        chapter
+                                            .startTimeMs
+                                    )
+                                )
+                                .font(.caption)
+                                .foregroundStyle(
+                                    .secondary
+                                )
+                            }
+
+                            Spacer()
+                        }
+                        .padding(
+                            .vertical,
+                            6
+                        )
+                    }
+                }
             }
         }
     }
@@ -3942,6 +4104,40 @@ private struct PlayerSettingsOverlay: View {
         }
 
         return "\(model.availableAudioTracks.count)"
+    }
+
+    private func chapterTime(
+        _ milliseconds: Int64
+    ) -> String {
+        let totalSeconds =
+            max(
+                0,
+                milliseconds / 1_000
+            )
+        let hours =
+            totalSeconds / 3_600
+        let minutes =
+            (totalSeconds % 3_600)
+                / 60
+        let seconds =
+            totalSeconds % 60
+
+        if hours > 0 {
+            return String(
+                format:
+                    "%lld:%02lld:%02lld",
+                hours,
+                minutes,
+                seconds
+            )
+        }
+
+        return String(
+            format:
+                "%lld:%02lld",
+            minutes,
+            seconds
+        )
     }
 
     private func rateLabel(_ rate: Float) -> String {
