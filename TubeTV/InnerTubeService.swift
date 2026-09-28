@@ -129,40 +129,150 @@ actor InnerTubeService {
         sections: [YouTubeHomeSection],
         continuationToken: String?
     ) {
-        // SmartTube uses the TV Home browse id ("default") when signed in.
-        // Anonymous Home stays on WEB + FEwhat_to_watch.
         let isSignedIn =
             await SmartTubeAuthService.shared
                 .signedIn()
-        let homeBrowseID =
-            isSignedIn
-            ? "default"
-            : "FEwhat_to_watch"
 
-        let root = try await browse(
-            homeBrowseID,
-            requireAuthentication: false,
-            includeVisitorData: true
-        )
-        let diagnostics =
-            Self.rendererDiagnostics(from: root)
-        let sections =
-            Self.extractHomeSections(from: root)
-        let continuationToken =
-            Self.homeSectionListContinuationToken(
-                from: root
+        // SmartTube's current MediaServiceCore uses the TV client with the
+        // "default" browse id for Home, including in anonymous mode.
+        // Its older WEB Home path is kept only as a fallback because YouTube
+        // has periodically returned an empty anonymous WEB Home.
+        let primaryBrowseID = "default"
+
+        do {
+            let root = try await browse(
+                primaryBrowseID,
+                requireAuthentication: false,
+                includeVisitorData: true,
+                forceTVClient: true
+            )
+            let sections =
+                Self.extractHomeSections(from: root)
+            let continuationToken =
+                Self.homeSectionListContinuationToken(
+                    from: root
+                )
+
+            logHomeResult(
+                root: root,
+                sections: sections,
+                continuationToken:
+                    continuationToken,
+                source:
+                    isSignedIn
+                    ? "TV-authenticated"
+                    : "TV-anonymous"
             )
 
-        logger.notice(
-            "Home renderer diagnostics=\(diagnostics, privacy: .public)"
-        )
-        logger.notice(
-            "Home parsed sections=\(sections.count, privacy: .public) videos=\(sections.reduce(0) { $0 + $1.videos.count }, privacy: .public) hasNext=\(continuationToken != nil, privacy: .public)"
-        )
+            if !sections.isEmpty {
+                return (
+                    sections,
+                    continuationToken
+                )
+            }
+        } catch {
+            logger.error(
+                "Home TV request failed error=\(error.localizedDescription, privacy: .public)"
+            )
+        }
 
-        return (
-            sections,
-            continuationToken
+        if !isSignedIn {
+            do {
+                let root = try await browse(
+                    "FEwhat_to_watch",
+                    requireAuthentication: false,
+                    includeVisitorData: true
+                )
+                let sections =
+                    Self.extractHomeSections(
+                        from: root
+                    )
+                let continuationToken =
+                    Self.homeSectionListContinuationToken(
+                        from: root
+                    )
+
+                logHomeResult(
+                    root: root,
+                    sections: sections,
+                    continuationToken:
+                        continuationToken,
+                    source: "WEB-anonymous"
+                )
+
+                if !sections.isEmpty {
+                    return (
+                        sections,
+                        continuationToken
+                    )
+                }
+            } catch {
+                logger.error(
+                    "Home WEB fallback failed error=\(error.localizedDescription, privacy: .public)"
+                )
+            }
+
+            // SmartTube itself avoids leaving a fresh anonymous install on
+            // an empty Home and falls back to public content. Use its TV
+            // Music browse page as the last-resort anonymous feed.
+            do {
+                let root = try await browse(
+                    "FEtopics_music",
+                    requireAuthentication: false,
+                    includeVisitorData: true,
+                    forceTVClient: true
+                )
+                let sections =
+                    Self.extractHomeSections(
+                        from: root
+                    )
+                let continuationToken =
+                    Self.homeSectionListContinuationToken(
+                        from: root
+                    )
+
+                logHomeResult(
+                    root: root,
+                    sections: sections,
+                    continuationToken:
+                        continuationToken,
+                    source: "TV-public-music"
+                )
+
+                if !sections.isEmpty {
+                    return (
+                        sections,
+                        continuationToken
+                    )
+                }
+            } catch {
+                logger.error(
+                    "Home public fallback failed error=\(error.localizedDescription, privacy: .public)"
+                )
+            }
+        }
+
+        return ([], nil)
+    }
+
+    private func logHomeResult(
+        root: Any,
+        sections: [YouTubeHomeSection],
+        continuationToken: String?,
+        source: String
+    ) {
+        let diagnostics =
+            Self.rendererDiagnostics(from: root)
+        let videoCount =
+            sections.reduce(0) {
+                $0 + $1.videos.count
+            }
+
+        logger.notice(
+            "Home source=\(source, privacy: .public) diagnostics=\(diagnostics, privacy: .public)"
+        )
+        logger.notice(
+            "Home source=\(source, privacy: .public) sections=\(sections.count, privacy: .public) videos=\(videoCount, privacy: .public) hasNext=\(continuationToken != nil, privacy: .public)"
         )
     }
 
@@ -1255,47 +1365,105 @@ actor InnerTubeService {
         params: String? = nil,
         continuation: String? = nil,
         requireAuthentication: Bool = true,
-        includeVisitorData: Bool = false
+        includeVisitorData: Bool = false,
+        forceTVClient: Bool = false
     ) async throws -> Any {
-        let isSignedIn = await SmartTubeAuthService.shared.signedIn()
+        let isSignedIn =
+            await SmartTubeAuthService.shared
+                .signedIn()
 
         if requireAuthentication && !isSignedIn {
             throw InnerTubeError.notSignedIn
         }
 
-        let useWebClient = !isSignedIn && !requireAuthentication
-        let authorization = isSignedIn
-            ? try await SmartTubeAuthService.shared.authorizationHeader()
+        let useWebClient =
+            !forceTVClient
+            && !isSignedIn
+            && !requireAuthentication
+        let authorization =
+            isSignedIn
+            ? try await SmartTubeAuthService.shared
+                .authorizationHeader()
             : nil
 
-        let bootstrap = isSignedIn
-            ? try? await SmartTubeAuthService.shared.bootstrap()
+        // SmartTube always carries visitorData in the client context. Fetch
+        // the TV bootstrap even when Home is anonymous so the request has
+        // the same visitor identity as the real TV client.
+        let bootstrap =
+            (!useWebClient || isSignedIn)
+            ? try? await SmartTubeAuthService.shared
+                .bootstrap()
             : nil
 
-        let client: [String: Any]
+        let visitorData =
+            includeVisitorData
+            ? (
+                browseVisitorData
+                ?? bootstrap?.visitorData
+            )
+            : nil
+
+        var client: [String: Any]
 
         if useWebClient {
-            // Mirrors SmartTubeIOS webClientContext for anonymous Home.
-            client = [
-                "hl": "en",
-                "gl": "US",
-                "clientName": Self.webClientName,
-                "clientVersion": Self.webClientVersion
-            ]
-        } else {
-            // Authenticated browse is bound to the TV OAuth client.
             client = [
                 "hl": L10n.currentLanguageCode,
                 "gl": "CZ",
-                "clientName": SmartTubeAuthService.tvClientName,
-                "clientVersion": SmartTubeAuthService.tvClientVersion
+                "clientName": Self.webClientName,
+                "clientVersion":
+                    Self.webClientVersion,
+                "clientScreen": "WATCH"
             ]
+        } else {
+            // Match SmartTube MediaServiceCore's AppClient.TV browse
+            // context. In particular tvAppInfo is required by newer TV Home
+            // responses and "default" is the TV Home browse id.
+            client = [
+                "hl": L10n.currentLanguageCode,
+                "gl": "CZ",
+                "clientName":
+                    SmartTubeAuthService
+                        .tvClientName,
+                "clientVersion":
+                    SmartTubeAuthService
+                        .tvClientVersion,
+                "clientScreen": "WATCH",
+                "userAgent":
+                    SmartTubeAuthService
+                        .tvUserAgent,
+                "acceptLanguage":
+                    L10n.currentLanguageCode,
+                "acceptRegion": "CZ",
+                "utcOffsetMinutes":
+                    TimeZone.current
+                        .secondsFromGMT()
+                        / 60,
+                "tvAppInfo": [
+                    "appQuality":
+                        "TV_APP_QUALITY_FULL_ANIMATION",
+                    "zylonLeftNav": true
+                ],
+                "webpSupport": false,
+                "animatedWebpSupport": true
+            ]
+        }
+
+        if let visitorData,
+           !visitorData.isEmpty {
+            client["visitorData"] =
+                visitorData
         }
 
         var payload: [String: Any] = [
             "context": [
-                "client": client
-            ]
+                "client": client,
+                "user": [
+                    "enableSafetyMode": false,
+                    "lockedSafetyMode": false
+                ]
+            ],
+            "racyCheckOk": true,
+            "contentCheckOk": true
         ]
 
         if let continuation,
@@ -1314,19 +1482,8 @@ actor InnerTubeService {
             payload["params"] = params
         }
 
-        if includeVisitorData {
-            let visitor =
-                browseVisitorData
-                ?? bootstrap?.visitorData
-
-            if let visitor, !visitor.isEmpty {
-                payload["visitorData"] = visitor
-            }
-        }
-
-        let endpoint = useWebClient
-            ? "https://www.youtube.com/youtubei/v1/browse"
-            : "https://youtubei.googleapis.com/youtubei/v1/browse"
+        let endpoint =
+            "https://www.youtube.com/youtubei/v1/browse"
 
         guard var components = URLComponents(
             string: endpoint
@@ -1352,7 +1509,8 @@ actor InnerTubeService {
         request.timeoutInterval = 25
         request.setValue(
             "application/json",
-            forHTTPHeaderField: "Content-Type"
+            forHTTPHeaderField:
+                "Content-Type"
         )
 
         if useWebClient {
@@ -1362,57 +1520,98 @@ actor InnerTubeService {
             )
             request.setValue(
                 Self.webClientNameID,
-                forHTTPHeaderField: "X-YouTube-Client-Name"
+                forHTTPHeaderField:
+                    "X-YouTube-Client-Name"
             )
             request.setValue(
                 Self.webClientVersion,
-                forHTTPHeaderField: "X-YouTube-Client-Version"
+                forHTTPHeaderField:
+                    "X-YouTube-Client-Version"
             )
         } else {
             request.setValue(
-                "7",
-                forHTTPHeaderField: "X-YouTube-Client-Name"
+                SmartTubeAuthService.tvUserAgent,
+                forHTTPHeaderField:
+                    "User-Agent"
             )
             request.setValue(
-                SmartTubeAuthService.tvClientVersion,
-                forHTTPHeaderField: "X-YouTube-Client-Version"
+                SmartTubeAuthService.tvReferer,
+                forHTTPHeaderField:
+                    "Referer"
+            )
+            request.setValue(
+                "7",
+                forHTTPHeaderField:
+                    "X-YouTube-Client-Name"
+            )
+            request.setValue(
+                SmartTubeAuthService
+                    .tvClientVersion,
+                forHTTPHeaderField:
+                    "X-YouTube-Client-Version"
             )
 
             if let authorization {
                 request.setValue(
                     authorization,
-                    forHTTPHeaderField: "Authorization"
+                    forHTTPHeaderField:
+                        "Authorization"
                 )
             }
 
-            if let pageID =
-                await SmartTubeAuthService.shared.selectedPageID(),
+            if isSignedIn,
+               let pageID =
+                    await SmartTubeAuthService
+                        .shared
+                        .selectedPageID(),
                !pageID.isEmpty {
                 request.setValue(
                     pageID,
-                    forHTTPHeaderField: "X-Goog-Pageid"
+                    forHTTPHeaderField:
+                        "X-Goog-Pageid"
                 )
             }
         }
 
+        if let visitorData,
+           !visitorData.isEmpty {
+            request.setValue(
+                visitorData,
+                forHTTPHeaderField:
+                    "X-Goog-Visitor-Id"
+            )
+        }
+
         request.httpBody =
-            try JSONSerialization.data(withJSONObject: payload)
+            try JSONSerialization.data(
+                withJSONObject: payload
+            )
 
         let (data, response) =
-            try await URLSession.shared.data(for: request)
+            try await URLSession.shared
+                .data(for: request)
 
-        guard let http = response as? HTTPURLResponse,
-              (200..<300).contains(http.statusCode),
-              let root = try JSONSerialization.jsonObject(
-                with: data
-              ) as? [String: Any] else {
+        guard let http =
+                response as? HTTPURLResponse,
+              (200..<300).contains(
+                http.statusCode
+              ),
+              let root =
+                try JSONSerialization
+                    .jsonObject(
+                        with: data
+                    ) as? [String: Any]
+        else {
             throw InnerTubeError.invalidResponse
         }
 
         if let responseContext =
-                root["responseContext"] as? [String: Any],
+                root["responseContext"]
+                    as? [String: Any],
            let visitor =
-                responseContext["visitorData"] as? String,
+                responseContext[
+                    "visitorData"
+                ] as? String,
            !visitor.isEmpty {
             browseVisitorData = visitor
         }
@@ -1422,9 +1621,17 @@ actor InnerTubeService {
             ?? (continuation == nil
                 ? "unknown"
                 : "continuation")
+        let clientName =
+            useWebClient
+            ? "WEB"
+            : (
+                isSignedIn
+                ? "TV-authenticated"
+                : "TV-anonymous"
+            )
 
         logger.notice(
-            "Browse client=\(useWebClient ? "WEB" : "TV", privacy: .public) id=\(requestID, privacy: .public) status=\(http.statusCode, privacy: .public)"
+            "Browse client=\(clientName, privacy: .public) id=\(requestID, privacy: .public) status=\(http.statusCode, privacy: .public)"
         )
 
         return root
