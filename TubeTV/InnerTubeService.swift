@@ -3241,43 +3241,56 @@ actor InnerTubeService {
     private static func extractPlaylists(
         from root: Any
     ) -> [YouTubePlaylistItem] {
-        var candidates: [[String: Any]] = []
-        collectDictionaries(from: root, into: &candidates)
+        var renderers: [[String: Any]] = []
+        collectPlaylistRenderers(
+            from: root,
+            into: &renderers
+        )
 
         var seen = Set<String>()
         var result: [YouTubePlaylistItem] = []
 
-        for dictionary in candidates {
-            guard let playlistID = firstString(
-                in: dictionary,
-                keys: ["playlistId", "playlist_id"]
-            ),
-            !playlistID.isEmpty,
-            seen.insert(playlistID).inserted else {
+        for renderer in renderers {
+            guard let playlistID =
+                    playlistID(
+                        from: renderer
+                    ),
+                  !playlistID.isEmpty,
+                  seen.insert(
+                    playlistID
+                  ).inserted
+            else {
                 continue
             }
 
-            let title = firstText(
-                in: dictionary,
-                keys: ["title", "headline", "primaryText"]
-            ) ?? "Playlist"
+            let title =
+                playlistTitle(
+                    from: renderer
+                )
+                ?? playlistID
 
-            let subtitle = firstText(
-                in: dictionary,
-                keys: [
-                    "videoCountText",
-                    "shortBylineText",
-                    "secondaryText",
-                    "subtitle"
-                ]
-            ) ?? ""
+            let subtitle =
+                firstText(
+                    in: renderer,
+                    keys: [
+                        "videoCountText",
+                        "videoCountShortText",
+                        "shortBylineText",
+                        "secondaryText",
+                        "subtitle"
+                    ]
+                )
+                ?? ""
 
             result.append(
                 YouTubePlaylistItem(
                     id: playlistID,
                     title: title,
                     subtitle: subtitle,
-                    thumbnailURL: firstThumbnailURL(in: dictionary)
+                    thumbnailURL:
+                        firstThumbnailURL(
+                            in: renderer
+                        )
                 )
             )
 
@@ -3287,6 +3300,157 @@ actor InnerTubeService {
         }
 
         return result
+    }
+
+    private static func collectPlaylistRenderers(
+        from node: Any,
+        into output:
+            inout [[String: Any]]
+    ) {
+        if let dictionary =
+                node as? [String: Any] {
+            for key in [
+                "gridPlaylistRenderer",
+                "pivotPlaylistRenderer",
+                "compactPlaylistRenderer",
+                "playlistRenderer"
+            ] {
+                if let renderer =
+                        dictionary[key]
+                            as? [String: Any] {
+                    output.append(renderer)
+                }
+            }
+
+            if let lockup =
+                    dictionary[
+                        "lockupViewModel"
+                    ] as? [String: Any],
+               playlistID(
+                    from: lockup
+               ) != nil {
+                output.append(lockup)
+            }
+
+            for value
+                in dictionary.values {
+                collectPlaylistRenderers(
+                    from: value,
+                    into: &output
+                )
+            }
+        } else if let array =
+                    node as? [Any] {
+            for value in array {
+                collectPlaylistRenderers(
+                    from: value,
+                    into: &output
+                )
+            }
+        }
+    }
+
+    private static func playlistID(
+        from renderer: [String: Any]
+    ) -> String? {
+        if let direct =
+                firstString(
+                    in: renderer,
+                    keys: [
+                        "playlistId",
+                        "playlist_id"
+                    ]
+                ) {
+            return direct
+        }
+
+        let paths = [
+            [
+                "navigationEndpoint",
+                "watchEndpoint",
+                "playlistId"
+            ],
+            [
+                "onSelectCommand",
+                "watchEndpoint",
+                "playlistId"
+            ],
+            [
+                "rendererContext",
+                "commandContext",
+                "onTap",
+                "innertubeCommand",
+                "watchEndpoint",
+                "playlistId"
+            ]
+        ]
+
+        for path in paths {
+            if let value =
+                    nested(
+                        renderer,
+                        path: path
+                    ) as? String,
+               !value.isEmpty {
+                return value
+            }
+        }
+
+        if let contentID =
+                renderer[
+                    "contentId"
+                ] as? String,
+           contentID.count > 11,
+           !contentID.hasPrefix("UC") {
+            return contentID
+        }
+
+        return nil
+    }
+
+    private static func playlistTitle(
+        from renderer: [String: Any]
+    ) -> String? {
+        if let direct =
+                firstText(
+                    in: renderer,
+                    keys: [
+                        "title",
+                        "headline",
+                        "primaryText"
+                    ]
+                ),
+           !direct.isEmpty {
+            return direct
+        }
+
+        let paths = [
+            [
+                "metadata",
+                "lockupMetadataViewModel",
+                "title"
+            ],
+            [
+                "metadata",
+                "tileMetadataRenderer",
+                "title"
+            ]
+        ]
+
+        for path in paths {
+            if let value =
+                    nested(
+                        renderer,
+                        path: path
+                    ),
+               let title =
+                    text(from: value),
+               !title.isEmpty {
+                return title
+            }
+        }
+
+        return nil
     }
 
     private static func collectDictionaries(
@@ -3808,19 +3972,34 @@ actor InnerTubeService {
         guard let value else { return nil }
 
         if let string = value as? String {
-            return URL(string: string)
+            return normalizedThumbnailURL(
+                string
+            )
         }
 
         if let dictionary = value as? [String: Any] {
-            if let url = dictionary["url"] as? String,
-               let parsed = URL(string: url) {
+            if let raw =
+                    dictionary["url"]
+                        as? String,
+               let parsed =
+                    normalizedThumbnailURL(
+                        raw
+                    ) {
                 return parsed
             }
 
-            if let thumbnails = dictionary["thumbnails"] as? [[String: Any]] {
-                for item in thumbnails.reversed() {
-                    if let raw = item["url"] as? String,
-                       let url = URL(string: raw) {
+            if let thumbnails =
+                    dictionary["thumbnails"]
+                        as? [[String: Any]] {
+                for item in thumbnails
+                    .reversed() {
+                    if let raw =
+                            item["url"]
+                                as? String,
+                       let url =
+                            normalizedThumbnailURL(
+                                raw
+                            ) {
                         return url
                     }
                 }
@@ -3842,5 +4021,18 @@ actor InnerTubeService {
         }
 
         return nil
+    }
+
+    private static func normalizedThumbnailURL(
+        _ raw: String
+    ) -> URL? {
+        let normalized =
+            raw.hasPrefix("//")
+            ? "https:\(raw)"
+            : raw
+
+        return URL(
+            string: normalized
+        )
     }
 }
