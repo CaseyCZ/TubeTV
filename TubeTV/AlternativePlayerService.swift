@@ -948,7 +948,28 @@ actor AlternativePlayerService {
                 )
         )?.url
 
-        // Fast-start path for tvOS. A muxed YouTube format can be handed to
+        // For normal Auto playback on tvOS prefer YouTube's clean HLS
+        // manifest whenever it is available. Long progressive MP4 streams
+        // can make AVPlayer inspect/buffer a large part of the file before
+        // the first frame. HLS is segmented, so playback can begin after the
+        // first few segments and seeking does not depend on already-buffered
+        // file ranges.
+        if preferredQuality == "Auto",
+           let hlsRaw,
+           let hls = URL(string: hlsRaw),
+           !adMetadata.containsAdvertisingMetadata {
+            logger.notice(
+                "FAST_START HLS client=\(client.profile, privacy: .public)"
+            )
+
+            return .directWithHeaders(
+                hls,
+                playbackHeaders
+            )
+        }
+
+        // Fast-start fallback for responses without a usable HLS manifest.
+        // A muxed YouTube format can be handed to AVPlayer immediately.
         // AVPlayer immediately. Separate adaptive video/audio requires us to
         // load both remote assets, inspect their tracks and durations and
         // build an AVMutableComposition before AVPlayer can even start.
