@@ -551,6 +551,7 @@ struct VideoRow: View {
 }
 
 struct VideoCard: View {
+    @Environment(\.isFocused) private var isFocused
     let video: VideoItem
 
     var body: some View {
@@ -595,6 +596,26 @@ struct VideoCard: View {
                 }
             }
             .frame(width: 420, height: 236)
+            .overlay {
+                RoundedRectangle(
+                    cornerRadius: 18
+                )
+                .stroke(
+                    .white.opacity(
+                        isFocused ? 0.9 : 0
+                    ),
+                    lineWidth: 4
+                )
+            }
+            .scaleEffect(
+                isFocused
+                    ? 1.025
+                    : 1
+            )
+            .animation(
+                .easeOut(duration: 0.12),
+                value: isFocused
+            )
 
             Text(video.title)
                 .font(.headline)
