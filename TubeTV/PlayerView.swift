@@ -1086,8 +1086,6 @@ final class NativePlayerModel: ObservableObject {
         chapters = []
         nextPreloadTask?.cancel()
         nextPreloadTask = nil
-        preloadedNextVideoID = nil
-        preloadedNextSource = nil
         failedClientProfiles.removeAll()
         isSubscribed = nil
         isLoadingChannelState = false
@@ -1136,6 +1134,11 @@ final class NativePlayerModel: ObservableObject {
                             preferredQuality:
                                 activeQuality
                         )
+
+                // A preload for another suggestion is no longer useful once
+                // the user has chosen a different video.
+                preloadedNextVideoID = nil
+                preloadedNextSource = nil
             }
 
             nextPreloadTask?.cancel()
