@@ -118,6 +118,7 @@ actor AlternativePlayerService {
     private var visitorData: String?
     private var signatureTimestamp: Int?
     private var signatureTimestampFetchedAt: Date?
+    private var lastSuccessfulProfile: String?
 
     init() {
         let configuration = URLSessionConfiguration.default
@@ -344,10 +345,39 @@ actor AlternativePlayerService {
         var lastError: Error =
             StreamResolverError.noPlayableStream
 
-        for client in clients
-        where !excludingProfiles.contains(client.profile) {
+        let availableClients =
+            clients.filter {
+                !excludingProfiles.contains(
+                    $0.profile
+                )
+            }
+        let orderedClients: [AlternativePlayerClient]
+
+        if let lastSuccessfulProfile,
+           let preferred =
+                availableClients.first(
+                    where: {
+                        $0.profile
+                            == lastSuccessfulProfile
+                    }
+                ) {
+            orderedClients =
+                [preferred]
+                + availableClients.filter {
+                    $0.profile
+                        != lastSuccessfulProfile
+                }
+        } else {
+            orderedClients = availableClients
+        }
+
+        for client in orderedClients {
             do {
-                if client.seedWebSession {
+                // Seeding is useful for WEB/VISIONOS-style clients, but once
+                // visitorData has been obtained repeating the extra page load
+                // for every video only slows startup down.
+                if client.seedWebSession,
+                   visitorData == nil {
                     await seedWebSession(
                         videoID: videoID
                     )
@@ -358,6 +388,9 @@ actor AlternativePlayerService {
                     preferredQuality: preferredQuality,
                     client: client
                 ) {
+                    lastSuccessfulProfile =
+                        client.profile
+
                     logger.notice(
                         "Resolved with client=\(client.profile, privacy: .public) version=\(client.version, privacy: .public)"
                     )
