@@ -2327,6 +2327,15 @@ actor InnerTubeService {
         return nil
     }
 
+    private static func looksLikeDuration(
+        _ value: String
+    ) -> Bool {
+        value.range(
+            of: #"^\d{1,2}:\d{2}(?::\d{2})?$"#,
+            options: .regularExpression
+        ) != nil
+    }
+
     private static func extractVideos(from root: Any) -> [VideoItem] {
         var renderers: [[String: Any]] = []
         collectVideoRenderers(from: root, into: &renderers)
@@ -2375,7 +2384,7 @@ actor InnerTubeService {
                         && $0 != "•"
                 }
 
-            let channel =
+            let rawChannel =
                 firstText(
                     in: renderer,
                     keys: [
@@ -2386,10 +2395,6 @@ actor InnerTubeService {
                         "byline"
                     ]
                 )
-                ?? metadata.first
-                ?? "YouTube"
-
-            let channelID = findChannelID(in: renderer)
 
             let duration =
                 firstText(
@@ -2397,6 +2402,21 @@ actor InnerTubeService {
                     keys: ["lengthText", "durationText"]
                 )
                 ?? firstBadgeText(in: renderer)
+
+            let channel =
+                [rawChannel]
+                    .compactMap { $0 }
+                    .first(where: {
+                        !looksLikeDuration($0)
+                    })
+                ?? metadata.first(
+                    where: {
+                        !looksLikeDuration($0)
+                    }
+                )
+                ?? "YouTube"
+
+            let channelID = findChannelID(in: renderer)
 
             let published = firstText(
                 in: renderer,
