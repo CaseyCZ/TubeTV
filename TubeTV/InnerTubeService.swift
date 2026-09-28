@@ -2603,8 +2603,8 @@ actor InnerTubeService {
                     title: title,
                     query: query,
                     thumbnailURL:
-                        firstThumbnailURL(
-                            in: renderer
+                        playlistThumbnailURL(
+                            from: renderer
                         )
                 )
             )
@@ -3302,6 +3302,53 @@ actor InnerTubeService {
         return result
     }
 
+    private static func playlistThumbnailURL(
+        from renderer: [String: Any]
+    ) -> URL? {
+        let paths = [
+            [
+                "header",
+                "tileHeaderRenderer",
+                "thumbnail"
+            ],
+            [
+                "header",
+                "trackTileHeaderRenderer",
+                "thumbnail"
+            ],
+            [
+                "contentImage",
+                "thumbnailViewModel",
+                "image"
+            ],
+            [
+                "contentImage",
+                "collectionThumbnailViewModel",
+                "primaryThumbnail",
+                "thumbnailViewModel",
+                "image"
+            ]
+        ]
+
+        for path in paths {
+            if let value =
+                    nested(
+                        renderer,
+                        path: path
+                    ),
+               let url =
+                    thumbnailURL(
+                        from: value
+                    ) {
+                return url
+            }
+        }
+
+        return firstThumbnailURL(
+            in: renderer
+        )
+    }
+
     private static func collectPlaylistRenderers(
         from node: Any,
         into output:
@@ -3320,6 +3367,18 @@ actor InnerTubeService {
                             as? [String: Any] {
                     output.append(renderer)
                 }
+            }
+
+            // Current TV/search surfaces increasingly wrap playlists in a
+            // generic tileRenderer rather than playlistRenderer. SmartTube's
+            // TileItem explicitly supports TILE_CONTENT_TYPE_PLAYLIST.
+            if let tile =
+                    dictionary[
+                        "tileRenderer"
+                    ] as? [String: Any],
+               tile["contentType"] as? String
+                    == "TILE_CONTENT_TYPE_PLAYLIST" {
+                output.append(tile)
             }
 
             if let lockup =
@@ -3433,6 +3492,11 @@ actor InnerTubeService {
             [
                 "metadata",
                 "tileMetadataRenderer",
+                "title"
+            ],
+            [
+                "onLongPressCommand",
+                "showMenuCommand",
                 "title"
             ]
         ]
