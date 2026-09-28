@@ -54,7 +54,7 @@ struct AccountFeedView: View {
                             NavigationLink(value: video) {
                                 VideoCard(video: video)
                             }
-                            .buttonStyle(.card)
+                            .buttonStyle(.plain)
                             .onAppear {
                                 let threshold =
                                     max(
@@ -471,7 +471,7 @@ struct PlaylistDetailView: View {
                         NavigationLink(value: video) {
                             VideoCard(video: video)
                         }
-                        .buttonStyle(.card)
+                        .buttonStyle(.plain)
                         .onAppear {
                             let threshold =
                                 max(
