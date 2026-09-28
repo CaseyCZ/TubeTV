@@ -621,8 +621,12 @@ final class NativePlayerModel: ObservableObject {
                 nil
         }
 
+        // Let AVPlayer choose an appropriate forward buffer for HLS/VOD.
+        // Apple's guidance warns that forcing a very small buffer increases
+        // the chance of stalls. playImmediately(atRate:) still keeps startup
+        // aggressive, while the default buffer can grow after playback starts.
         item.preferredForwardBufferDuration =
-            2
+            0
 
         player.replaceCurrentItem(
             with: item
@@ -1657,9 +1661,9 @@ final class NativePlayerModel: ObservableObject {
                     if !isWaiting,
                        !isBufferEmpty,
                        !cannotKeepUp {
-                        // With automaticallyWaitsToMinimizeStalling=false,
-                        // AVPlayer can pause when it runs out of buffered
-                        // media. Resume as soon as data is healthy again.
+                        // A transient network stall can leave rate at zero
+                        // even though playback is still requested. Resume as
+                        // soon as the item is healthy again.
                         if self.player.rate == 0,
                            item.status == .readyToPlay {
                             self.player
