@@ -332,26 +332,10 @@ enum StreamResolver {
 
         var meaningfulError: StreamResolverError?
 
-        // Match SmartTube's normal playback order: try its regular client
-        // chain first (VISIONOS -> TV_DOWNGRADED -> WEB ...). Authentication
-        // is a fallback for content that actually requires it, rather than an
-        // extra blocking /player request before every ordinary video.
-        do {
-            return try await AlternativePlayerService.shared.resolve(
-                videoID: videoID,
-                preferredQuality: preferredQuality,
-                excludingProfiles: excludingProfiles
-            )
-        } catch let error as StreamResolverError {
-            if case .ipBlocked = error {
-                throw error
-            }
-
-            meaningfulError = error
-        } catch {
-            // Continue to authenticated playback / YouTubeKit fallbacks.
-        }
-
+        // Keep the reliable order used by the previous Apple TV build:
+        // signed-in TV playback first, then the SmartTube-compatible client
+        // chain, then YouTubeKit. The services themselves still use the
+        // new HLS/muxed fast-start paths.
         if !excludingProfiles.contains("TV_AUTH"),
            await SmartTubeAuthService.shared.signedIn() {
             do {
@@ -366,12 +350,28 @@ enum StreamResolver {
 
                 meaningfulError = error
             } catch {
-                // Continue to the final direct-stream fallback.
+                // Continue to the SmartTube-compatible fallback chain.
             }
-        } else if let meaningfulError {
-            if case .signInRequired = meaningfulError {
-                throw meaningfulError
+        }
+
+        do {
+            return try await AlternativePlayerService.shared.resolve(
+                videoID: videoID,
+                preferredQuality: preferredQuality,
+                excludingProfiles: excludingProfiles
+            )
+        } catch let error as StreamResolverError {
+            if case .ipBlocked = error {
+                throw error
             }
+
+            if case .signInRequired = error {
+                throw error
+            }
+
+            meaningfulError = error
+        } catch {
+            // Continue to the final direct-stream fallback.
         }
 
         do {
