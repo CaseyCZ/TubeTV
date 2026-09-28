@@ -292,6 +292,7 @@ final class NativePlayerModel: ObservableObject {
     private var ciSmokeVerificationScheduled = false
     private var failedClientProfiles = Set<String>()
     private var bufferWatchdogTask: Task<Void, Never>?
+    private var playerItemFailureObserver: NSObjectProtocol?
     private var bufferWindowStartedAt: Date?
     private var accumulatedBufferingSeconds: TimeInterval = 0
     private var isRecoveringFromBuffering = false
@@ -501,6 +502,16 @@ final class NativePlayerModel: ObservableObject {
             )
 
         currentSource = source
+
+        if let playerItemFailureObserver {
+            NotificationCenter.default
+                .removeObserver(
+                    playerItemFailureObserver
+                )
+            self.playerItemFailureObserver =
+                nil
+        }
+
         player.replaceCurrentItem(
             with: item
         )
@@ -508,6 +519,10 @@ final class NativePlayerModel: ObservableObject {
 
         try await waitUntilReadyToPlay(
             item
+        )
+
+        installPlayerItemFailureObserver(
+            for: item
         )
 
         await restorePlaybackPositionIfNeeded(
@@ -1033,6 +1048,15 @@ final class NativePlayerModel: ObservableObject {
             self.localPositionObserver = nil
         }
 
+        if let playerItemFailureObserver {
+            NotificationCenter.default
+                .removeObserver(
+                    playerItemFailureObserver
+                )
+            self.playerItemFailureObserver =
+                nil
+        }
+
         // Cancel results from caption work belonging to the old video and
         // release the current AVPlayerItem immediately. Without this, several
         // consecutive full-screen players can keep media resources alive
@@ -1053,6 +1077,70 @@ final class NativePlayerModel: ObservableObject {
 
     func play() {
         player.playImmediately(atRate: playbackRate)
+    }
+
+    private func installPlayerItemFailureObserver(
+        for item: AVPlayerItem
+    ) {
+        if let playerItemFailureObserver {
+            NotificationCenter.default
+                .removeObserver(
+                    playerItemFailureObserver
+                )
+        }
+
+        playerItemFailureObserver =
+            NotificationCenter.default
+                .addObserver(
+                    forName:
+                        .AVPlayerItemFailedToPlayToEndTime,
+                    object: item,
+                    queue: .main
+                ) { [weak self, weak item]
+                    notification in
+                    guard let self else {
+                        return
+                    }
+
+                    let notificationError =
+                        notification.userInfo?[
+                            AVPlayerItemFailedToPlayToEndTimeErrorKey
+                        ] as? Error
+                    let error =
+                        notificationError
+                        ?? item?.error
+                        ?? StreamResolverError
+                            .noPlayableStream
+
+                    Task { @MainActor [weak self] in
+                        await self?
+                            .recoverFromRuntimePlaybackFailure(
+                                error
+                            )
+                    }
+                }
+    }
+
+    private func recoverFromRuntimePlaybackFailure(
+        _ error: Error
+    ) async {
+        guard !isPreparing,
+              !isSwitchingQuality,
+              !isSwitchingAudio,
+              !isSwitchingVideo,
+              !isRecoveringFromBuffering
+        else {
+            return
+        }
+
+        playbackLogger.error(
+            "Runtime playback failure profile=\(self.activeClientProfile ?? "UNTAGGED", privacy: .public) error=\(error.localizedDescription, privacy: .public)"
+        )
+
+        await recoverPlayback(
+            reason:
+                "runtime-error: \(error.localizedDescription)"
+        )
     }
 
     private func startBufferWatchdog() {
@@ -1157,6 +1245,14 @@ final class NativePlayerModel: ObservableObject {
 
     private func recoverFromLongBuffering()
         async {
+        await recoverPlayback(
+            reason: "long-buffering"
+        )
+    }
+
+    private func recoverPlayback(
+        reason: String
+    ) async {
         guard !isRecoveringFromBuffering,
               let youtubeVideoID
         else {
@@ -1190,7 +1286,7 @@ final class NativePlayerModel: ObservableObject {
         }
 
         playbackLogger.warning(
-            "Buffer recovery start video=\(youtubeVideoID, privacy: .public) failedProfile=\(failedProfile ?? "UNTAGGED", privacy: .public) position=\(savedSeconds, privacy: .public)"
+            "Playback recovery start reason=\(reason, privacy: .public) video=\(youtubeVideoID, privacy: .public) failedProfile=\(failedProfile ?? "UNTAGGED", privacy: .public) position=\(savedSeconds, privacy: .public)"
         )
 
         // First try a muxed/direct fallback from the same player response.
@@ -1225,7 +1321,7 @@ final class NativePlayerModel: ObservableObject {
                 play()
 
                 playbackLogger.notice(
-                    "Buffer recovery succeeded with local fallback"
+                    "Playback recovery succeeded with local fallback reason=\(reason, privacy: .public)"
                 )
                 return
             } catch {
@@ -1272,7 +1368,7 @@ final class NativePlayerModel: ObservableObject {
             }
 
             playbackLogger.notice(
-                "Buffer recovery finished profile=\(self.activeClientProfile ?? "UNTAGGED", privacy: .public)"
+                "Playback recovery finished reason=\(reason, privacy: .public) profile=\(self.activeClientProfile ?? "UNTAGGED", privacy: .public)"
             )
         } catch {
             isPreparing = false
@@ -1280,7 +1376,7 @@ final class NativePlayerModel: ObservableObject {
                 error.localizedDescription
 
             playbackLogger.error(
-                "Buffer recovery failed error=\(error.localizedDescription, privacy: .public)"
+                "Playback recovery failed reason=\(reason, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
             )
         }
 
