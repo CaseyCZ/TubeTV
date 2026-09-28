@@ -3374,7 +3374,12 @@ struct NativePlayerView: View {
                     }
 
                     Text(
-                        "←/→ 10 s   •   ▲ (L10n.text("settings", languageCode: appLanguage))"
+                        "←/→ 10 s   •   ▲ " +
+                        L10n.text(
+                            "settings",
+                            languageCode:
+                                appLanguage
+                        )
                     )
                     .font(.caption)
                     .foregroundStyle(
