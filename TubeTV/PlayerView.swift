@@ -2959,9 +2959,9 @@ struct NativePlayerView: View {
     init(
         source: PlaybackSource,
         youtubeVideoID: String?,
-        videoTitle: String,
-        channelTitle: String,
-        channelID: String?,
+        videoTitle: String = "",
+        channelTitle: String = "",
+        channelID: String? = nil,
         initialQuality: String,
         captionsEnabled: Bool,
         captionLanguage: String,
