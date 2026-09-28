@@ -263,6 +263,13 @@ private final class TubeTVPlayerEngine {
 
     private init() {
         player = AVPlayer()
+
+        // Prefer first-frame latency over building a large safety buffer.
+        // TubeTV has its own buffering watchdog and client failover, so the
+        // player can start aggressively and recover if the chosen source is
+        // unhealthy.
+        player.automaticallyWaitsToMinimizeStalling =
+            false
     }
 }
 
@@ -547,6 +554,9 @@ final class NativePlayerModel: ObservableObject {
             self.playerItemFailureObserver =
                 nil
         }
+
+        item.preferredForwardBufferDuration =
+            2
 
         player.replaceCurrentItem(
             with: item
