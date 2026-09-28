@@ -522,7 +522,7 @@ struct VideoRow: View {
                                 video: video
                             )
                         }
-                        .buttonStyle(.card)
+                        .buttonStyle(.plain)
                         .onAppear {
                             let threshold =
                                 max(
