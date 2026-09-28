@@ -283,6 +283,16 @@ final class NativePlayerModel: ObservableObject {
                     source
                 )
 
+                if let confirmedProfile =
+                        source.clientProfile {
+                    await AlternativePlayerService
+                        .shared
+                        .markPlaybackSuccessful(
+                            profile:
+                                confirmedProfile
+                        )
+                }
+
                 currentSource = source
                 activeClientProfile =
                     source.clientProfile
@@ -325,6 +335,16 @@ final class NativePlayerModel: ObservableObject {
             } catch {
                 lastError = error
                 player.pause()
+
+                if let failedProfile =
+                        source.clientProfile {
+                    await AlternativePlayerService
+                        .shared
+                        .markPlaybackFailed(
+                            profile:
+                                failedProfile
+                        )
+                }
 
                 playbackLogger.error(
                     "FAILED profile=\(profile, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
@@ -740,6 +760,16 @@ final class NativePlayerModel: ObservableObject {
             player.removeTimeObserver(trackingObserver)
             self.trackingObserver = nil
         }
+
+        // Cancel results from caption work belonging to the old video and
+        // release the current AVPlayerItem immediately. Without this, several
+        // consecutive full-screen players can keep media resources alive
+        // until SwiftUI finally deallocates their models.
+        captionLoadGeneration = UUID()
+        cues.removeAll()
+        currentCaption = ""
+        trackingContext = nil
+        player.replaceCurrentItem(with: nil)
     }
 
     func play() {
