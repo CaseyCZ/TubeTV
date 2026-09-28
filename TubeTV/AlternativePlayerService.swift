@@ -123,8 +123,8 @@ actor AlternativePlayerService {
 
     init() {
         let configuration = URLSessionConfiguration.default
-        configuration.timeoutIntervalForRequest = 25
-        configuration.timeoutIntervalForResource = 60
+        configuration.timeoutIntervalForRequest = 12
+        configuration.timeoutIntervalForResource = 20
         configuration.httpCookieStorage = HTTPCookieStorage.shared
         configuration.httpShouldSetCookies = true
         session = URLSession(configuration: configuration)
@@ -336,6 +336,19 @@ actor AlternativePlayerService {
             }
         let orderedClients: [AlternativePlayerClient]
 
+        // The auth/bootstrap layer already caches visitorData. Reuse it here
+        // so the first video doesn't need an extra youtube.com/watch page
+        // request just to seed the resolver.
+        if visitorData == nil,
+           let bootstrap =
+                try? await SmartTubeAuthService
+                    .shared.bootstrap(),
+           let bootstrapVisitor =
+                bootstrap.visitorData,
+           !bootstrapVisitor.isEmpty {
+            visitorData = bootstrapVisitor
+        }
+
         if let lastSuccessfulProfile,
            let preferred =
                 availableClients.first(
@@ -354,7 +367,11 @@ actor AlternativePlayerService {
             orderedClients = availableClients
         }
 
+        let resolveStartedAt = Date()
+
         for client in orderedClients {
+            let clientStartedAt = Date()
+
             do {
                 // Seeding is useful for WEB/VISIONOS-style clients, but once
                 // visitorData has been obtained repeating the extra page load
@@ -371,8 +388,23 @@ actor AlternativePlayerService {
                     preferredQuality: preferredQuality,
                     client: client
                 ) {
+                    let clientMs =
+                        Int(
+                            Date()
+                                .timeIntervalSince(
+                                    clientStartedAt
+                                ) * 1_000
+                        )
+                    let totalMs =
+                        Int(
+                            Date()
+                                .timeIntervalSince(
+                                    resolveStartedAt
+                                ) * 1_000
+                        )
+
                     logger.notice(
-                        "Resolved with client=\(client.profile, privacy: .public) version=\(client.version, privacy: .public)"
+                        "Resolved with client=\(client.profile, privacy: .public) version=\(client.version, privacy: .public) clientMs=\(clientMs, privacy: .public) totalMs=\(totalMs, privacy: .public)"
                     )
                     return source
                 }
@@ -462,7 +494,7 @@ actor AlternativePlayerService {
         var request = URLRequest(
             url: url,
             cachePolicy: .reloadIgnoringLocalCacheData,
-            timeoutInterval: 15
+            timeoutInterval: 8
         )
         request.setValue(
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.5 Safari/605.1.15,gzip(gfe)",
@@ -648,7 +680,7 @@ actor AlternativePlayerService {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = 20
+        request.timeoutInterval = 10
         request.setValue(
             "application/json",
             forHTTPHeaderField:
@@ -1215,7 +1247,7 @@ actor AlternativePlayerService {
         }
 
         var request = URLRequest(url: url)
-        request.timeoutInterval = 15
+        request.timeoutInterval = 8
         request.setValue(
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.5 Safari/605.1.15,gzip(gfe)",
             forHTTPHeaderField: "User-Agent"
