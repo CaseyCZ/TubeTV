@@ -32,91 +32,16 @@ struct VideoDetailView: View {
     @AppStorage("autoEnableCaptions") private var autoEnableCaptions = true
     @AppStorage("autoTranslateCaptions") private var autoTranslateCaptions = true
 
-    @State private var showPlayer = false
     @State private var playbackSource: PlaybackSource?
     @State private var isResolving = false
     @State private var errorMessage: String?
-
-    private var canPlay: Bool {
-        video.playbackURL != nil || video.youtubeVideoID != nil
-    }
+    @State private var didStartResolving = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 28) {
-            Spacer()
+        ZStack {
+            Color.black
+                .ignoresSafeArea()
 
-            Text(video.title)
-                .font(.largeTitle.bold())
-
-            if let channelID = video.channelID {
-                NavigationLink {
-                    ChannelView(
-                        channelID: channelID,
-                        fallbackTitle: video.channel
-                    )
-                } label: {
-                    Label(video.channel, systemImage: "person.crop.circle")
-                        .font(.title2)
-                }
-                .buttonStyle(.plain)
-            } else {
-                Text(video.channel)
-                    .font(.title2)
-            }
-
-            Text(video.subtitle)
-                .font(.title3)
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 20) {
-                Button {
-                    Task {
-                        await preparePlayback()
-                    }
-                } label: {
-                    if isResolving {
-                        HStack(spacing: 12) {
-                            ProgressView()
-                            Text(L10n.text("loading_stream", languageCode: appLanguage))
-                        }
-                    } else {
-                        Label(L10n.text("play", languageCode: appLanguage), systemImage: "play.fill")
-                    }
-                }
-                .disabled(!canPlay || isResolving)
-
-                Label(
-                    autoEnableCaptions
-                        ? "\(L10n.text("captions", languageCode: appLanguage)): \(localizedLanguageName(preferredCaptionLanguage, localeCode: appLanguage))"
-                        : "\(L10n.text("captions", languageCode: appLanguage)): \(L10n.text("captions_off", languageCode: appLanguage))",
-                    systemImage: "captions.bubble.fill"
-                )
-                .foregroundStyle(.secondary)
-            }
-
-            if video.youtubeVideoID != nil {
-                Label(
-                    preferredQuality == "Auto"
-                        ? "\(L10n.text("quality", languageCode: appLanguage)): \(L10n.text("automatic", languageCode: appLanguage))"
-                        : "\(L10n.text("preferred_quality", languageCode: appLanguage)): \(preferredQuality)",
-                    systemImage: "4k.tv"
-                )
-                .foregroundStyle(.secondary)
-            }
-
-            if let errorMessage {
-                Label(
-                    errorMessage,
-                    systemImage: "exclamationmark.triangle.fill"
-                )
-                .foregroundStyle(.red)
-                .font(.headline)
-            }
-
-            Spacer()
-        }
-        .padding(64)
-        .fullScreenCover(isPresented: $showPlayer) {
             if let playbackSource {
                 NativePlayerView(
                     source: playbackSource,
@@ -126,39 +51,118 @@ struct VideoDetailView: View {
                     captionLanguage: preferredCaptionLanguage,
                     allowCaptionTranslation: autoTranslateCaptions
                 )
+            } else if let errorMessage {
+                VStack(spacing: 24) {
+                    Image(
+                        systemName:
+                            "exclamationmark.triangle.fill"
+                    )
+                    .font(.system(size: 54))
+
+                    Text(errorMessage)
+                        .font(.title3)
+                        .multilineTextAlignment(.center)
+
+                    Button {
+                        Task {
+                            await preparePlayback(
+                                force: true
+                            )
+                        }
+                    } label: {
+                        Label(
+                            L10n.text(
+                                "retry",
+                                languageCode:
+                                    appLanguage
+                            ),
+                            systemImage:
+                                "arrow.clockwise"
+                        )
+                    }
+                    .buttonStyle(
+                        .borderedProminent
+                    )
+                }
+                .padding(60)
+            } else {
+                VStack(spacing: 22) {
+                    ProgressView()
+                        .controlSize(.large)
+
+                    Text(
+                        L10n.text(
+                            "preparing_video",
+                            languageCode:
+                                appLanguage
+                        )
+                    )
+                    .font(.title3)
+
+                    Text(video.title)
+                        .font(.headline)
+                        .foregroundStyle(
+                            .secondary
+                        )
+                        .lineLimit(2)
+                        .multilineTextAlignment(
+                            .center
+                        )
+                }
+                .padding(60)
             }
+        }
+        .task {
+            await preparePlayback()
         }
     }
 
     @MainActor
-    private func preparePlayback() async {
+    private func preparePlayback(
+        force: Bool = false
+    ) async {
+        guard force
+                || !didStartResolving
+        else {
+            return
+        }
+
+        didStartResolving = true
         errorMessage = nil
 
         if let url = video.playbackURL {
             playbackSource = .direct(url)
-            showPlayer = true
             return
         }
 
-        guard let videoID = video.youtubeVideoID else {
-            errorMessage = L10n.text(
-                "no_playback_source",
-                languageCode: appLanguage
-            )
+        guard let videoID =
+                video.youtubeVideoID
+        else {
+            errorMessage =
+                L10n.text(
+                    "no_playback_source",
+                    languageCode:
+                        appLanguage
+                )
             return
         }
 
         isResolving = true
-        defer { isResolving = false }
+        defer {
+            isResolving = false
+        }
 
         do {
-            playbackSource = try await StreamResolver.resolveYouTubeVideo(
-                videoID: videoID,
-                preferredQuality: preferredQuality
-            )
-            showPlayer = true
+            playbackSource =
+                try await StreamResolver
+                    .resolveYouTubeVideo(
+                        videoID: videoID,
+                        preferredQuality:
+                            preferredQuality
+                    )
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage =
+                error.localizedDescription
         }
     }
 }
