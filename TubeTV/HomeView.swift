@@ -545,6 +545,7 @@ struct VideoRow: View {
                 }
             }
         }
+        .focusSection()
     }
 }
 
