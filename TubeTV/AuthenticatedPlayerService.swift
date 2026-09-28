@@ -163,7 +163,7 @@ actor AuthenticatedPlayerService {
             url: playerURL
         )
         request.httpMethod = "POST"
-        request.timeoutInterval = 25
+        request.timeoutInterval = 10
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(
             playerUserAgent,
@@ -253,6 +253,10 @@ actor AuthenticatedPlayerService {
             from: streaming["adaptiveFormats"]
         )
 
+        let hlsURL =
+            (streaming["hlsManifestUrl"] as? String)
+                .flatMap(URL.init(string:))
+
         let fallback = Self.bestCombined(
             combined,
             requestedHeight: Self.requestedHeight(for: preferredQuality)
@@ -298,26 +302,46 @@ actor AuthenticatedPlayerService {
                     .containsAdvertisingMetadata
         )
 
-        if let audio = audios.first {
-            if let height = Self.requestedHeight(for: preferredQuality),
-               let video = videos.first(where: { $0.height == height }) {
-                return .adaptiveWithHeaders(
-                    video: video.url,
-                    audio: audio.url,
-                    fallback: fallback,
-                    headers: playbackHeaders
-                )
-            }
+        // tvOS fast-start path. The authenticated TV response used to
+        // choose separate adaptive video+audio for Auto. Building an
+        // AVMutableComposition requires loading tracks and durations from
+        // both remote assets and becomes especially slow on long videos.
+        // Prefer a clean HLS manifest because AVPlayer can start from the
+        // first segments without inspecting the complete media files.
+        if preferredQuality == "Auto",
+           let hlsURL,
+           !adMetadata.containsAdvertisingMetadata {
+            return .directWithHeaders(
+                hlsURL,
+                playbackHeaders
+            )
+        }
 
-            if preferredQuality == "Auto",
-               let video = videos.first {
-                return .adaptiveWithHeaders(
-                    video: video.url,
-                    audio: audio.url,
-                    fallback: fallback,
-                    headers: playbackHeaders
-                )
-            }
+        // If the authenticated response has no usable HLS, a muxed MP4 is
+        // still faster to start than composing separate streams.
+        if preferredQuality == "Auto",
+           let fallback {
+            return .directWithHeaders(
+                fallback,
+                playbackHeaders
+            )
+        }
+
+        // Explicit quality choices may still need separate video and audio
+        // to reach 1080p/4K.
+        if let audio = audios.first,
+           let height = Self.requestedHeight(
+                for: preferredQuality
+           ),
+           let video = videos.first(
+                where: { $0.height == height }
+           ) {
+            return .adaptiveWithHeaders(
+                video: video.url,
+                audio: audio.url,
+                fallback: fallback,
+                headers: playbackHeaders
+            )
         }
 
         if let fallback {
@@ -327,15 +351,8 @@ actor AuthenticatedPlayerService {
             )
         }
 
-        let hasDirectContentFormats =
-            !combined.isEmpty || !adaptive.isEmpty
-
-        if AdFilteringPolicy.shouldUseHLSFallback(
-            adMetadata: adMetadata,
-            hasDirectContentFormats: hasDirectContentFormats
-        ),
-        let hls = streaming["hlsManifestUrl"] as? String,
-        let hlsURL = URL(string: hls) {
+        if let hlsURL,
+           !adMetadata.containsAdvertisingMetadata {
             return .directWithHeaders(
                 hlsURL,
                 playbackHeaders
