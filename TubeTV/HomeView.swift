@@ -202,6 +202,9 @@ struct HomeView: View {
                     languageCode: appLanguage
                 )
             } else {
+                // Once usable Home content is visible, any earlier primary
+                // request/fallback failure is no longer a user-facing error.
+                errorMessage = nil
                 lastLoadedAt = Date()
 
                 if homeContinuationToken != nil {
@@ -269,8 +272,24 @@ struct HomeView: View {
                 homeContinuationToken =
                     nextToken
             } catch {
-                errorMessage =
-                    error.localizedDescription
+                // The first Home page is already usable. SmartTube treats a
+                // failed continuation as the end of the feed instead of
+                // replacing visible content with a fatal account error.
+                homeContinuationToken = nil
+
+                let hasVisibleContent =
+                    sections.contains {
+                        !$0.videos.isEmpty
+                            || !$0.searchTiles.isEmpty
+                    }
+
+                if !hasVisibleContent {
+                    errorMessage =
+                        error.localizedDescription
+                } else {
+                    errorMessage = nil
+                }
+
                 break
             }
         }
@@ -338,8 +357,34 @@ struct HomeView: View {
                         : nextToken
                 )
         } catch {
-            errorMessage =
-                error.localizedDescription
+            // Keep the already loaded row usable. A failed "load more"
+            // request should not show a global account error over valid Home
+            // content or retrigger endlessly when focus reaches the row end.
+            let current =
+                sections[index]
+
+            sections[index] =
+                YouTubeHomeSection(
+                    id: current.id,
+                    title: current.title,
+                    videos: current.videos,
+                    searchTiles:
+                        current.searchTiles,
+                    continuationToken: nil
+                )
+
+            let hasVisibleContent =
+                sections.contains {
+                    !$0.videos.isEmpty
+                        || !$0.searchTiles.isEmpty
+                }
+
+            if !hasVisibleContent {
+                errorMessage =
+                    error.localizedDescription
+            } else {
+                errorMessage = nil
+            }
         }
     }
 }
