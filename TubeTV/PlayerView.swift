@@ -526,8 +526,17 @@ final class NativePlayerModel: ObservableObject {
 
                 return
             } catch {
+                if error is CancellationError {
+                    isPreparing = false
+                    return
+                }
+
                 lastError = error
-                player.pause()
+
+                if TubeTVPlayerEngine.shared
+                    .owns(playerOwnerID) {
+                    player.pause()
+                }
 
                 if let failedProfile =
                         source.clientProfile {
