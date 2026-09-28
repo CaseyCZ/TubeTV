@@ -37,6 +37,11 @@ struct VideoDetailView: View {
     @State private var errorMessage: String?
     @State private var didStartResolving = false
 
+    private let startupLogger = Logger(
+        subsystem: "cz.caseycz.tubetv",
+        category: "Startup"
+    )
+
     var body: some View {
         ZStack {
             Color.black
@@ -169,14 +174,30 @@ struct VideoDetailView: View {
             isResolving = false
         }
 
+        let resolveStartedAt = Date()
+
         do {
-            playbackSource =
+            let resolved =
                 try await StreamResolver
                     .resolveYouTubeVideo(
                         videoID: videoID,
                         preferredQuality:
                             preferredQuality
                     )
+
+            let elapsedMs =
+                Int(
+                    Date()
+                        .timeIntervalSince(
+                            resolveStartedAt
+                        ) * 1_000
+                )
+
+            startupLogger.notice(
+                "STARTUP_RESOLVED video=\(videoID, privacy: .public) source=\(resolved.diagnosticSourceKind, privacy: .public) profile=\(resolved.clientProfile ?? "UNTAGGED", privacy: .public) ms=\(elapsedMs, privacy: .public)"
+            )
+
+            playbackSource = resolved
         } catch {
             errorMessage =
                 error.localizedDescription
@@ -351,6 +372,7 @@ final class NativePlayerModel: ObservableObject {
     private let allowCaptionTranslation: Bool
 
     private var didPrepare = false
+    private var playerStartupStartedAt: Date?
     private var cues: [CaptionCue] = []
     private var captionLoadGeneration = UUID()
     private var timeObserver: Any?
@@ -432,6 +454,8 @@ final class NativePlayerModel: ObservableObject {
         errorMessage = nil
         failedClientProfiles.removeAll()
 
+        playerStartupStartedAt = Date()
+
         playbackLogger.notice(
             "STARTUP_BEGIN video=\(self.youtubeVideoID ?? "none", privacy: .public)"
         )
@@ -503,8 +527,19 @@ final class NativePlayerModel: ObservableObject {
                     "PLAYBACK_DIAG videoID=\(videoID, privacy: .public) live=\(live, privacy: .public) source=\(sourceKind, privacy: .public) profile=\(profile, privacy: .public) ads=\(ads, privacy: .public)"
                 )
 
+                let playerReadyMs =
+                    playerStartupStartedAt.map {
+                        Int(
+                            Date()
+                                .timeIntervalSince(
+                                    $0
+                                ) * 1_000
+                        )
+                    }
+                    ?? -1
+
                 playbackLogger.notice(
-                    "READY profile=\(profile, privacy: .public)"
+                    "READY profile=\(profile, privacy: .public) playerMs=\(playerReadyMs, privacy: .public)"
                 )
 
                 startBufferWatchdog()
