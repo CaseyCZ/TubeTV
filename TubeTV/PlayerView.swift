@@ -218,6 +218,10 @@ final class NativePlayerModel: ObservableObject {
     private var trackingContext: YouTubeTrackingContext?
     private var ciSmokeVerificationScheduled = false
     private var failedClientProfiles = Set<String>()
+    private var bufferWatchdogTask: Task<Void, Never>?
+    private var bufferWindowStartedAt: Date?
+    private var accumulatedBufferingSeconds: TimeInterval = 0
+    private var isRecoveringFromBuffering = false
     private var remoteSeekDirection = 0
     private var remoteSeekIncrementSeconds = 10.0
     private var remoteSeekAccelerationStartedAt: Date?
@@ -338,6 +342,7 @@ final class NativePlayerModel: ObservableObject {
                     "READY profile=\(profile, privacy: .public)"
                 )
 
+                startBufferWatchdog()
                 startCaptionLoadingIfNeeded()
                 startHistoryTrackingIfNeeded()
                 loadCaptionOptions()
@@ -785,11 +790,251 @@ final class NativePlayerModel: ObservableObject {
         cues.removeAll()
         currentCaption = ""
         trackingContext = nil
+
+        bufferWatchdogTask?.cancel()
+        bufferWatchdogTask = nil
+        bufferWindowStartedAt = nil
+        accumulatedBufferingSeconds = 0
+        isRecoveringFromBuffering = false
+
         player.replaceCurrentItem(with: nil)
     }
 
     func play() {
         player.playImmediately(atRate: playbackRate)
+    }
+
+    private func startBufferWatchdog() {
+        bufferWatchdogTask?.cancel()
+        bufferWindowStartedAt = Date()
+        accumulatedBufferingSeconds = 0
+
+        bufferWatchdogTask =
+            Task { @MainActor [weak self] in
+                guard let self else {
+                    return
+                }
+
+                var lastSample = Date()
+
+                while !Task.isCancelled {
+                    try? await Task.sleep(
+                        nanoseconds:
+                            500_000_000
+                    )
+
+                    guard !Task.isCancelled else {
+                        break
+                    }
+
+                    let now = Date()
+                    let elapsed =
+                        min(
+                            1.0,
+                            max(
+                                0,
+                                now.timeIntervalSince(
+                                    lastSample
+                                )
+                            )
+                        )
+                    lastSample = now
+
+                    if let windowStart =
+                            self
+                                .bufferWindowStartedAt,
+                       now.timeIntervalSince(
+                            windowStart
+                       ) >= 60 {
+                        self
+                            .bufferWindowStartedAt =
+                            now
+                        self
+                            .accumulatedBufferingSeconds =
+                            0
+                    }
+
+                    guard !self.isPreparing,
+                          !self
+                            .isSwitchingQuality,
+                          !self
+                            .isSwitchingAudio,
+                          !self
+                            .isRecoveringFromBuffering,
+                          self.player
+                            .currentItem != nil
+                    else {
+                        continue
+                    }
+
+                    guard self.player
+                            .timeControlStatus
+                            == .waitingToPlayAtSpecifiedRate
+                    else {
+                        continue
+                    }
+
+                    self
+                        .accumulatedBufferingSeconds +=
+                        elapsed
+
+                    guard self
+                            .accumulatedBufferingSeconds
+                            >= 20
+                    else {
+                        continue
+                    }
+
+                    self
+                        .accumulatedBufferingSeconds =
+                        0
+                    self
+                        .bufferWindowStartedAt =
+                        now
+
+                    self.playbackLogger.warning(
+                        "Long buffering detected profile=\(self.activeClientProfile ?? "UNTAGGED", privacy: .public)"
+                    )
+
+                    Task { @MainActor [weak self] in
+                        await self?
+                            .recoverFromLongBuffering()
+                    }
+                }
+            }
+    }
+
+    private func recoverFromLongBuffering()
+        async {
+        guard !isRecoveringFromBuffering,
+              let youtubeVideoID
+        else {
+            return
+        }
+
+        isRecoveringFromBuffering = true
+        isPreparing = true
+        errorMessage = nil
+
+        let savedTime =
+            player.currentTime()
+        let savedSeconds =
+            savedTime.seconds
+        let failedProfile =
+            currentSource.clientProfile
+
+        player.pause()
+        sendHistoryProgress()
+
+        if let failedProfile {
+            failedClientProfiles.insert(
+                failedProfile
+            )
+
+            await AlternativePlayerService
+                .shared
+                .markPlaybackFailed(
+                    profile: failedProfile
+                )
+        }
+
+        playbackLogger.warning(
+            "Buffer recovery start video=\(youtubeVideoID, privacy: .public) failedProfile=\(failedProfile ?? "UNTAGGED", privacy: .public) position=\(savedSeconds, privacy: .public)"
+        )
+
+        // First try a muxed/direct fallback from the same player response.
+        // This mirrors SmartTube's preference to change the usable format
+        // before walking the remaining player clients.
+        if let localFallback =
+                fallbackSource(
+                    from: currentSource
+                ) {
+            do {
+                try await activateAndVerify(
+                    localFallback
+                )
+
+                currentSource =
+                    localFallback
+                activeClientProfile =
+                    localFallback
+                        .clientProfile
+
+                if savedSeconds.isFinite,
+                   savedSeconds > 0 {
+                    await seek(
+                        to: savedTime
+                    )
+                }
+
+                isPreparing = false
+                isRecoveringFromBuffering =
+                    false
+                startBufferWatchdog()
+                play()
+
+                playbackLogger.notice(
+                    "Buffer recovery succeeded with local fallback"
+                )
+                return
+            } catch {
+                playbackLogger.warning(
+                    "Local buffer fallback failed error=\(error.localizedDescription, privacy: .public)"
+                )
+            }
+        }
+
+        do {
+            let resolved =
+                try await StreamResolver
+                    .resolveYouTubeVideo(
+                        videoID:
+                            youtubeVideoID,
+                        preferredQuality:
+                            activeQuality,
+                        excludingProfiles:
+                            failedClientProfiles
+                    )
+
+            let nextSource =
+                activeAudioTrackID
+                    .flatMap {
+                        resolved
+                            .replacingAudioTrack(
+                                id: $0
+                            )
+                    }
+                ?? resolved
+
+            await prepareWithFailover(
+                startingFrom:
+                    nextSource
+            )
+
+            if errorMessage == nil,
+               savedSeconds.isFinite,
+               savedSeconds > 0 {
+                await seek(
+                    to: savedTime
+                )
+                play()
+            }
+
+            playbackLogger.notice(
+                "Buffer recovery finished profile=\(self.activeClientProfile ?? "UNTAGGED", privacy: .public)"
+            )
+        } catch {
+            isPreparing = false
+            errorMessage =
+                error.localizedDescription
+
+            playbackLogger.error(
+                "Buffer recovery failed error=\(error.localizedDescription, privacy: .public)"
+            )
+        }
+
+        isRecoveringFromBuffering =
+            false
     }
 
     private func scheduleCISmokeVerificationIfNeeded() {
