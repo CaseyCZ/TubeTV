@@ -164,8 +164,19 @@ struct VideoDetailView: View {
 }
 
 @MainActor
+private final class TubeTVPlayerEngine {
+    static let shared = TubeTVPlayerEngine()
+
+    let player: AVPlayer
+
+    private init() {
+        player = AVPlayer()
+    }
+}
+
+@MainActor
 final class NativePlayerModel: ObservableObject {
-    @Published private(set) var player = AVPlayer()
+    @Published private(set) var player: AVPlayer
     @Published private(set) var errorMessage: String?
     @Published private(set) var isPreparing = true
     @Published private(set) var currentCaption = ""
@@ -226,6 +237,7 @@ final class NativePlayerModel: ObservableObject {
         captionLanguage: String,
         allowCaptionTranslation: Bool
     ) {
+        player = TubeTVPlayerEngine.shared.player
         currentSource = source
         self.youtubeVideoID = youtubeVideoID
         activeQuality = initialQuality
