@@ -274,6 +274,7 @@ private final class TubeTVPlayerEngine {
     static let shared = TubeTVPlayerEngine()
 
     let player: AVPlayer
+    private var ownerID: UUID?
 
     private init() {
         player = AVPlayer()
@@ -284,6 +285,26 @@ private final class TubeTVPlayerEngine {
         // unhealthy.
         player.automaticallyWaitsToMinimizeStalling =
             false
+    }
+
+    func claim(_ id: UUID) {
+        ownerID = id
+    }
+
+    func owns(_ id: UUID) -> Bool {
+        ownerID == id
+    }
+
+    func release(_ id: UUID) {
+        guard ownerID == id else {
+            return
+        }
+
+        player.pause()
+        player.replaceCurrentItem(
+            with: nil
+        )
+        ownerID = nil
     }
 }
 
@@ -323,6 +344,7 @@ final class NativePlayerModel: ObservableObject {
     @Published private(set) var isLoadingChannelState = false
     @Published private(set) var isUpdatingSubscription = false
 
+    private let playerOwnerID = UUID()
     private var currentSource: PlaybackSource
     private var youtubeVideoID: String?
     private let preferredCaptionLanguage: String
@@ -394,9 +416,15 @@ final class NativePlayerModel: ObservableObject {
 
     func prepareAndPlay() async {
         guard !didPrepare else {
-            play()
+            if TubeTVPlayerEngine.shared
+                .owns(playerOwnerID) {
+                play()
+            }
             return
         }
+
+        TubeTVPlayerEngine.shared
+            .claim(playerOwnerID)
 
         didPrepare = true
         isPreparing = true
@@ -565,6 +593,12 @@ final class NativePlayerModel: ObservableObject {
             try await makePlayerItem(
                 from: source
             )
+
+        guard TubeTVPlayerEngine.shared
+                .owns(playerOwnerID)
+        else {
+            throw CancellationError()
+        }
 
         currentSource = source
 
@@ -1388,9 +1422,15 @@ final class NativePlayerModel: ObservableObject {
     }
 
     func cleanup() {
-        sendHistoryProgress()
-        saveLocalPlaybackPosition()
-        player.pause()
+        let ownsPlayer =
+            TubeTVPlayerEngine.shared
+                .owns(playerOwnerID)
+
+        if ownsPlayer {
+            sendHistoryProgress()
+            saveLocalPlaybackPosition()
+            player.pause()
+        }
 
         if let timeObserver {
             player.removeTimeObserver(timeObserver)
@@ -1433,11 +1473,22 @@ final class NativePlayerModel: ObservableObject {
         accumulatedBufferingSeconds = 0
         isRecoveringFromBuffering = false
 
-        player.replaceCurrentItem(with: nil)
+        if ownsPlayer {
+            TubeTVPlayerEngine.shared
+                .release(playerOwnerID)
+        }
     }
 
     func play() {
-        player.playImmediately(atRate: playbackRate)
+        guard TubeTVPlayerEngine.shared
+                .owns(playerOwnerID)
+        else {
+            return
+        }
+
+        player.playImmediately(
+            atRate: playbackRate
+        )
     }
 
     private func installPlayerItemFailureObserver(
