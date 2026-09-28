@@ -204,9 +204,11 @@ final class NativePlayerModel: ObservableObject {
     @Published private(set) var isLoadingPlaylists = false
     @Published private(set) var updatingPlaylistID: String?
     @Published private(set) var isCreatingPlaylist = false
+    @Published private(set) var suggestedVideos: [VideoItem] = []
+    @Published private(set) var isSwitchingVideo = false
 
     private var currentSource: PlaybackSource
-    private let youtubeVideoID: String?
+    private var youtubeVideoID: String?
     private let preferredCaptionLanguage: String
     private let allowCaptionTranslation: Bool
 
@@ -222,6 +224,7 @@ final class NativePlayerModel: ObservableObject {
     private var bufferWindowStartedAt: Date?
     private var accumulatedBufferingSeconds: TimeInterval = 0
     private var isRecoveringFromBuffering = false
+    private var playbackHistory: [String] = []
     private var remoteSeekDirection = 0
     private var remoteSeekIncrementSeconds = 10.0
     private var remoteSeekAccelerationStartedAt: Date?
@@ -350,6 +353,10 @@ final class NativePlayerModel: ObservableObject {
 
                 Task {
                     await loadLikeStatusIfNeeded()
+                }
+
+                Task {
+                    await loadSuggestionsIfNeeded()
                 }
 
                 return
@@ -540,6 +547,162 @@ final class NativePlayerModel: ObservableObject {
 
     var supportsPlaylistActions: Bool {
         youtubeVideoID != nil
+    }
+
+    var canPlayNextVideo: Bool {
+        suggestedVideos
+            .contains {
+                $0.youtubeVideoID != nil
+            }
+    }
+
+    var canPlayPreviousVideo: Bool {
+        !playbackHistory.isEmpty
+    }
+
+    var nextVideoTitle: String? {
+        suggestedVideos
+            .first(
+                where: {
+                    $0.youtubeVideoID != nil
+                }
+            )?
+            .title
+    }
+
+    func playNextVideo() async {
+        guard let next =
+                suggestedVideos.first(
+                    where: {
+                        $0.youtubeVideoID != nil
+                    }
+                ),
+              let nextID =
+                next.youtubeVideoID
+        else {
+            return
+        }
+
+        await switchToVideo(
+            nextID,
+            rememberCurrent: true
+        )
+    }
+
+    func playPreviousVideo() async {
+        guard let previousID =
+                playbackHistory.popLast()
+        else {
+            return
+        }
+
+        await switchToVideo(
+            previousID,
+            rememberCurrent: false
+        )
+    }
+
+    private func loadSuggestionsIfNeeded()
+        async {
+        guard let youtubeVideoID else {
+            suggestedVideos = []
+            return
+        }
+
+        do {
+            suggestedVideos =
+                try await InnerTubeService
+                    .shared
+                    .watchNextVideos(
+                        youtubeVideoID
+                    )
+        } catch {
+            suggestedVideos = []
+
+            playbackLogger.notice(
+                "Suggestions load failed video=\(youtubeVideoID, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
+            )
+        }
+    }
+
+    private func switchToVideo(
+        _ videoID: String,
+        rememberCurrent: Bool
+    ) async {
+        guard !videoID.isEmpty,
+              videoID != youtubeVideoID,
+              !isSwitchingVideo
+        else {
+            return
+        }
+
+        let previousID =
+            youtubeVideoID
+
+        isSwitchingVideo = true
+        isPreparing = true
+        errorMessage = nil
+
+        sendHistoryProgress()
+        player.pause()
+
+        bufferWatchdogTask?.cancel()
+        bufferWatchdogTask = nil
+        bufferWindowStartedAt = nil
+        accumulatedBufferingSeconds = 0
+
+        captionLoadGeneration = UUID()
+        cues.removeAll()
+        currentCaption = ""
+        captionStatus = nil
+        activeCaptionLanguageCode = nil
+        captionOptions = []
+
+        trackingContext = nil
+        likeStatus = nil
+        playlistMemberships = []
+        suggestedVideos = []
+        failedClientProfiles.removeAll()
+
+        if rememberCurrent,
+           let previousID,
+           previousID != videoID {
+            playbackHistory.append(
+                previousID
+            )
+
+            if playbackHistory.count > 50 {
+                playbackHistory.removeFirst(
+                    playbackHistory.count - 50
+                )
+            }
+        }
+
+        youtubeVideoID = videoID
+
+        do {
+            let source =
+                try await StreamResolver
+                    .resolveYouTubeVideo(
+                        videoID: videoID,
+                        preferredQuality:
+                            activeQuality
+                    )
+
+            await prepareWithFailover(
+                startingFrom: source
+            )
+        } catch {
+            isPreparing = false
+            errorMessage =
+                error.localizedDescription
+
+            playbackLogger.error(
+                "Video switch failed video=\(videoID, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
+            )
+        }
+
+        isSwitchingVideo = false
     }
 
     func loadPlaylistMemberships() async {
@@ -2284,7 +2447,9 @@ struct NativePlayerView: View {
             VideoPlayer(player: model.player)
                 .ignoresSafeArea()
 
-            if model.isPreparing || model.isSwitchingQuality {
+            if model.isPreparing
+                || model.isSwitchingQuality
+                || model.isSwitchingVideo {
                 ProgressView(
                     model.isSwitchingQuality
                         ? L10n.text("switching_quality", languageCode: appLanguage)
@@ -2518,6 +2683,82 @@ private struct PlayerSettingsOverlay: View {
 
     private var rootPage: some View {
         VStack(spacing: 14) {
+            if model.canPlayPreviousVideo
+                || model.canPlayNextVideo {
+                HStack(spacing: 14) {
+                    Button {
+                        Task {
+                            await model
+                                .playPreviousVideo()
+                        }
+                    } label: {
+                        Label(
+                            L10n.text(
+                                "previous_video",
+                                languageCode:
+                                    appLanguage
+                            ),
+                            systemImage:
+                                "backward.end.fill"
+                        )
+                        .frame(
+                            maxWidth:
+                                .infinity
+                        )
+                    }
+                    .disabled(
+                        !model
+                            .canPlayPreviousVideo
+                    )
+
+                    Button {
+                        Task {
+                            await model
+                                .playNextVideo()
+                        }
+                    } label: {
+                        VStack(
+                            alignment:
+                                .leading,
+                            spacing: 3
+                        ) {
+                            Label(
+                                L10n.text(
+                                    "next_video",
+                                    languageCode:
+                                        appLanguage
+                                ),
+                                systemImage:
+                                    "forward.end.fill"
+                            )
+
+                            if let title =
+                                    model
+                                        .nextVideoTitle {
+                                Text(title)
+                                    .font(
+                                        .caption
+                                    )
+                                    .foregroundStyle(
+                                        .secondary
+                                    )
+                                    .lineLimit(1)
+                            }
+                        }
+                        .frame(
+                            maxWidth:
+                                .infinity,
+                            alignment:
+                                .leading
+                        )
+                    }
+                    .disabled(
+                        !model
+                            .canPlayNextVideo
+                    )
+                }
+            }
+
             if model.supportsVideoReactions {
                 HStack(spacing: 14) {
                     reactionButton(
