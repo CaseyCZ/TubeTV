@@ -3075,6 +3075,8 @@ struct NativePlayerView: View {
 
     @State private var showSettings = false
     @State private var settingsPage: PlayerSettingsPage = .root
+    @State private var showTransportControls = true
+    @State private var controlsHideTask: Task<Void, Never>?
     @FocusState private var playerControlFocus: PlayerControlFocus?
 
     init(
@@ -3148,6 +3150,12 @@ struct NativePlayerView: View {
                 }
             }
 
+            if showTransportControls
+                && !showSettings {
+                transportOverlay
+                    .transition(.opacity)
+            }
+
             if showSettings {
                 PlayerSettingsOverlay(
                     model: model,
@@ -3158,6 +3166,25 @@ struct NativePlayerView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: showSettings)
+        .animation(
+            .easeInOut(duration: 0.18),
+            value: showTransportControls
+        )
+        .onTapGesture {
+            revealTransportControls()
+        }
+        .onPlayPauseCommand {
+            if model.player.timeControlStatus
+                == .playing {
+                model.player.pause()
+            } else {
+                model.player.playImmediately(
+                    atRate: model.playbackRate
+                )
+            }
+
+            revealTransportControls()
+        }
         .onMoveCommand { direction in
             guard !showSettings else {
                 return
@@ -3165,17 +3192,17 @@ struct NativePlayerView: View {
 
             switch direction {
             case .up:
-                // VideoPlayer keeps tvOS focus, so the floating gear cannot
-                // reliably be reached by the focus engine. Match TV-player
-                // behaviour and make Up the direct path into settings.
                 settingsPage = .root
                 showSettings = true
+                showTransportControls = false
                 playerControlFocus = nil
 
             case .down:
                 playerControlFocus = nil
+                revealTransportControls()
 
             case .left:
+                revealTransportControls()
                 playerControlFocus = nil
                 let delta =
                     model.remoteSeekDelta(
@@ -3188,6 +3215,7 @@ struct NativePlayerView: View {
                 }
 
             case .right:
+                revealTransportControls()
                 playerControlFocus = nil
                 let delta =
                     model.remoteSeekDelta(
@@ -3204,9 +3232,11 @@ struct NativePlayerView: View {
             }
         }
         .task {
+            revealTransportControls()
             await model.prepareAndPlay()
         }
         .onDisappear {
+            controlsHideTask?.cancel()
             model.cleanup()
         }
         .onExitCommand {
@@ -3221,6 +3251,203 @@ struct NativePlayerView: View {
             }
         }
     }
+
+    private var transportOverlay: some View {
+        VStack {
+            Spacer()
+
+            LinearGradient(
+                colors: [
+                    .clear,
+                    .black.opacity(0.88)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 320)
+            .overlay(alignment: .bottom) {
+                VStack(
+                    alignment: .leading,
+                    spacing: 18
+                ) {
+                    if !model.currentVideoTitle
+                        .isEmpty {
+                        Text(
+                            model.currentVideoTitle
+                        )
+                        .font(.title2.bold())
+                        .lineLimit(1)
+                    }
+
+                    if !model.currentChannelTitle
+                        .isEmpty {
+                        Text(
+                            model.currentChannelTitle
+                        )
+                        .font(.headline)
+                        .foregroundStyle(
+                            .secondary
+                        )
+                        .lineLimit(1)
+                    }
+
+                    TimelineView(
+                        .periodic(
+                            from: .now,
+                            by: 0.5
+                        )
+                    ) { _ in
+                        let current =
+                            max(
+                                0,
+                                model.player
+                                    .currentTime()
+                                    .seconds
+                            )
+                        let duration =
+                            model.player
+                                .currentItem?
+                                .duration
+                                .seconds
+                            ?? 0
+                        let safeCurrent =
+                            current.isFinite
+                            ? current
+                            : 0
+                        let safeDuration =
+                            duration.isFinite
+                                && duration > 0
+                            ? duration
+                            : 1
+
+                        VStack(
+                            spacing: 10
+                        ) {
+                            ProgressView(
+                                value:
+                                    min(
+                                        safeCurrent,
+                                        safeDuration
+                                    ),
+                                total:
+                                    safeDuration
+                            )
+                            .progressViewStyle(
+                                .linear
+                            )
+
+                            HStack {
+                                Text(
+                                    formatTransportTime(
+                                        safeCurrent
+                                    )
+                                )
+
+                                Spacer()
+
+                                Image(
+                                    systemName:
+                                        model.player
+                                            .timeControlStatus
+                                        == .playing
+                                        ? "pause.fill"
+                                        : "play.fill"
+                                )
+                                .font(.title2)
+
+                                Spacer()
+
+                                Text(
+                                    duration.isFinite
+                                        && duration > 0
+                                    ? formatTransportTime(
+                                        duration
+                                    )
+                                    : "--:--"
+                                )
+                            }
+                            .font(
+                                .headline
+                                    .monospacedDigit()
+                            )
+                        }
+                    }
+
+                    Text(
+                        "←/→ 10 s   •   ▲ (L10n.text("settings", languageCode: appLanguage))"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(
+                        .secondary
+                    )
+                }
+                .padding(
+                    .horizontal,
+                    70
+                )
+                .padding(
+                    .bottom,
+                    54
+                )
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func revealTransportControls() {
+        showTransportControls = true
+
+        controlsHideTask?.cancel()
+        controlsHideTask =
+            Task { @MainActor in
+                try? await Task.sleep(
+                    nanoseconds:
+                        4_000_000_000
+                )
+
+                guard !Task.isCancelled,
+                      !showSettings else {
+                    return
+                }
+
+                showTransportControls = false
+            }
+    }
+
+    private func formatTransportTime(
+        _ seconds: Double
+    ) -> String {
+        guard seconds.isFinite,
+              seconds >= 0 else {
+            return "00:00"
+        }
+
+        let total =
+            Int(seconds.rounded(.down))
+        let hours = total / 3600
+        let minutes =
+            (total % 3600) / 60
+        let remaining =
+            total % 60
+
+        if hours > 0 {
+            return String(
+                format:
+                    "%d:%02d:%02d",
+                hours,
+                minutes,
+                remaining
+            )
+        }
+
+        return String(
+            format:
+                "%02d:%02d",
+            minutes,
+            remaining
+        )
+    }
+
 }
 
 private struct PlayerSettingsOverlay: View {
