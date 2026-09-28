@@ -751,6 +751,10 @@ actor AlternativePlayerService {
             videoDetails?["isLive"]
                 as? Bool
             ?? false
+        let isLiveContent =
+            videoDetails?["isLiveContent"]
+                as? Bool
+            ?? false
 
         guard let streaming =
             AdFilteringPolicy
@@ -877,13 +881,14 @@ actor AlternativePlayerService {
             availableHeights: availableHeights,
             audioTracks: audioTracks,
             isLive: isLive,
+            isLiveContent: isLiveContent,
             advertisingMetadataDetected:
                 adMetadata
                     .containsAdvertisingMetadata
         )
 
         logger.notice(
-            "Formats client=\(client.profile, privacy: .public) combined=\(combined.count, privacy: .public) combinedAll=\(allCombined.count, privacy: .public) adaptive=\(adaptive.count, privacy: .public) hls=\(hlsRaw != nil, privacy: .public) ads=\(adMetadata.containsAdvertisingMetadata, privacy: .public)"
+            "Formats client=\(client.profile, privacy: .public) combined=\(combined.count, privacy: .public) combinedAll=\(allCombined.count, privacy: .public) adaptive=\(adaptive.count, privacy: .public) hls=\(hlsRaw != nil, privacy: .public) live=\(isLive, privacy: .public) liveContent=\(isLiveContent, privacy: .public) ads=\(adMetadata.containsAdvertisingMetadata, privacy: .public)"
         )
 
         // SmartTubeIOS uses standard Android only as the final muxed
@@ -905,8 +910,26 @@ actor AlternativePlayerService {
             )
         }
 
-        // On Apple platforms, VisionOS HLS is the preferred
-        // native path when YouTube returns it.
+        // SmartTube routes active live playback through a manifest path.
+        // AVPlayer's native HLS implementation is the most reliable equivalent
+        // on tvOS, so prefer HLS for any currently-live response before trying
+        // separately muxed video/audio tracks.
+        if isLive,
+           let hlsRaw,
+           let hls = URL(string: hlsRaw),
+           !adMetadata.containsAdvertisingMetadata {
+            logger.notice(
+                "Using native HLS live path client=\(client.profile, privacy: .public)"
+            )
+
+            return .directWithHeaders(
+                hls,
+                playbackHeaders
+            )
+        }
+
+        // On Apple platforms, VisionOS HLS is also the preferred native path
+        // for ordinary/past-live content when YouTube returns it.
         if client.profile == "VISIONOS",
            let hlsRaw,
            let hls = URL(string: hlsRaw),
