@@ -125,7 +125,6 @@ jobs:
           xcrun simctl launch "$UDID" cz.caseycz.tubetv | tee simulator-launch.txt
 
           sleep 12
-          xcrun simctl io "$UDID" screenshot tubetv-simulator.png
           xcrun simctl spawn "$UDID" log show \
             --style compact \
             --last 2m \
@@ -172,7 +171,6 @@ jobs:
             > video-smoke-launch.txt
 
           sleep 18
-          xcrun simctl io "$UDID" screenshot tubetv-video-smoke.png
           xcrun simctl spawn "$UDID" log show \
             --style compact \
             --last 3m \
@@ -208,7 +206,6 @@ jobs:
             > live-smoke-launch.txt
 
           sleep 22
-          xcrun simctl io "$UDID" screenshot tubetv-live-smoke.png
           xcrun simctl spawn "$UDID" log show \
             --style compact \
             --last 3m \
@@ -244,7 +241,6 @@ jobs:
             > direct-video-launch.txt
 
           sleep 16
-          xcrun simctl io "$UDID" screenshot tubetv-direct-video.png
           xcrun simctl spawn "$UDID" log show \
             --style compact \
             --last 2m \
@@ -255,31 +251,6 @@ jobs:
           grep -q "TUBETV_DIRECT_VIDEO_STARTED" tubetv-direct-video.log
           grep -q "TUBETV_VIDEO_PLAYBACK_OK" tubetv-direct-video.log
           grep -q "PLAYBACK_DIAG .*source=HLS .*profile=UNTAGGED" tubetv-direct-video.log
-
-      - name: Upload simulator evidence
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: TubeTV-tvOS-Simulator
-          if-no-files-found: warn
-          path: |
-            simulator-build.log
-            device-release-build.log
-            device-release-archive.log
-            simulator-launch.txt
-            tubetv-simulator.png
-            tubetv-simulator.log
-            ad-filter-launch.txt
-            tubetv-ad-filter.log
-            video-smoke-launch.txt
-            tubetv-video-smoke.png
-            tubetv-video-smoke.log
-            live-smoke-launch.txt
-            tubetv-live-smoke.png
-            tubetv-live-smoke.log
-            direct-video-launch.txt
-            tubetv-direct-video.png
-            tubetv-direct-video.log
 
       - name: Shutdown simulator
         if: always()
