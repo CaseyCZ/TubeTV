@@ -388,9 +388,6 @@ actor AlternativePlayerService {
                     preferredQuality: preferredQuality,
                     client: client
                 ) {
-                    lastSuccessfulProfile =
-                        client.profile
-
                     logger.notice(
                         "Resolved with client=\(client.profile, privacy: .public) version=\(client.version, privacy: .public)"
                     )
@@ -417,6 +414,28 @@ actor AlternativePlayerService {
         }
 
         throw lastError
+    }
+
+    func markPlaybackSuccessful(
+        profile: String
+    ) {
+        lastSuccessfulProfile = profile
+
+        logger.notice(
+            "Playback profile confirmed=\(profile, privacy: .public)"
+        )
+    }
+
+    func markPlaybackFailed(
+        profile: String
+    ) {
+        if lastSuccessfulProfile == profile {
+            lastSuccessfulProfile = nil
+        }
+
+        logger.notice(
+            "Playback profile rejected=\(profile, privacy: .public)"
+        )
     }
 
     private func seedWebSession(
