@@ -1,5 +1,10 @@
 import SwiftUI
 
+extension Notification.Name {
+    static let tubeTVPlayerVisibilityChanged =
+        Notification.Name("TubeTVPlayerVisibilityChanged")
+}
+
 enum AppSection: String, CaseIterable, Identifiable {
     case home
     case subscriptions
@@ -35,17 +40,21 @@ struct RootView: View {
     @State private var selection: AppSection = .home
     @State private var requestedSearchQuery: String?
     @State private var sidebarCollapsed = false
+    @State private var playerIsVisible = false
     @FocusState private var focusedSidebarItem: AppSection?
 
     var body: some View {
         HStack(spacing: 0) {
-            sidebar
-                .frame(
-                    width:
-                        sidebarCollapsed
-                        ? 96
-                        : 460
-                )
+            if !playerIsVisible {
+                sidebar
+                    .frame(
+                        width:
+                            sidebarCollapsed
+                            ? 96
+                            : 460
+                    )
+                    .transition(.move(edge: .leading).combined(with: .opacity))
+            }
 
             Group {
                 switch selection {
@@ -78,11 +87,29 @@ struct RootView: View {
             .easeInOut(duration: 0.22),
             value: sidebarCollapsed
         )
+        .animation(
+            .easeInOut(duration: 0.18),
+            value: playerIsVisible
+        )
         .onChange(
             of: focusedSidebarItem
         ) { _, newValue in
             sidebarCollapsed =
                 newValue == nil
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: .tubeTVPlayerVisibilityChanged
+            )
+        ) { notification in
+            playerIsVisible =
+                notification.object as? Bool
+                ?? false
+
+            if playerIsVisible {
+                focusedSidebarItem = nil
+                sidebarCollapsed = true
+            }
         }
         .background(Color.black)
         .preferredColorScheme(.dark)
