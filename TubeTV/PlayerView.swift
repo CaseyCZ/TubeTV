@@ -3120,27 +3120,6 @@ struct NativePlayerView: View {
             }
 
             VStack {
-                HStack {
-                    Spacer()
-
-                    Button {
-                        settingsPage = .root
-                        showSettings = true
-                        playerControlFocus = nil
-                    } label: {
-                        Image(systemName: "gearshape.fill")
-                            .font(.title2)
-                            .padding(10)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .focused(
-                        $playerControlFocus,
-                        equals: .settings
-                    )
-                    .padding(.top, 38)
-                    .padding(.trailing, 48)
-                }
-
                 Spacer()
 
                 if !model.currentCaption.isEmpty {
