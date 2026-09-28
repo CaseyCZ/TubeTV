@@ -349,6 +349,9 @@ final class NativePlayerModel: ObservableObject {
     private var pendingRemoteSeekSeconds: Double?
     private var remoteSeekAccelerationStartedAt: Date?
     private var remoteSeekLastEventAt: Date?
+    private var nextPreloadTask: Task<Void, Never>?
+    private var preloadedNextVideoID: String?
+    private var preloadedNextSource: PlaybackSource?
 
     private let playbackLogger = Logger(
         subsystem: "cz.caseycz.tubetv",
@@ -1062,6 +1065,10 @@ final class NativePlayerModel: ObservableObject {
 
         bufferWatchdogTask?.cancel()
         bufferWatchdogTask = nil
+        nextPreloadTask?.cancel()
+        nextPreloadTask = nil
+        preloadedNextVideoID = nil
+        preloadedNextSource = nil
         bufferWindowStartedAt = nil
         accumulatedBufferingSeconds = 0
 
@@ -1077,6 +1084,10 @@ final class NativePlayerModel: ObservableObject {
         playlistMemberships = []
         suggestedVideos = []
         chapters = []
+        nextPreloadTask?.cancel()
+        nextPreloadTask = nil
+        preloadedNextVideoID = nil
+        preloadedNextSource = nil
         failedClientProfiles.removeAll()
         isSubscribed = nil
         isLoadingChannelState = false
@@ -1105,13 +1116,30 @@ final class NativePlayerModel: ObservableObject {
         restoredPositionVideoID = nil
 
         do {
-            let source =
-                try await StreamResolver
-                    .resolveYouTubeVideo(
-                        videoID: videoID,
-                        preferredQuality:
-                            activeQuality
-                    )
+            let source: PlaybackSource
+
+            if preloadedNextVideoID
+                    == videoID,
+               let preloadedNextSource {
+                source =
+                    preloadedNextSource
+
+                self.preloadedNextVideoID =
+                    nil
+                self.preloadedNextSource =
+                    nil
+            } else {
+                source =
+                    try await StreamResolver
+                        .resolveYouTubeVideo(
+                            videoID: videoID,
+                            preferredQuality:
+                                activeQuality
+                        )
+            }
+
+            nextPreloadTask?.cancel()
+            nextPreloadTask = nil
 
             await prepareWithFailover(
                 startingFrom: source
@@ -2247,8 +2275,90 @@ final class NativePlayerModel: ObservableObject {
                 queue: .main
             ) { [weak self] _ in
                 Task { @MainActor [weak self] in
-                    self?
-                        .saveLocalPlaybackPosition()
+                    guard let self else {
+                        return
+                    }
+
+                    self.saveLocalPlaybackPosition()
+                    self.preloadNextVideoIfNeeded()
+                }
+            }
+    }
+
+    private func preloadNextVideoIfNeeded() {
+        guard currentSource.diagnosticIsLive != true,
+              nextPreloadTask == nil,
+              let duration =
+                player.currentItem?
+                    .duration.seconds,
+              duration.isFinite,
+              duration > 0
+        else {
+            return
+        }
+
+        let position =
+            player.currentTime()
+                .seconds
+
+        guard position.isFinite,
+              duration - position < 50,
+              let next =
+                suggestedVideos.first(
+                    where: {
+                        $0.youtubeVideoID
+                            != nil
+                    }
+                ),
+              let nextID =
+                next.youtubeVideoID,
+              !nextID.isEmpty,
+              preloadedNextVideoID
+                != nextID
+        else {
+            return
+        }
+
+        let quality = activeQuality
+
+        nextPreloadTask =
+            Task { @MainActor [weak self] in
+                guard let self else {
+                    return
+                }
+
+                defer {
+                    self.nextPreloadTask = nil
+                }
+
+                do {
+                    let source =
+                        try await StreamResolver
+                            .resolveYouTubeVideo(
+                                videoID: nextID,
+                                preferredQuality:
+                                    quality
+                            )
+
+                    guard !Task.isCancelled,
+                          self.youtubeVideoID
+                            != nextID
+                    else {
+                        return
+                    }
+
+                    self.preloadedNextVideoID =
+                        nextID
+                    self.preloadedNextSource =
+                        source
+
+                    self.playbackLogger.notice(
+                        "Preloaded next video=\(nextID, privacy: .public)"
+                    )
+                } catch {
+                    self.playbackLogger.notice(
+                        "Next preload failed video=\(nextID, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
+                    )
                 }
             }
     }
