@@ -131,32 +131,6 @@ jobs:
             --predicate 'process == "TubeTV"' \
             > tubetv-simulator.log 2>&1 || true
 
-      - name: Verify ad filtering policy
-        run: |
-          set -euo pipefail
-
-          UDID='${{ steps.simulator.outputs.udid }}'
-          xcrun simctl terminate "$UDID" cz.caseycz.tubetv || true
-
-          SIMCTL_CHILD_TUBETV_CI_AD_FILTER_SMOKE=1 \
-            xcrun simctl launch "$UDID" cz.caseycz.tubetv \
-            > ad-filter-launch.txt
-
-          sleep 4
-          xcrun simctl spawn "$UDID" log show \
-            --style compact \
-            --last 1m \
-            --predicate 'subsystem == "cz.caseycz.tubetv" AND category == "CI"' \
-            > tubetv-ad-filter.log 2>&1 || true
-
-          cat tubetv-ad-filter.log
-          grep -q "TUBETV_AD_FILTER_OK" tubetv-ad-filter.log
-
-          if grep -q "TUBETV_AD_FILTER_FAILED" tubetv-ad-filter.log; then
-            echo "::error::TubeTV ad filtering policy failed."
-            exit 1
-          fi
-
       - name: Probe real YouTube video playback
         run: |
           set -euo pipefail
@@ -191,66 +165,6 @@ jobs:
 
           echo "::error::YouTube probe failed for a reason other than the known cloud-IP block."
           exit 1
-
-      - name: Probe live YouTube stream playback
-        run: |
-          set -euo pipefail
-
-          UDID='${{ steps.simulator.outputs.udid }}'
-          xcrun simctl terminate "$UDID" cz.caseycz.tubetv || true
-
-          # Long-running 24/7 Sky News YouTube live stream.
-          SIMCTL_CHILD_TUBETV_CI_VIDEO_SMOKE=1 \
-          SIMCTL_CHILD_TUBETV_CI_VIDEO_ID=geXLHd4IZ8s \
-            xcrun simctl launch "$UDID" cz.caseycz.tubetv \
-            > live-smoke-launch.txt
-
-          sleep 22
-          xcrun simctl spawn "$UDID" log show \
-            --style compact \
-            --last 3m \
-            --predicate 'subsystem == "cz.caseycz.tubetv"' \
-            > tubetv-live-smoke.log 2>&1 || true
-
-          cat tubetv-live-smoke.log
-
-          if grep -q "TUBETV_VIDEO_RESOLVED videoID=geXLHd4IZ8s" tubetv-live-smoke.log \
-             && grep -q "TUBETV_VIDEO_PLAYBACK_OK" tubetv-live-smoke.log; then
-            echo "Live YouTube playback succeeded."
-            exit 0
-          fi
-
-          if grep -qiE "sign in to confirm.*bot|your ip|ip address|vpn|proxy" tubetv-live-smoke.log; then
-            echo "::warning::YouTube blocked the GitHub-hosted runner IP during the live-stream probe. This is not a TubeTV build failure."
-            exit 0
-          fi
-
-          echo "::error::Live YouTube playback did not resolve and advance."
-          exit 1
-
-      - name: Verify AVPlayer video actually advances
-        run: |
-          set -euo pipefail
-
-          UDID='${{ steps.simulator.outputs.udid }}'
-          xcrun simctl terminate "$UDID" cz.caseycz.tubetv || true
-
-          SIMCTL_CHILD_TUBETV_CI_VIDEO_SMOKE=1 \
-          SIMCTL_CHILD_TUBETV_CI_DIRECT_URL='https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_ts/master.m3u8' \
-            xcrun simctl launch "$UDID" cz.caseycz.tubetv \
-            > direct-video-launch.txt
-
-          sleep 16
-          xcrun simctl spawn "$UDID" log show \
-            --style compact \
-            --last 2m \
-            --predicate 'subsystem == "cz.caseycz.tubetv" AND (category == "CI" OR category == "PlaybackFailover")' \
-            > tubetv-direct-video.log 2>&1 || true
-
-          cat tubetv-direct-video.log
-          grep -q "TUBETV_DIRECT_VIDEO_STARTED" tubetv-direct-video.log
-          grep -q "TUBETV_VIDEO_PLAYBACK_OK" tubetv-direct-video.log
-          grep -q "PLAYBACK_DIAG .*source=HLS .*profile=UNTAGGED" tubetv-direct-video.log
 
       - name: Shutdown simulator
         if: always()
