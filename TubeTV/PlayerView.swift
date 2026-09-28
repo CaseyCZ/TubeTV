@@ -639,7 +639,10 @@ final class NativePlayerModel: ObservableObject {
     private func waitUntilReadyToPlay(
         _ item: AVPlayerItem
     ) async throws {
-        for _ in 0..<100 {
+        // A healthy HLS/muxed source should become ready quickly. Do not
+        // spend tens of seconds on a source that AVPlayer can't prepare;
+        // fail over to the next SmartTube client instead.
+        for _ in 0..<80 {
             switch item.status {
             case .readyToPlay:
                 return
@@ -660,6 +663,15 @@ final class NativePlayerModel: ObservableObject {
                 nanoseconds: 100_000_000
             )
         }
+
+        let waitingReason =
+            player.reasonForWaitingToPlay?
+                .rawValue
+            ?? "none"
+
+        playbackLogger.notice(
+            "Startup readiness timeout status=\(String(describing: item.status), privacy: .public) waiting=\(waitingReason, privacy: .public)"
+        )
 
         throw StreamResolverError
             .noPlayableStream
