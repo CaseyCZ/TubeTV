@@ -33,6 +33,16 @@ struct YouTubePlaylistMembership: Identifiable, Hashable {
     let isSelected: Bool
 }
 
+struct YouTubeChapter: Identifiable, Hashable {
+    let title: String
+    let startTimeMs: Int64
+    let thumbnailURL: URL?
+
+    var id: String {
+        "\(startTimeMs)-\(title)"
+    }
+}
+
 struct YouTubeSearchTile: Identifiable, Hashable {
     let id: String
     let title: String
@@ -1419,11 +1429,14 @@ actor InnerTubeService {
         return root
     }
 
-    func watchNextVideos(
+    func watchNextMetadata(
         _ videoID: String
-    ) async throws -> [VideoItem] {
+    ) async throws -> (
+        videos: [VideoItem],
+        chapters: [YouTubeChapter]
+    ) {
         guard !videoID.isEmpty else {
-            return []
+            return ([], [])
         }
 
         let root =
@@ -1450,11 +1463,27 @@ actor InnerTubeService {
                 ).inserted
             }
 
+        let chapters =
+            Self.extractChapters(
+                from: root
+            )
+
         logger.notice(
-            "WatchNext video=\(videoID, privacy: .public) suggestions=\(videos.count, privacy: .public)"
+            "WatchNext video=\(videoID, privacy: .public) suggestions=\(videos.count, privacy: .public) chapters=\(chapters.count, privacy: .public)"
         )
 
-        return videos
+        return (
+            videos,
+            chapters
+        )
+    }
+
+    func watchNextVideos(
+        _ videoID: String
+    ) async throws -> [VideoItem] {
+        try await watchNextMetadata(
+            videoID
+        ).videos
     }
 
     private func watchNext(
@@ -2100,6 +2129,202 @@ actor InnerTubeService {
         }
 
         return result
+    }
+
+    private static func extractChapters(
+        from root: Any
+    ) -> [YouTubeChapter] {
+        var chapters: [YouTubeChapter] = []
+        collectChapters(
+            from: root,
+            into: &chapters
+        )
+
+        var seen = Set<String>()
+
+        return chapters
+            .filter {
+                $0.startTimeMs >= 0
+                    && !$0.title
+                        .trimmingCharacters(
+                            in: .whitespacesAndNewlines
+                        )
+                        .isEmpty
+            }
+            .sorted {
+                $0.startTimeMs
+                    < $1.startTimeMs
+            }
+            .filter {
+                let identity =
+                    "\($0.startTimeMs)-\($0.title)"
+                return seen
+                    .insert(identity)
+                    .inserted
+            }
+    }
+
+    private static func collectChapters(
+        from node: Any,
+        into output:
+            inout [YouTubeChapter]
+    ) {
+        if let dictionary =
+                node as? [String: Any] {
+            if let renderer =
+                    dictionary[
+                        "chapterRenderer"
+                    ] as? [String: Any],
+               let chapter =
+                    chapter(
+                        from: renderer,
+                        kind: .chapterRenderer
+                    ) {
+                output.append(chapter)
+            }
+
+            if let renderer =
+                    dictionary[
+                        "macroMarkersListItemRenderer"
+                    ] as? [String: Any],
+               let chapter =
+                    chapter(
+                        from: renderer,
+                        kind: .macroMarker
+                    ) {
+                output.append(chapter)
+            }
+
+            if dictionary["startMillis"]
+                    != nil,
+               dictionary["title"] != nil,
+               let chapter =
+                    chapter(
+                        from: dictionary,
+                        kind: .entityMarker
+                    ) {
+                output.append(chapter)
+            }
+
+            for value in dictionary.values {
+                collectChapters(
+                    from: value,
+                    into: &output
+                )
+            }
+        } else if let array =
+                    node as? [Any] {
+            for value in array {
+                collectChapters(
+                    from: value,
+                    into: &output
+                )
+            }
+        }
+    }
+
+    private enum ChapterRendererKind {
+        case chapterRenderer
+        case macroMarker
+        case entityMarker
+    }
+
+    private static func chapter(
+        from renderer: [String: Any],
+        kind: ChapterRendererKind
+    ) -> YouTubeChapter? {
+        guard let title =
+                text(
+                    from:
+                        renderer["title"]
+                )?
+                .trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                ),
+              !title.isEmpty
+        else {
+            return nil
+        }
+
+        let startTimeMs: Int64?
+
+        switch kind {
+        case .chapterRenderer:
+            startTimeMs =
+                int64Value(
+                    renderer[
+                        "timeRangeStartMillis"
+                    ]
+                )
+
+        case .macroMarker:
+            if let endpoint =
+                    nested(
+                        renderer,
+                        path: [
+                            "onTap",
+                            "watchEndpoint",
+                            "startTimeSeconds"
+                        ]
+                    ),
+               let seconds =
+                    int64Value(endpoint) {
+                startTimeMs =
+                    seconds * 1_000
+            } else {
+                startTimeMs = nil
+            }
+
+        case .entityMarker:
+            startTimeMs =
+                int64Value(
+                    renderer[
+                        "startMillis"
+                    ]
+                )
+        }
+
+        guard let startTimeMs,
+              startTimeMs >= 0
+        else {
+            return nil
+        }
+
+        return YouTubeChapter(
+            title: title,
+            startTimeMs:
+                startTimeMs,
+            thumbnailURL:
+                firstThumbnailURL(
+                    in: renderer
+                )
+        )
+    }
+
+    private static func int64Value(
+        _ value: Any?
+    ) -> Int64? {
+        if let value as? Int {
+            return Int64(value)
+        }
+
+        if let value as? Int64 {
+            return value
+        }
+
+        if let value as? Double {
+            return Int64(value)
+        }
+
+        if let value as? NSNumber {
+            return value.int64Value
+        }
+
+        if let value as? String {
+            return Int64(value)
+        }
+
+        return nil
     }
 
     private static func extractVideos(from root: Any) -> [VideoItem] {
