@@ -167,6 +167,75 @@ struct VideoDetailView: View {
     }
 }
 
+private enum PlaybackPositionStore {
+    private static let prefix =
+        "tubetv.playback.position."
+
+    static func load(
+        videoID: String
+    ) -> Double? {
+        let key = prefix + videoID
+
+        guard UserDefaults.standard
+                .object(forKey: key) != nil
+        else {
+            return nil
+        }
+
+        let value =
+            UserDefaults.standard
+                .double(forKey: key)
+
+        return value > 0
+            ? value
+            : nil
+    }
+
+    static func save(
+        videoID: String,
+        position: Double,
+        duration: Double?
+    ) {
+        let key = prefix + videoID
+
+        guard position.isFinite,
+              position >= 10
+        else {
+            UserDefaults.standard
+                .removeObject(
+                    forKey: key
+                )
+            return
+        }
+
+        if let duration,
+           duration.isFinite,
+           duration > 0,
+           duration - position < 3 {
+            UserDefaults.standard
+                .removeObject(
+                    forKey: key
+                )
+            return
+        }
+
+        UserDefaults.standard.set(
+            position,
+            forKey: key
+        )
+    }
+
+    static func clear(
+        videoID: String
+    ) {
+        UserDefaults.standard
+            .removeObject(
+                forKey:
+                    prefix + videoID
+            )
+    }
+}
+
 @MainActor
 private final class TubeTVPlayerEngine {
     static let shared = TubeTVPlayerEngine()
@@ -217,7 +286,9 @@ final class NativePlayerModel: ObservableObject {
     private var captionLoadGeneration = UUID()
     private var timeObserver: Any?
     private var trackingObserver: Any?
+    private var localPositionObserver: Any?
     private var trackingContext: YouTubeTrackingContext?
+    private var restoredPositionVideoID: String?
     private var ciSmokeVerificationScheduled = false
     private var failedClientProfiles = Set<String>()
     private var bufferWatchdogTask: Task<Void, Never>?
@@ -439,6 +510,12 @@ final class NativePlayerModel: ObservableObject {
             item
         )
 
+        await restorePlaybackPositionIfNeeded(
+            source: source,
+            item: item
+        )
+        installLocalPositionObserverIfNeeded()
+
         await updateFormatInfo(
             from: item
         )
@@ -644,6 +721,7 @@ final class NativePlayerModel: ObservableObject {
         errorMessage = nil
 
         sendHistoryProgress()
+        saveLocalPlaybackPosition()
         player.pause()
 
         bufferWatchdogTask?.cancel()
@@ -679,6 +757,7 @@ final class NativePlayerModel: ObservableObject {
         }
 
         youtubeVideoID = videoID
+        restoredPositionVideoID = nil
 
         do {
             let source =
@@ -928,11 +1007,13 @@ final class NativePlayerModel: ObservableObject {
 
     func pause() {
         sendHistoryProgress()
+        saveLocalPlaybackPosition()
         player.pause()
     }
 
     func cleanup() {
         sendHistoryProgress()
+        saveLocalPlaybackPosition()
         player.pause()
 
         if let timeObserver {
@@ -943,6 +1024,13 @@ final class NativePlayerModel: ObservableObject {
         if let trackingObserver {
             player.removeTimeObserver(trackingObserver)
             self.trackingObserver = nil
+        }
+
+        if let localPositionObserver {
+            player.removeTimeObserver(
+                localPositionObserver
+            )
+            self.localPositionObserver = nil
         }
 
         // Cancel results from caption work belonging to the old video and
@@ -1674,6 +1762,129 @@ final class NativePlayerModel: ObservableObject {
             activeCaptionLanguageCode = nil
             captionStatus = error.localizedDescription
         }
+    }
+
+    private func installLocalPositionObserverIfNeeded() {
+        guard localPositionObserver == nil else {
+            return
+        }
+
+        let interval =
+            CMTime(
+                seconds: 15,
+                preferredTimescale: 600
+            )
+
+        localPositionObserver =
+            player.addPeriodicTimeObserver(
+                forInterval: interval,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?
+                        .saveLocalPlaybackPosition()
+                }
+            }
+    }
+
+    private func saveLocalPlaybackPosition() {
+        guard let videoID =
+                youtubeVideoID,
+              currentSource
+                .diagnosticIsLive != true
+        else {
+            return
+        }
+
+        let position =
+            player.currentTime()
+                .seconds
+        let duration =
+            player.currentItem?
+                .duration.seconds
+
+        PlaybackPositionStore.save(
+            videoID: videoID,
+            position: position,
+            duration: duration
+        )
+
+        if position.isFinite {
+            playbackLogger.notice(
+                "Saved local position video=\(videoID, privacy: .public) position=\(position, privacy: .public)"
+            )
+        }
+    }
+
+    private func restorePlaybackPositionIfNeeded(
+        source: PlaybackSource,
+        item: AVPlayerItem
+    ) async {
+        guard let videoID =
+                youtubeVideoID,
+              restoredPositionVideoID
+                != videoID,
+              source.diagnosticIsLive
+                != true
+        else {
+            return
+        }
+
+        restoredPositionVideoID =
+            videoID
+
+        guard let saved =
+                PlaybackPositionStore
+                    .load(
+                        videoID:
+                            videoID
+                    ),
+              saved >= 10
+        else {
+            return
+        }
+
+        let duration =
+            item.duration.seconds
+
+        if duration.isFinite,
+           duration > 0,
+           duration - saved < 3 {
+            PlaybackPositionStore.clear(
+                videoID: videoID
+            )
+            return
+        }
+
+        let targetSeconds =
+            duration.isFinite
+                && duration > 0
+            ? min(
+                saved,
+                max(
+                    0,
+                    duration - 3
+                )
+            )
+            : saved
+
+        guard targetSeconds >= 10 else {
+            return
+        }
+
+        let target =
+            CMTime(
+                seconds:
+                    targetSeconds,
+                preferredTimescale:
+                    600
+            )
+
+        await seek(to: target)
+
+        playbackLogger.notice(
+            "Restored local position video=\(videoID, privacy: .public) position=\(targetSeconds, privacy: .public)"
+        )
     }
 
     private func startHistoryTrackingIfNeeded() {
