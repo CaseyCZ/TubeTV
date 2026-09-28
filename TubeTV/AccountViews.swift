@@ -724,7 +724,9 @@ struct SubscribedChannelsView: View {
                                 ChannelView(
                                     channelID: channel.id,
                                     fallbackTitle:
-                                        channel.title
+                                        channel.title,
+                                    reloadPageKey:
+                                        channel.reloadPageKey
                                 )
                             } label: {
                                 VStack(
