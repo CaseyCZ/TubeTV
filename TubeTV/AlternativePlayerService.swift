@@ -828,15 +828,25 @@ actor AlternativePlayerService {
             )
         }
 
-        let qualityFormats: [AlternativeFormat]
-        if client.profile == "ANDROID" {
-            qualityFormats = allCombined.filter {
+        let nativeCombined =
+            combined.filter {
                 $0.isNativeVideo
             }
+        let nativeAdaptiveVideo =
+            adaptive.filter {
+                $0.isNativeVideo
+            }
+
+        let qualityFormats: [AlternativeFormat]
+        if client.profile == "ANDROID" {
+            qualityFormats =
+                allCombined.filter {
+                    $0.isNativeVideo
+                }
         } else {
             qualityFormats =
-                combined.filter { $0.isNativeVideo }
-                + adaptive.filter { $0.isNativeVideo }
+                nativeCombined
+                + nativeAdaptiveVideo
         }
 
         let availableHeights = Array(
@@ -915,9 +925,9 @@ actor AlternativePlayerService {
                 )
         )?.url
 
-        let videos = adaptive
-            .filter { $0.isNativeVideo }
-            .sorted(by: videoSort)
+        let videos =
+            nativeAdaptiveVideo
+                .sorted(by: videoSort)
 
         if let audio = audios.first {
             if let height =
@@ -958,19 +968,35 @@ actor AlternativePlayerService {
             )
         }
 
-        let hasDirectContent =
-            !combined.isEmpty
-            || !adaptive.isEmpty
+        // A YouTube response may contain DASH/WebM formats that exist but
+        // cannot actually be consumed by AVPlayer on this Apple TV. Treat
+        // those as unavailable and allow HLS to rescue the video. Previously
+        // the mere presence of any direct format blocked this fallback and
+        // produced "No Apple TV-compatible stream" even when HLS existed.
+        let hasPlayableDirectContent =
+            !nativeCombined.isEmpty
+            || (
+                !nativeAdaptiveVideo.isEmpty
+                && !audios.isEmpty
+            )
+
+        logger.notice(
+            "Playable formats client=\(client.profile, privacy: .public) nativeCombined=\(nativeCombined.count, privacy: .public) nativeVideo=\(nativeAdaptiveVideo.count, privacy: .public) nativeAudio=\(audios.count, privacy: .public) hls=\(hlsRaw != nil, privacy: .public)"
+        )
 
         if AdFilteringPolicy
             .shouldUseHLSFallback(
                 adMetadata: adMetadata,
                 hasDirectContentFormats:
-                    hasDirectContent
+                    hasPlayableDirectContent
             ),
            let hlsRaw,
            let hls =
                 URL(string: hlsRaw) {
+            logger.notice(
+                "Using HLS compatibility fallback client=\(client.profile, privacy: .public)"
+            )
+
             return .directWithHeaders(
                 hls,
                 playbackHeaders
