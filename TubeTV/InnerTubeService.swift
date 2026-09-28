@@ -12,6 +12,19 @@ struct YouTubeSubscribedChannel: Identifiable, Hashable {
     let id: String
     let title: String
     let thumbnailURL: URL?
+    let reloadPageKey: String?
+
+    init(
+        id: String,
+        title: String,
+        thumbnailURL: URL?,
+        reloadPageKey: String? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.thumbnailURL = thumbnailURL
+        self.reloadPageKey = reloadPageKey
+    }
 }
 
 struct YouTubePlaylistMembership: Identifiable, Hashable {
@@ -568,6 +581,52 @@ actor InnerTubeService {
                 videos: Self.extractVideos(from: root)
             ),
             Self.nextContinuationToken(from: root),
+            Self.channelSubscriptionState(
+                from: root
+            )
+        )
+    }
+
+    func channelPage(
+        reloadPageKey: String,
+        fallbackTitle: String
+    ) async throws -> (
+        page: YouTubeChannelPage,
+        continuationToken: String?,
+        isSubscribed: Bool?
+    ) {
+        let root = try await browse(
+            nil,
+            continuation: reloadPageKey
+        )
+
+        let videos =
+            Self.extractVideos(from: root)
+        let metadata =
+            Self.channelMetadata(from: root)
+        let resolvedChannelID =
+            videos.first?.channelID
+            ?? Self.directChannelID(
+                in: root
+            )
+            ?? ""
+
+        return (
+            YouTubeChannelPage(
+                id: resolvedChannelID,
+                title:
+                    metadata.title
+                    ?? fallbackTitle,
+                description:
+                    metadata.description
+                    ?? "",
+                avatarURL:
+                    metadata.avatarURL,
+                videos: videos
+            ),
+            Self.nextContinuationToken(
+                from: root
+            ),
             Self.channelSubscriptionState(
                 from: root
             )
@@ -2548,23 +2607,49 @@ actor InnerTubeService {
     private static func extractSubscribedChannels(
         from root: Any
     ) -> [YouTubeSubscribedChannel] {
-        var candidates: [[String: Any]] = []
-        collectDictionaries(
+        var renderers: [[String: Any]] = []
+        collectTabRenderers(
             from: root,
-            into: &candidates
+            into: &renderers
         )
 
         var seen = Set<String>()
         var result: [YouTubeSubscribedChannel] = []
 
-        for dictionary in candidates {
-            guard let renderer =
-                    dictionary["tabRenderer"]
-                    as? [String: Any],
-                  let channelID =
-                    findChannelID(in: renderer),
-                  channelID.hasPrefix("UC"),
-                  seen.insert(channelID).inserted else {
+        for (index, renderer) in renderers.enumerated() {
+            // SmartTube skips the first "All subscriptions" tab when it has
+            // no channel artwork. The actual channel tabs carry a unique
+            // reloadContinuationData token rather than a channelId.
+            if index == 0,
+               firstThumbnailURL(
+                    in: renderer
+               ) == nil {
+                continue
+            }
+
+            let reloadPageKey =
+                reloadContinuationToken(
+                    in: renderer
+                )
+            let channelID =
+                directChannelID(
+                    in: renderer
+                )
+
+            guard reloadPageKey != nil
+                    || channelID != nil
+            else {
+                continue
+            }
+
+            let identity =
+                reloadPageKey
+                ?? channelID
+                ?? ""
+
+            guard !identity.isEmpty,
+                  seen.insert(identity).inserted
+            else {
                 continue
             }
 
@@ -2577,17 +2662,146 @@ actor InnerTubeService {
 
             result.append(
                 YouTubeSubscribedChannel(
-                    id: channelID,
+                    id:
+                        channelID
+                        ?? "reload:\(identity)",
                     title: title,
                     thumbnailURL:
                         firstThumbnailURL(
                             in: renderer
-                        )
+                        ),
+                    reloadPageKey:
+                        reloadPageKey
                 )
             )
         }
 
         return result
+    }
+
+    private static func collectTabRenderers(
+        from node: Any,
+        into output:
+            inout [[String: Any]]
+    ) {
+        if let dictionary =
+                node as? [String: Any] {
+            if let renderer =
+                    dictionary["tabRenderer"]
+                        as? [String: Any] {
+                output.append(renderer)
+            }
+
+            for value
+                in dictionary.values {
+                collectTabRenderers(
+                    from: value,
+                    into: &output
+                )
+            }
+        } else if let array =
+                    node as? [Any] {
+            for value in array {
+                collectTabRenderers(
+                    from: value,
+                    into: &output
+                )
+            }
+        }
+    }
+
+    private static func reloadContinuationToken(
+        in node: Any
+    ) -> String? {
+        if let dictionary =
+                node as? [String: Any] {
+            if let reload =
+                    dictionary[
+                        "reloadContinuationData"
+                    ] as? [String: Any],
+               let token =
+                    reload[
+                        "continuation"
+                    ] as? String,
+               !token.isEmpty {
+                return token
+            }
+
+            for value
+                in dictionary.values {
+                if let token =
+                        reloadContinuationToken(
+                            in: value
+                        ) {
+                    return token
+                }
+            }
+        } else if let array =
+                    node as? [Any] {
+            for value in array {
+                if let token =
+                        reloadContinuationToken(
+                            in: value
+                        ) {
+                    return token
+                }
+            }
+        }
+
+        return nil
+    }
+
+    private static func directChannelID(
+        in node: Any
+    ) -> String? {
+        guard let dictionary =
+                node as? [String: Any]
+        else {
+            return nil
+        }
+
+        for key in [
+            "channelId",
+            "browseId"
+        ] {
+            if let value =
+                    dictionary[key]
+                        as? String,
+               value.hasPrefix("UC") {
+                return value
+            }
+        }
+
+        let paths = [
+            [
+                "endpoint",
+                "browseEndpoint",
+                "browseId"
+            ],
+            [
+                "navigationEndpoint",
+                "browseEndpoint",
+                "browseId"
+            ],
+            [
+                "onSelectCommand",
+                "browseEndpoint",
+                "browseId"
+            ]
+        ]
+
+        for path in paths {
+            if let value =
+                    nested(
+                        dictionary,
+                        path: path
+                    ) as? String,
+               value.hasPrefix("UC") {
+                return value
+            }
+        }
+
+        return nil
     }
 
     private static func extractPlaylists(
