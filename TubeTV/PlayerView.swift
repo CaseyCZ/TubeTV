@@ -332,6 +332,7 @@ final class NativePlayerModel: ObservableObject {
     private var playbackHistory: [PlaybackHistoryEntry] = []
     private var remoteSeekDirection = 0
     private var remoteSeekIncrementSeconds = 10.0
+    private var pendingRemoteSeekSeconds: Double?
     private var remoteSeekAccelerationStartedAt: Date?
     private var remoteSeekLastEventAt: Date?
 
@@ -1760,38 +1761,61 @@ final class NativePlayerModel: ObservableObject {
             return
         }
 
-        let duration =
-            try? await item.asset.load(
-                .duration
-            )
-        let durationSeconds =
-            duration?.seconds
+        let baseSeconds =
+            pendingRemoteSeekSeconds
+            ?? currentSeconds
 
         var targetSeconds =
             max(
                 0,
-                currentSeconds + delta
+                baseSeconds + delta
             )
 
-        if let durationSeconds,
-           durationSeconds.isFinite,
+        let durationSeconds =
+            item.duration.seconds
+
+        if durationSeconds.isFinite,
            durationSeconds > 0 {
             targetSeconds =
                 min(
                     targetSeconds,
-                    durationSeconds
+                    max(
+                        0,
+                        durationSeconds - 0.25
+                    )
                 )
         }
+
+        pendingRemoteSeekSeconds =
+            targetSeconds
+
+        let wasPlaying =
+            player.rate > 0
+            || player.timeControlStatus
+                == .playing
+            || player.timeControlStatus
+                == .waitingToPlayAtSpecifiedRate
 
         let target = CMTime(
             seconds: targetSeconds,
             preferredTimescale: 600
         )
 
-        await seek(to: target)
+        await seek(
+            to: target,
+            toleranceSeconds: 2
+        )
+
+        pendingRemoteSeekSeconds = nil
+
+        if wasPlaying {
+            player.playImmediately(
+                atRate: playbackRate
+            )
+        }
 
         playbackLogger.notice(
-            "Remote seek delta=\(delta, privacy: .public) from=\(currentSeconds, privacy: .public) to=\(targetSeconds, privacy: .public)"
+            "Remote seek delta=\(delta, privacy: .public) from=\(currentSeconds, privacy: .public) to=\(targetSeconds, privacy: .public) resume=\(wasPlaying, privacy: .public)"
         )
     }
 
@@ -2815,12 +2839,33 @@ final class NativePlayerModel: ObservableObject {
         return heights
     }
 
-    private func seek(to time: CMTime) async {
+    private func seek(
+        to time: CMTime,
+        toleranceSeconds: Double = 0.5
+    ) async {
+        let tolerance =
+            CMTime(
+                seconds:
+                    max(
+                        0,
+                        toleranceSeconds
+                    ),
+                preferredTimescale: 600
+            )
+
+        // Rapid remote presses may otherwise queue multiple exact seeks.
+        // Keep only the newest target and allow AVPlayer to land on a nearby
+        // keyframe instead of waiting for an exact, not-yet-buffered sample.
+        player.currentItem?
+            .cancelPendingSeeks()
+
         await withCheckedContinuation { continuation in
             player.seek(
                 to: time,
-                toleranceBefore: .zero,
-                toleranceAfter: .zero
+                toleranceBefore:
+                    tolerance,
+                toleranceAfter:
+                    tolerance
             ) { _ in
                 continuation.resume()
             }
