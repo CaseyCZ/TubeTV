@@ -122,8 +122,14 @@ struct ChannelView: View {
                         ) { index in
                             let video = videos[index]
 
-                            NavigationLink(value: video) {
-                                VideoCard(video: video)
+                            NavigationLink {
+                                VideoDetailView(
+                                    video: video
+                                )
+                            } label: {
+                                VideoCard(
+                                    video: video
+                                )
                             }
                             .buttonStyle(.plain)
                             .onAppear {
@@ -152,9 +158,6 @@ struct ChannelView: View {
                 }
             }
             .padding(48)
-        }
-        .navigationDestination(for: VideoItem.self) { video in
-            VideoDetailView(video: video)
         }
         .task {
             await loadChannel()
