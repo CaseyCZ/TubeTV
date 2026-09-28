@@ -1419,6 +1419,215 @@ actor InnerTubeService {
         return root
     }
 
+    func watchNextVideos(
+        _ videoID: String
+    ) async throws -> [VideoItem] {
+        guard !videoID.isEmpty else {
+            return []
+        }
+
+        let root =
+            try await watchNext(
+                videoID: videoID
+            )
+        var seen = Set<String>()
+
+        let videos =
+            Self.extractVideos(
+                from: root
+            )
+            .filter {
+                guard let candidateID =
+                        $0.youtubeVideoID,
+                      candidateID
+                        != videoID
+                else {
+                    return false
+                }
+
+                return seen.insert(
+                    candidateID
+                ).inserted
+            }
+
+        logger.notice(
+            "WatchNext video=\(videoID, privacy: .public) suggestions=\(videos.count, privacy: .public)"
+        )
+
+        return videos
+    }
+
+    private func watchNext(
+        videoID: String
+    ) async throws -> Any {
+        let isSignedIn =
+            await SmartTubeAuthService.shared
+                .signedIn()
+        let authorization =
+            isSignedIn
+            ? try await SmartTubeAuthService.shared
+                .authorizationHeader()
+            : nil
+        let bootstrap =
+            try? await SmartTubeAuthService.shared
+                .bootstrap()
+        let visitorData =
+            browseVisitorData
+            ?? bootstrap?.visitorData
+
+        var client: [String: Any] = [
+            "hl": L10n.currentLanguageCode,
+            "gl": "CZ",
+            "clientName":
+                SmartTubeAuthService.tvClientName,
+            "clientVersion":
+                SmartTubeAuthService
+                    .tvClientVersion,
+            "clientScreen": "WATCH",
+            "userAgent":
+                SmartTubeAuthService.tvUserAgent,
+            "acceptLanguage":
+                L10n.currentLanguageCode,
+            "acceptRegion": "CZ",
+            "utcOffsetMinutes":
+                TimeZone.current
+                    .secondsFromGMT()
+                    / 60,
+            "tvAppInfo": [
+                "appQuality":
+                    "TV_APP_QUALITY_FULL_ANIMATION",
+                "zylonLeftNav": true
+            ],
+            "webpSupport": false,
+            "animatedWebpSupport": true
+        ]
+
+        if let visitorData,
+           !visitorData.isEmpty {
+            client["visitorData"] =
+                visitorData
+        }
+
+        let payload: [String: Any] = [
+            "context": [
+                "client": client,
+                "user": [
+                    "enableSafetyMode":
+                        false,
+                    "lockedSafetyMode":
+                        false
+                ]
+            ],
+            "videoId": videoID,
+            "racyCheckOk": true,
+            "contentCheckOk": true
+        ]
+
+        guard let url = URL(
+            string:
+                "https://www.youtube.com/youtubei/v1/next"
+        ) else {
+            throw InnerTubeError
+                .invalidResponse
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 25
+        request.setValue(
+            "application/json",
+            forHTTPHeaderField:
+                "Content-Type"
+        )
+        request.setValue(
+            SmartTubeAuthService.tvUserAgent,
+            forHTTPHeaderField:
+                "User-Agent"
+        )
+        request.setValue(
+            SmartTubeAuthService.tvReferer,
+            forHTTPHeaderField:
+                "Referer"
+        )
+        request.setValue(
+            "7",
+            forHTTPHeaderField:
+                "X-YouTube-Client-Name"
+        )
+        request.setValue(
+            SmartTubeAuthService
+                .tvClientVersion,
+            forHTTPHeaderField:
+                "X-YouTube-Client-Version"
+        )
+
+        if let authorization {
+            request.setValue(
+                authorization,
+                forHTTPHeaderField:
+                    "Authorization"
+            )
+        }
+
+        if let visitorData,
+           !visitorData.isEmpty {
+            request.setValue(
+                visitorData,
+                forHTTPHeaderField:
+                    "X-Goog-Visitor-Id"
+            )
+        }
+
+        if isSignedIn,
+           let pageID =
+                await SmartTubeAuthService.shared
+                    .selectedPageID(),
+           !pageID.isEmpty {
+            request.setValue(
+                pageID,
+                forHTTPHeaderField:
+                    "X-Goog-Pageid"
+            )
+        }
+
+        request.httpBody =
+            try JSONSerialization.data(
+                withJSONObject: payload
+            )
+
+        let (data, response) =
+            try await URLSession.shared
+                .data(for: request)
+
+        guard let http =
+                response as? HTTPURLResponse,
+              (200..<300).contains(
+                http.statusCode
+              ),
+              let root =
+                try JSONSerialization
+                    .jsonObject(
+                        with: data
+                    ) as? [String: Any]
+        else {
+            throw InnerTubeError
+                .invalidResponse
+        }
+
+        if let responseContext =
+                root["responseContext"]
+                    as? [String: Any],
+           let visitor =
+                responseContext[
+                    "visitorData"
+                ] as? String,
+           !visitor.isEmpty {
+            browseVisitorData = visitor
+        }
+
+        return root
+    }
+
     private func browse(
         _ browseID: String?,
         params: String? = nil,
