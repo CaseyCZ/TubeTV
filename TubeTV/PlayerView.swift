@@ -3514,7 +3514,7 @@ struct NativePlayerView: View {
                 .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
-        .focusable()
+        .focusable(!showSettings)
         .animation(.easeInOut(duration: 0.2), value: showSettings)
         .animation(
             .easeInOut(duration: 0.18),
@@ -3533,52 +3533,12 @@ struct NativePlayerView: View {
 
             revealTransportControls()
         }
-        .onMoveCommand { direction in
-            guard !showSettings else {
-                return
-            }
-
-            switch direction {
-            case .up:
-                settingsPage = .root
-                showSettings = true
-                showTransportControls = false
-                playerControlFocus = nil
-
-            case .down:
-                playerControlFocus = nil
-                revealTransportControls()
-
-            case .left:
-                revealTransportControls()
-                playerControlFocus = nil
-                let delta =
-                    model.remoteSeekDelta(
-                        forward: false
-                    )
-                Task {
-                    await model.seekFromRemote(
-                        seconds: delta
-                    )
-                }
-
-            case .right:
-                revealTransportControls()
-                playerControlFocus = nil
-                let delta =
-                    model.remoteSeekDelta(
-                        forward: true
-                    )
-                Task {
-                    await model.seekFromRemote(
-                        seconds: delta
-                    )
-                }
-
-            default:
-                break
-            }
-        }
+        .onMoveCommand(
+            perform:
+                showSettings
+                ? nil
+                : handlePlayerMoveCommand
+        )
         .task {
             revealTransportControls()
             await model.prepareAndPlay()
@@ -3597,6 +3557,51 @@ struct NativePlayerView: View {
             } else {
                 dismiss()
             }
+        }
+    }
+
+    private func handlePlayerMoveCommand(
+        _ direction: MoveCommandDirection
+    ) {
+        switch direction {
+        case .up:
+            settingsPage = .root
+            showSettings = true
+            showTransportControls = false
+            playerControlFocus = nil
+
+        case .down:
+            playerControlFocus = nil
+            revealTransportControls()
+
+        case .left:
+            revealTransportControls()
+            playerControlFocus = nil
+            let delta =
+                model.remoteSeekDelta(
+                    forward: false
+                )
+            Task {
+                await model.seekFromRemote(
+                    seconds: delta
+                )
+            }
+
+        case .right:
+            revealTransportControls()
+            playerControlFocus = nil
+            let delta =
+                model.remoteSeekDelta(
+                    forward: true
+                )
+            Task {
+                await model.seekFromRemote(
+                    seconds: delta
+                )
+            }
+
+        default:
+            break
         }
     }
 
