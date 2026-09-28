@@ -72,7 +72,7 @@ struct VideoDetailView: View {
                     } label: {
                         Label(
                             L10n.text(
-                                "retry",
+                                "play",
                                 languageCode:
                                     appLanguage
                             ),
