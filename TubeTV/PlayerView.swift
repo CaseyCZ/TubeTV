@@ -279,12 +279,12 @@ private final class TubeTVPlayerEngine {
     private init() {
         player = AVPlayer()
 
-        // Prefer first-frame latency over building a large safety buffer.
-        // TubeTV has its own buffering watchdog and client failover, so the
-        // player can start aggressively and recover if the chosen source is
-        // unhealthy.
+        // Keep AVPlayer's automatic stall recovery enabled. TubeTV still
+        // calls playImmediately(atRate:) for fast first-frame startup, but
+        // after a seek into an unbuffered HLS range AVPlayer must be allowed
+        // to wait for data and resume automatically.
         player.automaticallyWaitsToMinimizeStalling =
-            false
+            true
     }
 
     func claim(_ id: UUID) {
@@ -1106,12 +1106,15 @@ final class NativePlayerModel: ObservableObject {
         saveLocalPlaybackPosition()
         player.pause()
 
+        let matchingPreloadedSource =
+            preloadedNextVideoID == videoID
+                ? preloadedNextSource
+                : nil
+
         bufferWatchdogTask?.cancel()
         bufferWatchdogTask = nil
         nextPreloadTask?.cancel()
         nextPreloadTask = nil
-        preloadedNextVideoID = nil
-        preloadedNextSource = nil
         bufferWindowStartedAt = nil
         accumulatedBufferingSeconds = 0
 
@@ -1127,8 +1130,6 @@ final class NativePlayerModel: ObservableObject {
         playlistMemberships = []
         suggestedVideos = []
         chapters = []
-        nextPreloadTask?.cancel()
-        nextPreloadTask = nil
         failedClientProfiles.removeAll()
         isSubscribed = nil
         isLoadingChannelState = false
@@ -1159,16 +1160,13 @@ final class NativePlayerModel: ObservableObject {
         do {
             let source: PlaybackSource
 
-            if preloadedNextVideoID
-                    == videoID,
-               let preloadedNextSource {
+            if let matchingPreloadedSource {
                 source =
-                    preloadedNextSource
+                    matchingPreloadedSource
 
-                self.preloadedNextVideoID =
-                    nil
-                self.preloadedNextSource =
-                    nil
+                playbackLogger.notice(
+                    "Using preloaded next video=\(videoID, privacy: .public)"
+                )
             } else {
                 source =
                     try await StreamResolver
@@ -1186,6 +1184,8 @@ final class NativePlayerModel: ObservableObject {
 
             nextPreloadTask?.cancel()
             nextPreloadTask = nil
+            preloadedNextVideoID = nil
+            preloadedNextSource = nil
 
             await prepareWithFailover(
                 startingFrom: source
@@ -1478,6 +1478,10 @@ final class NativePlayerModel: ObservableObject {
 
         bufferWatchdogTask?.cancel()
         bufferWatchdogTask = nil
+        nextPreloadTask?.cancel()
+        nextPreloadTask = nil
+        preloadedNextVideoID = nil
+        preloadedNextSource = nil
         bufferWindowStartedAt = nil
         accumulatedBufferingSeconds = 0
         isRecoveringFromBuffering = false
@@ -1613,6 +1617,8 @@ final class NativePlayerModel: ObservableObject {
                             .accumulatedBufferingSeconds =
                             0
                     }
+
+                    self.preloadNextVideoIfNeeded()
 
                     guard !self.isPreparing,
                           !self
