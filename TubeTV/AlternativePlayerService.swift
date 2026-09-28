@@ -119,6 +119,7 @@ actor AlternativePlayerService {
     private var signatureTimestamp: Int?
     private var signatureTimestampFetchedAt: Date?
     private var lastSuccessfulProfile: String?
+    private var captionRendererCache: [String: Data] = [:]
 
     init() {
         let configuration = URLSessionConfiguration.default
@@ -739,6 +740,11 @@ actor AlternativePlayerService {
             return nil
         }
 
+        cacheCaptionRenderer(
+            from: root,
+            videoID: videoID
+        )
+
         let playability =
             root["playabilityStatus"]
                 as? [String: Any]
@@ -990,6 +996,56 @@ actor AlternativePlayerService {
         }
 
         return nil
+    }
+
+    func cachedCaptionRendererData(
+        for videoID: String
+    ) -> Data? {
+        captionRendererCache[videoID]
+    }
+
+    private func cacheCaptionRenderer(
+        from root: [String: Any],
+        videoID: String
+    ) {
+        guard let captions =
+                root["captions"]
+                    as? [String: Any],
+              let renderer =
+                captions[
+                    "playerCaptionsTracklistRenderer"
+                ] as? [String: Any],
+              JSONSerialization
+                .isValidJSONObject(renderer),
+              let data =
+                try? JSONSerialization.data(
+                    withJSONObject: renderer
+                )
+        else {
+            return
+        }
+
+        if captionRendererCache.count >= 16,
+           captionRendererCache[videoID] == nil {
+            captionRendererCache.removeAll(
+                keepingCapacity: true
+            )
+        }
+
+        captionRendererCache[videoID] = data
+
+        let trackCount =
+            (renderer["captionTracks"]
+                as? [[String: Any]])?.count
+            ?? 0
+        let translationCount =
+            (renderer["translationLanguages"]
+                as? [[String: Any]])?.count
+            ?? 0
+
+        logger.notice(
+            "Cached captions video=\(videoID, privacy: .public) tracks=\(trackCount, privacy: .public) translations=\(translationCount, privacy: .public)"
+        )
     }
 
     private func clientFields(
