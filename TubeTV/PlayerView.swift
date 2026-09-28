@@ -1950,6 +1950,14 @@ private enum PlayerSettingsPage {
     case playlists
 }
 
+private enum PlayerControlFocus: Hashable {
+    case settings
+}
+
+private enum PlayerSettingsFocus: Hashable {
+    case quality
+}
+
 struct NativePlayerView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("appLanguage") private var appLanguage =
@@ -1958,6 +1966,7 @@ struct NativePlayerView: View {
 
     @State private var showSettings = false
     @State private var settingsPage: PlayerSettingsPage = .root
+    @FocusState private var playerControlFocus: PlayerControlFocus?
 
     init(
         source: PlaybackSource,
@@ -1999,13 +2008,18 @@ struct NativePlayerView: View {
 
                     Button {
                         settingsPage = .root
-                        showSettings.toggle()
+                        showSettings = true
+                        playerControlFocus = nil
                     } label: {
                         Image(systemName: "gearshape.fill")
                             .font(.title2)
                             .padding(10)
                     }
                     .buttonStyle(.borderedProminent)
+                    .focused(
+                        $playerControlFocus,
+                        equals: .settings
+                    )
                     .padding(.top, 38)
                     .padding(.trailing, 48)
                 }
@@ -2054,7 +2068,19 @@ struct NativePlayerView: View {
             }
 
             switch direction {
+            case .up:
+                // VideoPlayer keeps tvOS focus, so the floating gear cannot
+                // reliably be reached by the focus engine. Match TV-player
+                // behaviour and make Up the direct path into settings.
+                settingsPage = .root
+                showSettings = true
+                playerControlFocus = nil
+
+            case .down:
+                playerControlFocus = nil
+
             case .left:
+                playerControlFocus = nil
                 let delta =
                     model.remoteSeekDelta(
                         forward: false
@@ -2066,6 +2092,7 @@ struct NativePlayerView: View {
                 }
 
             case .right:
+                playerControlFocus = nil
                 let delta =
                     model.remoteSeekDelta(
                         forward: true
@@ -2107,6 +2134,7 @@ private struct PlayerSettingsOverlay: View {
     @Binding var page: PlayerSettingsPage
     @Binding var isPresented: Bool
     @State private var newPlaylistName = ""
+    @FocusState private var settingsFocus: PlayerSettingsFocus?
 
     var body: some View {
         HStack {
@@ -2159,6 +2187,22 @@ private struct PlayerSettingsOverlay: View {
             .background(.ultraThinMaterial)
         }
         .ignoresSafeArea()
+        .task {
+            await Task.yield()
+            if page == .root {
+                settingsFocus = .quality
+            }
+        }
+        .onChange(of: page) { _, newPage in
+            if newPage == .root {
+                Task {
+                    await Task.yield()
+                    settingsFocus = .quality
+                }
+            } else {
+                settingsFocus = nil
+            }
+        }
     }
 
     private var title: String {
@@ -2230,6 +2274,10 @@ private struct PlayerSettingsOverlay: View {
             ) {
                 page = .quality
             }
+            .focused(
+                $settingsFocus,
+                equals: .quality
+            )
 
             settingsButton(
                 title: L10n.text("captions", languageCode: appLanguage),
