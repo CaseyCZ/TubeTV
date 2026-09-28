@@ -948,40 +948,50 @@ actor AlternativePlayerService {
                 )
         )?.url
 
+        // Fast-start path for tvOS. A muxed YouTube format can be handed to
+        // AVPlayer immediately. Separate adaptive video/audio requires us to
+        // load both remote assets, inspect their tracks and durations and
+        // build an AVMutableComposition before AVPlayer can even start.
+        //
+        // ExoPlayer (SmartTube) can consume those separate streams directly;
+        // AVPlayer cannot. For Auto, prefer the muxed stream and let playback
+        // start right away. Explicit quality choices still use adaptive
+        // video+audio when needed for 1080p/4K/etc.
+        if preferredQuality == "Auto",
+           let fallback {
+            logger.notice(
+                "FAST_START muxed client=\(client.profile, privacy: .public)"
+            )
+
+            return .directWithHeaders(
+                fallback,
+                playbackHeaders
+            )
+        }
+
         let videos =
             nativeAdaptiveVideo
                 .sorted(by: videoSort)
 
-        if let audio = audios.first {
-            if let height =
+        if let audio = audios.first,
+           let height =
                 requestedHeight(
                     for:
                         preferredQuality
                 ),
-               let video =
+           let video =
                 videos.first(
                     where: {
                         $0.height
                             == height
                     }
                 ) {
-                return .adaptiveWithHeaders(
-                    video: video.url,
-                    audio: audio.url,
-                    fallback: fallback,
-                    headers: playbackHeaders
-                )
-            }
-
-            if preferredQuality == "Auto",
-               let video = videos.first {
-                return .adaptiveWithHeaders(
-                    video: video.url,
-                    audio: audio.url,
-                    fallback: fallback,
-                    headers: playbackHeaders
-                )
-            }
+            return .adaptiveWithHeaders(
+                video: video.url,
+                audio: audio.url,
+                fallback: fallback,
+                headers: playbackHeaders
+            )
         }
 
         if let fallback {
