@@ -400,6 +400,10 @@ final class NativePlayerModel: ObservableObject {
         errorMessage = nil
         failedClientProfiles.removeAll()
 
+        playbackLogger.notice(
+            "STARTUP_BEGIN video=\(self.youtubeVideoID ?? "none", privacy: .public)"
+        )
+
         await prepareWithFailover(
             startingFrom: currentSource
         )
@@ -592,16 +596,44 @@ final class NativePlayerModel: ObservableObject {
         )
         installLocalPositionObserverIfNeeded()
 
-        await updateFormatInfo(
-            from: item
-        )
-        await loadAudioTracks(
-            from: item,
-            source: source
-        )
+        // Playback is ready now. Format inspection and audio-language
+        // discovery are useful for the settings UI, but they must not keep
+        // the startup spinner up or delay first-frame playback.
         refreshAvailableQualityHeights(
             for: source
         )
+
+        Task { @MainActor [weak self, weak item] in
+            guard let self,
+                  let item,
+                  self.player.currentItem === item
+            else {
+                return
+            }
+
+            await self.updateFormatInfo(
+                from: item
+            )
+
+            guard self.player.currentItem === item
+            else {
+                return
+            }
+
+            await self.loadAudioTracks(
+                from: item,
+                source: source
+            )
+
+            guard self.player.currentItem === item
+            else {
+                return
+            }
+
+            self.refreshAvailableQualityHeights(
+                for: source
+            )
+        }
     }
 
     private func waitUntilReadyToPlay(
