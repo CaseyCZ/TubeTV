@@ -171,7 +171,7 @@ struct SearchView: View {
             NavigationLink(value: video) {
                 VideoCard(video: video)
             }
-            .buttonStyle(.card)
+            .buttonStyle(.plain)
 
         case .channel(let channel):
             NavigationLink {
