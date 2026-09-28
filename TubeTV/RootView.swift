@@ -34,11 +34,18 @@ struct RootView: View {
         AppLanguage.english.rawValue
     @State private var selection: AppSection = .home
     @State private var requestedSearchQuery: String?
+    @State private var sidebarCollapsed = false
+    @FocusState private var focusedSidebarItem: AppSection?
 
     var body: some View {
         HStack(spacing: 0) {
             sidebar
-                .frame(width: 460)
+                .frame(
+                    width:
+                        sidebarCollapsed
+                        ? 96
+                        : 460
+                )
 
             Group {
                 switch selection {
@@ -67,16 +74,35 @@ struct RootView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .animation(
+            .easeInOut(duration: 0.22),
+            value: sidebarCollapsed
+        )
+        .onChange(
+            of: focusedSidebarItem
+        ) { _, newValue in
+            sidebarCollapsed =
+                newValue == nil
+        }
         .background(Color.black)
         .preferredColorScheme(.dark)
         .id(appLanguage)
     }
 
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("TubeTV")
-                .font(.largeTitle.bold())
-                .padding(.bottom, 24)
+        VStack(
+            alignment: .leading,
+            spacing: 14
+        ) {
+            if !sidebarCollapsed {
+                Text("TubeTV")
+                    .font(.largeTitle.bold())
+                    .padding(.bottom, 24)
+                    .transition(.opacity)
+            } else {
+                Spacer()
+                    .frame(height: 58)
+            }
 
             ForEach(AppSection.allCases) { item in
                 Button {
@@ -90,27 +116,54 @@ struct RootView: View {
                         Image(systemName: item.icon)
                             .frame(width: 40)
 
-                        Text(
-                            L10n.text(
-                                item.titleKey,
-                                languageCode: appLanguage
+                        if !sidebarCollapsed {
+                            Text(
+                                L10n.text(
+                                    item.titleKey,
+                                    languageCode:
+                                        appLanguage
+                                )
                             )
-                        )
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                        .layoutPriority(1)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                            .layoutPriority(1)
 
-                        Spacer(minLength: 0)
+                            Spacer(minLength: 0)
+                        }
                     }
-                    .font(.title3.weight(.semibold))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 10)
+                    .font(
+                        .title3
+                            .weight(.semibold)
+                    )
+                    .frame(
+                        maxWidth: .infinity,
+                        alignment:
+                            sidebarCollapsed
+                            ? .center
+                            : .leading
+                    )
+                    .padding(
+                        .horizontal,
+                        sidebarCollapsed
+                        ? 0
+                        : 10
+                    )
                 }
+                .focused(
+                    $focusedSidebarItem,
+                    equals: item
+                )
             }
 
             Spacer()
         }
-        .padding(30)
+        .padding(
+            .horizontal,
+            sidebarCollapsed
+            ? 8
+            : 30
+        )
+        .padding(.vertical, 30)
         .background(.ultraThinMaterial)
     }
 }
