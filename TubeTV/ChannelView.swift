@@ -4,8 +4,10 @@ struct ChannelView: View {
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     let channelID: String
     let fallbackTitle: String
+    let reloadPageKey: String?
 
     @State private var page: YouTubeChannelPage?
+    @State private var resolvedChannelID: String?
     @State private var continuationToken: String?
     @State private var isSignedIn = false
     @State private var isSubscribed: Bool?
@@ -13,6 +15,16 @@ struct ChannelView: View {
     @State private var isLoadingMore = false
     @State private var isUpdatingSubscription = false
     @State private var errorMessage: String?
+
+    init(
+        channelID: String,
+        fallbackTitle: String,
+        reloadPageKey: String? = nil
+    ) {
+        self.channelID = channelID
+        self.fallbackTitle = fallbackTitle
+        self.reloadPageKey = reloadPageKey
+    }
 
     var body: some View {
         ScrollView {
@@ -161,7 +173,29 @@ struct ChannelView: View {
                     .signedIn()
             isSubscribed = nil
 
-            if isSignedIn {
+            if let reloadPageKey,
+               !reloadPageKey.isEmpty,
+               isSignedIn {
+                let result =
+                    try await InnerTubeService.shared
+                        .channelPage(
+                            reloadPageKey:
+                                reloadPageKey,
+                            fallbackTitle:
+                                fallbackTitle
+                        )
+
+                page = result.page
+                continuationToken =
+                    result.continuationToken
+                isSubscribed =
+                    result.isSubscribed
+                resolvedChannelID =
+                    result.page.id
+                        .hasPrefix("UC")
+                    ? result.page.id
+                    : nil
+            } else if isSignedIn {
                 do {
                     let result =
                         try await InnerTubeService.shared
@@ -174,6 +208,10 @@ struct ChannelView: View {
                         result.continuationToken
                     isSubscribed =
                         result.isSubscribed
+                    resolvedChannelID =
+                        channelID.hasPrefix("UC")
+                        ? channelID
+                        : nil
                 } catch {
                     page =
                         try await YouTubeService.shared
@@ -182,6 +220,10 @@ struct ChannelView: View {
                             )
                     continuationToken = nil
                     isSubscribed = nil
+                    resolvedChannelID =
+                        channelID.hasPrefix("UC")
+                        ? channelID
+                        : nil
                 }
             } else {
                 page =
@@ -191,6 +233,10 @@ struct ChannelView: View {
                         )
                 continuationToken = nil
                 isSubscribed = nil
+                resolvedChannelID =
+                    channelID.hasPrefix("UC")
+                    ? channelID
+                    : nil
             }
 
             if page?.videos.isEmpty == true {
@@ -204,6 +250,13 @@ struct ChannelView: View {
     @MainActor
     private func toggleSubscription() async {
         guard isSignedIn,
+              let actualChannelID =
+                resolvedChannelID
+                ?? (
+                    channelID.hasPrefix("UC")
+                    ? channelID
+                    : nil
+                ),
               let current =
                 isSubscribed,
               !isUpdatingSubscription
@@ -222,7 +275,8 @@ struct ChannelView: View {
 
             try await InnerTubeService.shared
                 .setChannelSubscription(
-                    channelID: channelID,
+                    channelID:
+                        actualChannelID,
                     subscribed: next
                 )
 
