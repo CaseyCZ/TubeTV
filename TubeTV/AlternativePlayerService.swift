@@ -130,8 +130,10 @@ actor AlternativePlayerService {
         session = URLSession(configuration: configuration)
     }
 
-    // Keep the fallback order aligned with SmartTube MediaServiceCore
-    // VIDEO_INFO_TYPE_LIST. Platform-specific playback still uses AVPlayer.
+    // Keep this list in the same order as SmartTube MediaServiceCore
+    // VIDEO_INFO_TYPE_LIST. Do not add extra profiles to the normal startup
+    // path: SmartTube intentionally skips several clients that are known to
+    // hang or require additional token/cipher handling.
     private var clients: [AlternativePlayerClient] {
         [
             AlternativePlayerClient(
@@ -290,26 +292,6 @@ actor AlternativePlayerService {
                 supportXhr: true,
                 seedWebSession: false,
                 extraClientFields: [:],
-                thirdParty: nil
-            ),
-            AlternativePlayerClient(
-                profile: "ANDROID",
-                name: "ANDROID",
-                version: "21.26.364",
-                innerTubeName: "3",
-                userAgent:
-                    "com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip",
-                referer: nil,
-                origin: nil,
-                apiKey: Self.webAPIKey,
-                clientScreen: "WATCH",
-                supportXhr: true,
-                seedWebSession: false,
-                extraClientFields: [
-                    "androidSdkVersion": 30,
-                    "osName": "Android",
-                    "osVersion": "11"
-                ],
                 thirdParty: nil
             ),
             AlternativePlayerClient(
