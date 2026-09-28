@@ -46,6 +46,9 @@ struct VideoDetailView: View {
                 NativePlayerView(
                     source: playbackSource,
                     youtubeVideoID: video.youtubeVideoID,
+                    videoTitle: video.title,
+                    channelTitle: video.channel,
+                    channelID: video.channelID,
                     initialQuality: preferredQuality,
                     captionsEnabled: autoEnableCaptions,
                     captionLanguage: preferredCaptionLanguage,
@@ -167,6 +170,22 @@ struct VideoDetailView: View {
     }
 }
 
+private struct PlaybackHistoryEntry {
+    let videoID: String
+    let title: String
+    let channelTitle: String
+    let channelID: String?
+
+    var videoItem: VideoItem {
+        VideoItem.youtube(
+            videoID: videoID,
+            title: title,
+            channel: channelTitle,
+            channelID: channelID
+        )
+    }
+}
+
 private enum PlaybackPositionStore {
     private static let prefix =
         "tubetv.playback.position."
@@ -275,6 +294,12 @@ final class NativePlayerModel: ObservableObject {
     @Published private(set) var isCreatingPlaylist = false
     @Published private(set) var suggestedVideos: [VideoItem] = []
     @Published private(set) var isSwitchingVideo = false
+    @Published private(set) var currentVideoTitle: String
+    @Published private(set) var currentChannelTitle: String
+    @Published private(set) var currentChannelID: String?
+    @Published private(set) var isSubscribed: Bool?
+    @Published private(set) var isLoadingChannelState = false
+    @Published private(set) var isUpdatingSubscription = false
 
     private var currentSource: PlaybackSource
     private var youtubeVideoID: String?
@@ -296,7 +321,7 @@ final class NativePlayerModel: ObservableObject {
     private var bufferWindowStartedAt: Date?
     private var accumulatedBufferingSeconds: TimeInterval = 0
     private var isRecoveringFromBuffering = false
-    private var playbackHistory: [String] = []
+    private var playbackHistory: [PlaybackHistoryEntry] = []
     private var remoteSeekDirection = 0
     private var remoteSeekIncrementSeconds = 10.0
     private var remoteSeekAccelerationStartedAt: Date?
@@ -315,6 +340,9 @@ final class NativePlayerModel: ObservableObject {
     init(
         source: PlaybackSource,
         youtubeVideoID: String?,
+        videoTitle: String,
+        channelTitle: String,
+        channelID: String?,
         initialQuality: String,
         captionsEnabled: Bool,
         captionLanguage: String,
@@ -323,6 +351,9 @@ final class NativePlayerModel: ObservableObject {
         player = TubeTVPlayerEngine.shared.player
         currentSource = source
         self.youtubeVideoID = youtubeVideoID
+        currentVideoTitle = videoTitle
+        currentChannelTitle = channelTitle
+        currentChannelID = channelID
         activeQuality = initialQuality
         captionsAreEnabled = captionsEnabled
         availableQualityHeights =
@@ -429,6 +460,10 @@ final class NativePlayerModel: ObservableObject {
 
                 Task {
                     await loadSuggestionsIfNeeded()
+                }
+
+                Task {
+                    await loadChannelStateIfNeeded()
                 }
 
                 return
@@ -662,36 +697,148 @@ final class NativePlayerModel: ObservableObject {
             .title
     }
 
+    var supportsChannelActions: Bool {
+        guard let currentChannelID else {
+            return false
+        }
+
+        return currentChannelID
+            .hasPrefix("UC")
+    }
+
     func playNextVideo() async {
         guard let next =
                 suggestedVideos.first(
                     where: {
                         $0.youtubeVideoID != nil
                     }
-                ),
-              let nextID =
-                next.youtubeVideoID
+                )
         else {
             return
         }
 
         await switchToVideo(
-            nextID,
+            next,
             rememberCurrent: true
         )
     }
 
     func playPreviousVideo() async {
-        guard let previousID =
+        guard let previous =
                 playbackHistory.popLast()
         else {
             return
         }
 
         await switchToVideo(
-            previousID,
+            previous.videoItem,
             rememberCurrent: false
         )
+    }
+
+    func toggleCurrentChannelSubscription()
+        async {
+        guard !isUpdatingSubscription,
+              let channelID =
+                currentChannelID,
+              channelID.hasPrefix("UC"),
+              let current =
+                isSubscribed
+        else {
+            return
+        }
+
+        guard await SmartTubeAuthService
+                .shared
+                .signedIn()
+        else {
+            errorMessage =
+                L10n.text(
+                    "sign_in_hint"
+                )
+            return
+        }
+
+        isUpdatingSubscription = true
+        errorMessage = nil
+        defer {
+            isUpdatingSubscription = false
+        }
+
+        do {
+            let next = !current
+
+            try await InnerTubeService.shared
+                .setChannelSubscription(
+                    channelID: channelID,
+                    subscribed: next
+                )
+
+            isSubscribed = next
+        } catch {
+            errorMessage =
+                error.localizedDescription
+        }
+    }
+
+    private func loadChannelStateIfNeeded()
+        async {
+        guard let channelID =
+                currentChannelID,
+              channelID.hasPrefix("UC")
+        else {
+            isSubscribed = nil
+            return
+        }
+
+        guard await SmartTubeAuthService
+                .shared
+                .signedIn()
+        else {
+            isSubscribed = nil
+            return
+        }
+
+        isLoadingChannelState = true
+        defer {
+            isLoadingChannelState = false
+        }
+
+        do {
+            let result =
+                try await InnerTubeService.shared
+                    .channelPage(
+                        channelID
+                    )
+
+            guard currentChannelID
+                    == channelID
+            else {
+                return
+            }
+
+            if currentChannelTitle.isEmpty
+                || currentChannelTitle
+                    == "YouTube" {
+                currentChannelTitle =
+                    result.page.title
+            }
+
+            isSubscribed =
+                result.isSubscribed
+        } catch {
+            guard currentChannelID
+                    == channelID
+            else {
+                return
+            }
+
+            isSubscribed = nil
+
+            playbackLogger.notice(
+                "Channel state load failed channel=\(channelID, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
+            )
+        }
     }
 
     private func loadSuggestionsIfNeeded()
@@ -718,18 +865,30 @@ final class NativePlayerModel: ObservableObject {
     }
 
     private func switchToVideo(
-        _ videoID: String,
+        _ video: VideoItem,
         rememberCurrent: Bool
     ) async {
-        guard !videoID.isEmpty,
+        guard let videoID =
+                video.youtubeVideoID,
+              !videoID.isEmpty,
               videoID != youtubeVideoID,
               !isSwitchingVideo
         else {
             return
         }
 
-        let previousID =
-            youtubeVideoID
+        let previousEntry =
+            youtubeVideoID.map {
+                PlaybackHistoryEntry(
+                    videoID: $0,
+                    title:
+                        currentVideoTitle,
+                    channelTitle:
+                        currentChannelTitle,
+                    channelID:
+                        currentChannelID
+                )
+            }
 
         isSwitchingVideo = true
         isPreparing = true
@@ -756,12 +915,15 @@ final class NativePlayerModel: ObservableObject {
         playlistMemberships = []
         suggestedVideos = []
         failedClientProfiles.removeAll()
+        isSubscribed = nil
+        isLoadingChannelState = false
 
         if rememberCurrent,
-           let previousID,
-           previousID != videoID {
+           let previousEntry,
+           previousEntry.videoID
+                != videoID {
             playbackHistory.append(
-                previousID
+                previousEntry
             )
 
             if playbackHistory.count > 50 {
@@ -772,6 +934,11 @@ final class NativePlayerModel: ObservableObject {
         }
 
         youtubeVideoID = videoID
+        currentVideoTitle = video.title
+        currentChannelTitle =
+            video.channel
+        currentChannelID =
+            video.channelID
         restoredPositionVideoID = nil
 
         do {
@@ -2732,6 +2899,9 @@ struct NativePlayerView: View {
     init(
         source: PlaybackSource,
         youtubeVideoID: String?,
+        videoTitle: String,
+        channelTitle: String,
+        channelID: String?,
         initialQuality: String,
         captionsEnabled: Bool,
         captionLanguage: String,
@@ -2741,6 +2911,9 @@ struct NativePlayerView: View {
             wrappedValue: NativePlayerModel(
                 source: source,
                 youtubeVideoID: youtubeVideoID,
+                videoTitle: videoTitle,
+                channelTitle: channelTitle,
+                channelID: channelID,
                 initialQuality: initialQuality,
                 captionsEnabled: captionsEnabled,
                 captionLanguage: captionLanguage,
@@ -3063,6 +3236,84 @@ private struct PlayerSettingsOverlay: View {
                         !model
                             .canPlayNextVideo
                     )
+                }
+            }
+
+            if model.supportsChannelActions,
+               let channelID =
+                    model.currentChannelID {
+                HStack(spacing: 14) {
+                    NavigationLink {
+                        ChannelView(
+                            channelID:
+                                channelID,
+                            fallbackTitle:
+                                model
+                                    .currentChannelTitle
+                        )
+                    } label: {
+                        Label(
+                            model
+                                .currentChannelTitle
+                                .isEmpty
+                            ? L10n.text(
+                                "channels",
+                                languageCode:
+                                    appLanguage
+                              )
+                            : model
+                                .currentChannelTitle,
+                            systemImage:
+                                "person.crop.rectangle"
+                        )
+                        .lineLimit(1)
+                        .frame(
+                            maxWidth:
+                                .infinity,
+                            alignment:
+                                .leading
+                        )
+                    }
+
+                    if let isSubscribed =
+                            model
+                                .isSubscribed {
+                        Button {
+                            Task {
+                                await model
+                                    .toggleCurrentChannelSubscription()
+                            }
+                        } label: {
+                            Label(
+                                L10n.text(
+                                    isSubscribed
+                                    ? "unsubscribe_channel"
+                                    : "subscribe_channel",
+                                    languageCode:
+                                        appLanguage
+                                ),
+                                systemImage:
+                                    isSubscribed
+                                    ? "checkmark.circle.fill"
+                                    : "plus.circle.fill"
+                            )
+                            .frame(
+                                maxWidth:
+                                    .infinity
+                            )
+                        }
+                        .disabled(
+                            model
+                                .isUpdatingSubscription
+                        )
+                    } else if model
+                                .isLoadingChannelState {
+                        ProgressView()
+                            .frame(
+                                maxWidth:
+                                    .infinity
+                            )
+                    }
                 }
             }
 
