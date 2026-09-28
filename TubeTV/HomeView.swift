@@ -600,18 +600,13 @@ struct VideoCard: View {
                 RoundedRectangle(
                     cornerRadius: 18
                 )
-                .stroke(
+                .strokeBorder(
                     .white.opacity(
                         isFocused ? 0.9 : 0
                     ),
                     lineWidth: 4
                 )
             }
-            .scaleEffect(
-                isFocused
-                    ? 1.025
-                    : 1
-            )
             .animation(
                 .easeOut(duration: 0.12),
                 value: isFocused
