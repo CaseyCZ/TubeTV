@@ -19,6 +19,7 @@ struct PlaybackRequestHeaders: Hashable {
     let availableHeights: [Int]
     let audioTracks: [PlaybackAudioTrack]
     let isLive: Bool
+    let isLiveContent: Bool
     let advertisingMetadataDetected: Bool
 
     init(
@@ -29,6 +30,7 @@ struct PlaybackRequestHeaders: Hashable {
         availableHeights: [Int] = [],
         audioTracks: [PlaybackAudioTrack] = [],
         isLive: Bool = false,
+        isLiveContent: Bool = false,
         advertisingMetadataDetected: Bool = false
     ) {
         self.userAgent = userAgent
@@ -40,6 +42,7 @@ struct PlaybackRequestHeaders: Hashable {
         ).sorted(by: >)
         self.audioTracks = audioTracks
         self.isLive = isLive
+        self.isLiveContent = isLiveContent
         self.advertisingMetadataDetected =
             advertisingMetadataDetected
     }
@@ -125,6 +128,26 @@ enum PlaybackSource: Hashable {
             let headers
         ):
             return headers.isLive
+
+        case .direct,
+             .adaptive:
+            return nil
+        }
+    }
+
+    var diagnosticIsLiveContent: Bool? {
+        switch self {
+        case .directWithHeaders(
+            _,
+            let headers
+        ),
+        .adaptiveWithHeaders(
+            _,
+            _,
+            _,
+            let headers
+        ):
+            return headers.isLiveContent
 
         case .direct,
              .adaptive:
