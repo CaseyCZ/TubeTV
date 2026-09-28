@@ -488,6 +488,7 @@ struct HomeSearchTileRow: View {
                 }
             }
         }
+        .focusSection()
     }
 }
 
