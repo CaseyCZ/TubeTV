@@ -3288,8 +3288,8 @@ actor InnerTubeService {
                     title: title,
                     subtitle: subtitle,
                     thumbnailURL:
-                        firstThumbnailURL(
-                            in: renderer
+                        playlistThumbnailURL(
+                            from: renderer
                         )
                 )
             )
