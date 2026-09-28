@@ -10,6 +10,9 @@ concurrency:
   group: tvos-build-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   test:
     name: Build and test TubeTV in tvOS Simulator
@@ -181,6 +184,18 @@ jobs:
 
           echo "::error::YouTube probe failed for a reason other than the known cloud-IP block."
           exit 1
+
+      - name: Publish IPA to GitHub Release
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          TAG="tvos-build-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          TITLE="TubeTV Apple TV Build ${GITHUB_RUN_NUMBER}"
+
+          gh release create "$TAG"             TubeTV-unsigned.ipa             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "$TITLE"             --notes "Unsigned tvOS IPA for Apple TV testing via ATVLoadly. Built from commit $GITHUB_SHA."             --prerelease
 
       - name: Shutdown simulator
         if: always()
