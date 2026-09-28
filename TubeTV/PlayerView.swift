@@ -365,6 +365,7 @@ final class NativePlayerModel: ObservableObject {
     private var bufferWindowStartedAt: Date?
     private var accumulatedBufferingSeconds: TimeInterval = 0
     private var isRecoveringFromBuffering = false
+    private var playbackRequested = true
     private var playbackHistory: [PlaybackHistoryEntry] = []
     private var remoteSeekDirection = 0
     private var remoteSeekIncrementSeconds = 10.0
@@ -1425,6 +1426,7 @@ final class NativePlayerModel: ObservableObject {
     }
 
     func pause() {
+        playbackRequested = false
         sendHistoryProgress()
         saveLocalPlaybackPosition()
         player.pause()
@@ -1499,6 +1501,7 @@ final class NativePlayerModel: ObservableObject {
             return
         }
 
+        playbackRequested = true
         player.playImmediately(
             atRate: playbackRate
         )
@@ -1633,10 +1636,39 @@ final class NativePlayerModel: ObservableObject {
                         continue
                     }
 
-                    guard self.player
+                    guard self.playbackRequested,
+                          let item =
+                            self.player
+                                .currentItem
+                    else {
+                        continue
+                    }
+
+                    let isWaiting =
+                        self.player
                             .timeControlStatus
                             == .waitingToPlayAtSpecifiedRate
-                    else {
+                    let isBufferEmpty =
+                        item.isPlaybackBufferEmpty
+                    let cannotKeepUp =
+                        !item.isPlaybackLikelyToKeepUp
+                        && self.player.rate == 0
+
+                    if !isWaiting,
+                       !isBufferEmpty,
+                       !cannotKeepUp {
+                        // With automaticallyWaitsToMinimizeStalling=false,
+                        // AVPlayer can pause when it runs out of buffered
+                        // media. Resume as soon as data is healthy again.
+                        if self.player.rate == 0,
+                           item.status == .readyToPlay {
+                            self.player
+                                .playImmediately(
+                                    atRate:
+                                        self.playbackRate
+                                )
+                        }
+
                         continue
                     }
 
@@ -1945,7 +1977,8 @@ final class NativePlayerModel: ObservableObject {
             targetSeconds
 
         let wasPlaying =
-            player.rate > 0
+            playbackRequested
+            || player.rate > 0
             || player.timeControlStatus
                 == .playing
             || player.timeControlStatus
@@ -3399,11 +3432,9 @@ struct NativePlayerView: View {
         .onPlayPauseCommand {
             if model.player.timeControlStatus
                 == .playing {
-                model.player.pause()
+                model.pause()
             } else {
-                model.player.playImmediately(
-                    atRate: model.playbackRate
-                )
+                model.play()
             }
 
             revealTransportControls()
