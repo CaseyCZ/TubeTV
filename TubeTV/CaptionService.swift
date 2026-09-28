@@ -295,6 +295,61 @@ actor CaptionService {
             throw CaptionServiceError.invalidVideoID
         }
 
+        // SmartTube obtains subtitles from the same YouTube /player
+        // response used for playback. Do that first so tvOS does not depend
+        // on watch-page HTML parsing for normal playback.
+        if let cachedData =
+                await AlternativePlayerService.shared
+                    .cachedCaptionRendererData(
+                        for: videoID
+                    ),
+           var renderer =
+                try? JSONSerialization
+                    .jsonObject(
+                        with: cachedData
+                    ) as? [String: Any] {
+            let tracks =
+                renderer["captionTracks"]
+                    as? [[String: Any]]
+                ?? []
+            let translations =
+                renderer["translationLanguages"]
+                    as? [[String: Any]]
+                ?? []
+
+            guard !tracks.isEmpty else {
+                return try await watchPageCaptionRenderer(
+                    videoID: videoID
+                )
+            }
+
+            // SmartTube supplements TV caption metadata from WEB when the
+            // TV response exposes only a reduced translation-language list.
+            if translations.count < 100,
+               let webRenderer =
+                    try? await watchPageCaptionRenderer(
+                        videoID: videoID
+                    ),
+               let webTranslations =
+                    webRenderer["translationLanguages"]
+                        as? [[String: Any]],
+               webTranslations.count
+                    > translations.count {
+                renderer["translationLanguages"] =
+                    webTranslations
+            }
+
+            return renderer
+        }
+
+        return try await watchPageCaptionRenderer(
+            videoID: videoID
+        )
+    }
+
+    private func watchPageCaptionRenderer(
+        videoID: String
+    ) async throws -> [String: Any] {
         guard let watchURL = URL(
             string: "https://www.youtube.com/watch?v=\(videoID)&hl=\(L10n.currentLanguageCode)&gl=CZ"
         ) else {
@@ -331,8 +386,22 @@ actor CaptionService {
         outputLanguage: String,
         translated: Bool
     ) async throws -> CaptionResult {
-        guard let rawURL = track["baseUrl"] as? String,
-              var components = URLComponents(string: rawURL) else {
+        guard let rawURL =
+                track["baseUrl"] as? String
+        else {
+            throw CaptionServiceError.invalidCaptionURL
+        }
+
+        let normalizedURL =
+            rawURL.hasPrefix("/")
+                ? "https://www.youtube.com\(rawURL)"
+                : rawURL
+
+        guard var components =
+                URLComponents(
+                    string: normalizedURL
+                )
+        else {
             throw CaptionServiceError.invalidCaptionURL
         }
 
