@@ -2,6 +2,57 @@ import AVFoundation
 import AVKit
 import OSLog
 import SwiftUI
+import UIKit
+
+private final class TubeTVPlayerSurfaceView: UIView {
+    override static var layerClass: AnyClass {
+        AVPlayerLayer.self
+    }
+
+    var playerLayer: AVPlayerLayer {
+        layer as! AVPlayerLayer
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .black
+        playerLayer.videoGravity = .resizeAspect
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        backgroundColor = .black
+        playerLayer.videoGravity = .resizeAspect
+    }
+}
+
+private struct TubeTVPlayerSurface: UIViewRepresentable {
+    let player: AVPlayer
+
+    func makeUIView(
+        context: Context
+    ) -> TubeTVPlayerSurfaceView {
+        let view = TubeTVPlayerSurfaceView()
+        view.playerLayer.player = player
+        return view
+    }
+
+    func updateUIView(
+        _ uiView: TubeTVPlayerSurfaceView,
+        context: Context
+    ) {
+        if uiView.playerLayer.player !== player {
+            uiView.playerLayer.player = player
+        }
+    }
+
+    static func dismantleUIView(
+        _ uiView: TubeTVPlayerSurfaceView,
+        coordinator: ()
+    ) {
+        uiView.playerLayer.player = nil
+    }
+}
 
 private func localizedLanguageName(
     _ languageCode: String,
@@ -3402,8 +3453,11 @@ struct NativePlayerView: View {
 
     var body: some View {
         ZStack {
-            VideoPlayer(player: model.player)
-                .ignoresSafeArea()
+            TubeTVPlayerSurface(
+                player: model.player
+            )
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
 
             if model.isPreparing
                 || model.isSwitchingQuality
@@ -3460,6 +3514,7 @@ struct NativePlayerView: View {
                 .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
+        .focusable()
         .animation(.easeInOut(duration: 0.2), value: showSettings)
         .animation(
             .easeInOut(duration: 0.18),
