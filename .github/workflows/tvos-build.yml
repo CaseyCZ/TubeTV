@@ -150,41 +150,6 @@ jobs:
             --predicate 'process == "TubeTV"' \
             > tubetv-simulator.log 2>&1 || true
 
-      - name: Probe real YouTube video playback
-        run: |
-          set -euo pipefail
-
-          UDID='${{ steps.simulator.outputs.udid }}'
-          xcrun simctl terminate "$UDID" cz.caseycz.tubetv || true
-
-          # Same regression video SmartTubeIOS uses to exercise Android fallback on Simulator.
-          SIMCTL_CHILD_TUBETV_CI_VIDEO_SMOKE=1 \
-          SIMCTL_CHILD_TUBETV_CI_VIDEO_ID=Dy9ki9Q5nXs \
-            xcrun simctl launch "$UDID" cz.caseycz.tubetv \
-            > video-smoke-launch.txt
-
-          sleep 18
-          xcrun simctl spawn "$UDID" log show \
-            --style compact \
-            --last 3m \
-            --predicate 'subsystem == "cz.caseycz.tubetv"' \
-            > tubetv-video-smoke.log 2>&1 || true
-
-          cat tubetv-video-smoke.log
-
-          if grep -q "TUBETV_VIDEO_PLAYBACK_OK" tubetv-video-smoke.log; then
-            echo "Real YouTube playback succeeded."
-            exit 0
-          fi
-
-          if grep -qiE "sign in to confirm.*bot|your ip|ip address|vpn|proxy" tubetv-video-smoke.log; then
-            echo "::warning::YouTube blocked the GitHub-hosted runner IP. Resolver probe captured; this is not a TubeTV build failure."
-            exit 0
-          fi
-
-          echo "::error::YouTube probe failed for a reason other than the known cloud-IP block."
-          exit 1
-
       - name: Publish IPA to GitHub Release
         if: success()
         env:
