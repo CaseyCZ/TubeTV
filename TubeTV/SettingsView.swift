@@ -209,46 +209,6 @@ struct SettingsView: View {
                         }
                         .disabled(isSigningIn)
 
-                        if let authorization {
-                            VStack(alignment: .leading, spacing: 14) {
-                                Text(
-                                    L10n.text(
-                                        "open_on_phone",
-                                        languageCode: appLanguage
-                                    )
-                                )
-                                .foregroundStyle(.secondary)
-
-                                Text(authorization.verificationURL)
-                                    .font(.title3.weight(.semibold))
-
-                                Text(
-                                    L10n.text(
-                                        "enter_code",
-                                        languageCode: appLanguage
-                                    )
-                                )
-                                .foregroundStyle(.secondary)
-
-                                Text(authorization.userCode)
-                                    .font(
-                                        .system(
-                                            size: 42,
-                                            weight: .bold,
-                                            design: .monospaced
-                                        )
-                                    )
-
-                                Text(
-                                    L10n.text(
-                                        "waiting_sign_in",
-                                        languageCode: appLanguage
-                                    )
-                                )
-                                .foregroundStyle(.secondary)
-                            }
-                            .padding(.vertical, 10)
-                        }
                     }
 
                     if let accountMessage {
@@ -270,6 +230,14 @@ struct SettingsView: View {
             )
             .task {
                 await loadAccountState()
+            }
+        }
+        .overlay {
+            if let authorization {
+                YouTubeDeviceAuthorizationOverlay(
+                    authorization: authorization,
+                    appLanguage: appLanguage
+                )
             }
         }
         .id(appLanguage)
@@ -361,5 +329,94 @@ struct SettingsView: View {
         selectedProfileID = ""
         accountMessage =
             L10n.text("signed_out", languageCode: appLanguage)
+    }
+}
+
+
+private struct YouTubeDeviceAuthorizationOverlay: View {
+    let authorization: TVDeviceAuthorization
+    let appLanguage: String
+
+    var body: some View {
+        ZStack {
+            Color.black
+                .opacity(0.82)
+                .ignoresSafeArea()
+
+            VStack(spacing: 22) {
+                Image(systemName: "person.crop.circle.badge.checkmark")
+                    .font(.system(size: 68, weight: .semibold))
+
+                Text(
+                    L10n.text(
+                        "youtube_account",
+                        languageCode: appLanguage
+                    )
+                )
+                .font(.largeTitle.bold())
+
+                Text(
+                    L10n.text(
+                        "open_on_phone",
+                        languageCode: appLanguage
+                    )
+                )
+                .font(.title3)
+                .foregroundStyle(.secondary)
+
+                Text(authorization.verificationURL)
+                    .font(.title2.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+
+                Text(
+                    L10n.text(
+                        "enter_code",
+                        languageCode: appLanguage
+                    )
+                )
+                .font(.title3)
+                .foregroundStyle(.secondary)
+                .padding(.top, 8)
+
+                Text(authorization.userCode)
+                    .font(
+                        .system(
+                            size: 60,
+                            weight: .bold,
+                            design: .monospaced
+                        )
+                    )
+                    .tracking(5)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+
+                HStack(spacing: 14) {
+                    ProgressView()
+
+                    Text(
+                        L10n.text(
+                            "waiting_sign_in",
+                            languageCode: appLanguage
+                        )
+                    )
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+                }
+                .padding(.top, 8)
+            }
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 70)
+            .padding(.vertical, 48)
+            .frame(maxWidth: 920)
+            .background(
+                .ultraThinMaterial,
+                in: RoundedRectangle(
+                    cornerRadius: 36,
+                    style: .continuous
+                )
+            )
+            .padding(60)
+        }
     }
 }
