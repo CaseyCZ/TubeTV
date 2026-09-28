@@ -368,9 +368,10 @@ enum StreamResolver {
             } catch {
                 // Continue to the final direct-stream fallback.
             }
-        } else if case .signInRequired = meaningfulError {
-            throw meaningfulError
-                ?? StreamResolverError.signInRequired
+        } else if let meaningfulError {
+            if case .signInRequired = meaningfulError {
+                throw meaningfulError
+            }
         }
 
         do {
@@ -409,6 +410,14 @@ enum StreamResolver {
                 ) {
                     return .direct(exactCombined.url)
                 }
+            } else if preferredQuality == "Auto",
+                      let fallbackURL {
+                // Keep the final YouTubeKit fallback fast on tvOS too.
+                // Separate video/audio makes AVFoundation inspect two remote
+                // assets before playback can begin.
+                return .direct(
+                    fallbackURL
+                )
             } else if let video = bestVideoStream(videoOnly),
                       let audio = audioOnly.highestAudioBitrateStream() {
                 return .adaptive(
