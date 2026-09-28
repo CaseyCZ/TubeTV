@@ -332,26 +332,10 @@ enum StreamResolver {
 
         var meaningfulError: StreamResolverError?
 
-        if !excludingProfiles.contains("TV_AUTH"),
-           await SmartTubeAuthService.shared.signedIn() {
-            do {
-                return try await AuthenticatedPlayerService.shared.resolve(
-                    videoID: videoID,
-                    preferredQuality: preferredQuality
-                )
-            } catch let error as StreamResolverError {
-                if case .ipBlocked = error {
-                    // SmartTubeIOS short-circuits IP blocks because repeated
-                    // /player requests can prolong the network block.
-                    throw error
-                }
-
-                meaningfulError = error
-            } catch {
-                // Continue with the same unauthenticated fallbacks SmartTube uses.
-            }
-        }
-
+        // Match SmartTube's normal playback order: try its regular client
+        // chain first (VISIONOS -> TV_DOWNGRADED -> WEB ...). Authentication
+        // is a fallback for content that actually requires it, rather than an
+        // extra blocking /player request before every ordinary video.
         do {
             return try await AlternativePlayerService.shared.resolve(
                 videoID: videoID,
@@ -363,15 +347,30 @@ enum StreamResolver {
                 throw error
             }
 
-            if case .signInRequired = error {
-                // Do not let YouTubeKit replace a useful sign-in/age-gate
-                // diagnosis with a generic extraction error.
-                throw error
-            }
-
             meaningfulError = error
         } catch {
-            // Final direct-stream fallback.
+            // Continue to authenticated playback / YouTubeKit fallbacks.
+        }
+
+        if !excludingProfiles.contains("TV_AUTH"),
+           await SmartTubeAuthService.shared.signedIn() {
+            do {
+                return try await AuthenticatedPlayerService.shared.resolve(
+                    videoID: videoID,
+                    preferredQuality: preferredQuality
+                )
+            } catch let error as StreamResolverError {
+                if case .ipBlocked = error {
+                    throw error
+                }
+
+                meaningfulError = error
+            } catch {
+                // Continue to the final direct-stream fallback.
+            }
+        } else if case .signInRequired = meaningfulError {
+            throw meaningfulError
+                ?? StreamResolverError.signInRequired
         }
 
         do {
