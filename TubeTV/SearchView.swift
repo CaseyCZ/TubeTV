@@ -11,6 +11,7 @@ struct SearchView: View {
     @State private var isLoadingMore = false
     @State private var searchGeneration = UUID()
     @State private var errorMessage: String?
+    @FocusState private var isSearchFieldFocused: Bool
 
     init(
         requestedQuery: String? = nil
@@ -34,10 +35,26 @@ struct SearchView: View {
                     .font(.largeTitle.bold())
 
                 HStack(spacing: 18) {
-                    TextField(L10n.text("search_placeholder", languageCode: appLanguage), text: $query)
-                        .onSubmit {
-                            Task { await runSearch() }
+                    TextField(
+                        L10n.text(
+                            "search_placeholder",
+                            languageCode: appLanguage
+                        ),
+                        text: $query
+                    )
+                    .focused($isSearchFieldFocused)
+                    .defaultFocus(
+                        $isSearchFieldFocused,
+                        true
+                    )
+                    .submitLabel(.search)
+                    .onSubmit {
+                        isSearchFieldFocused = false
+
+                        Task {
+                            await runSearch()
                         }
+                    }
 
                     if directVideoID == nil {
                         Button {
@@ -117,23 +134,30 @@ struct SearchView: View {
                 VideoDetailView(video: video)
             }
             .task(id: requestedQuery) {
-                guard let requestedQuery else {
+                if let requestedQuery {
+                    let trimmed =
+                        requestedQuery
+                            .trimmingCharacters(
+                                in:
+                                    .whitespacesAndNewlines
+                            )
+
+                    guard !trimmed.isEmpty else {
+                        return
+                    }
+
+                    query = trimmed
+                    isSearchFieldFocused = false
+                    await runSearch()
                     return
                 }
 
-                let trimmed =
-                    requestedQuery
-                        .trimmingCharacters(
-                            in:
-                                .whitespacesAndNewlines
-                        )
-
-                guard !trimmed.isEmpty else {
-                    return
-                }
-
-                query = trimmed
-                await runSearch()
+                // On tvOS the sidebar otherwise keeps focus and the
+                // search field cannot be reached reliably with the remote.
+                // Give the field focus after the view has entered the
+                // hierarchy so the system keyboard opens immediately.
+                await Task.yield()
+                isSearchFieldFocused = true
             }
         }
     }
