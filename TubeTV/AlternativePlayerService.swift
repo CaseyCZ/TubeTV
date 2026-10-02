@@ -986,8 +986,7 @@ actor AlternativePlayerService {
         // the first frame. HLS is segmented, so playback can begin after the
         // first few segments and seeking does not depend on already-buffered
         // file ranges.
-        if preferredQuality == "Auto",
-           let hlsRaw,
+        if let hlsRaw,
            let hls = URL(string: hlsRaw),
            !adMetadata.containsAdvertisingMetadata {
             logger.notice(
@@ -1010,8 +1009,7 @@ actor AlternativePlayerService {
         // AVPlayer cannot. For Auto, prefer the muxed stream and let playback
         // start right away. Explicit quality choices still use adaptive
         // video+audio when needed for 1080p/4K/etc.
-        if preferredQuality == "Auto",
-           let fallback {
+        if let fallback {
             logger.notice(
                 "FAST_START muxed client=\(client.profile, privacy: .public)"
             )
