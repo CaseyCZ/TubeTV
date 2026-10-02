@@ -308,8 +308,7 @@ actor AuthenticatedPlayerService {
         // both remote assets and becomes especially slow on long videos.
         // Prefer a clean HLS manifest because AVPlayer can start from the
         // first segments without inspecting the complete media files.
-        if preferredQuality == "Auto",
-           let hlsURL,
+        if let hlsURL,
            !adMetadata.containsAdvertisingMetadata {
             return .directWithHeaders(
                 hlsURL,
@@ -319,8 +318,7 @@ actor AuthenticatedPlayerService {
 
         // If the authenticated response has no usable HLS, a muxed MP4 is
         // still faster to start than composing separate streams.
-        if preferredQuality == "Auto",
-           let fallback {
+        if let fallback {
             return .directWithHeaders(
                 fallback,
                 playbackHeaders
