@@ -713,6 +713,10 @@ final class NativePlayerModel: ObservableObject {
         // aggressive, while the default buffer can grow after playback starts.
         item.preferredForwardBufferDuration =
             0
+        applyPreferredResolution(
+            quality: activeQuality,
+            to: item
+        )
 
         player.replaceCurrentItem(
             with: item
@@ -2140,6 +2144,10 @@ final class NativePlayerModel: ObservableObject {
                 )
 
             currentSource = newSource
+            applyPreferredResolution(
+                quality: quality,
+                to: newItem
+            )
             player.replaceCurrentItem(
                 with: newItem
             )
@@ -3261,6 +3269,28 @@ final class NativePlayerModel: ObservableObject {
         case .direct, .directWithHeaders:
             return nil
         }
+    }
+
+    private func applyPreferredResolution(
+        quality: String,
+        to item: AVPlayerItem
+    ) {
+        guard quality.hasSuffix("p"),
+              let height = Int(quality.dropLast()),
+              height > 0 else {
+            item.preferredMaximumResolution = .zero
+            return
+        }
+
+        let width = Int(
+            (Double(height) * 16.0 / 9.0)
+                .rounded()
+        )
+        item.preferredMaximumResolution =
+            CGSize(
+                width: width,
+                height: height
+            )
     }
 
     private func makePlayerItem(
