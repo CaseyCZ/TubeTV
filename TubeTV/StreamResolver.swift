@@ -43,8 +43,7 @@ struct PlaybackRequestHeaders: Hashable {
         self.audioTracks = audioTracks
         self.isLive = isLive
         self.isLiveContent = isLiveContent
-        self.advertisingMetadataDetected =
-            advertisingMetadataDetected
+        self.advertisingMetadataDetected = advertisingMetadataDetected
     }
 
     var dictionary: [String: String] {
@@ -78,7 +77,6 @@ enum PlaybackSource: Hashable {
         case .directWithHeaders(_, let headers),
              .adaptiveWithHeaders(_, _, _, let headers):
             return headers.clientProfile
-
         case .direct, .adaptive:
             return nil
         }
@@ -87,91 +85,45 @@ enum PlaybackSource: Hashable {
     var diagnosticSourceKind: String {
         switch self {
         case .direct(let url),
-             .directWithHeaders(
-                let url,
-                _
-             ):
-            let raw =
-                url.absoluteString
-                    .lowercased()
-
-            if url.pathExtension
-                    .lowercased()
-                    == "m3u8"
-                || raw.contains(
-                    "hls_playlist"
-                )
-                || raw.contains(
-                    "/manifest/"
-                ) {
+             .directWithHeaders(let url, _):
+            let raw = url.absoluteString.lowercased()
+            if url.pathExtension.lowercased() == "m3u8"
+                || raw.contains("hls_playlist")
+                || raw.contains("/manifest/") {
                 return "HLS"
             }
-
             return "DIRECT"
-
-        case .adaptive,
-             .adaptiveWithHeaders:
+        case .adaptive, .adaptiveWithHeaders:
             return "ADAPTIVE"
         }
     }
 
     var diagnosticIsLive: Bool? {
         switch self {
-        case .directWithHeaders(
-            _,
-            let headers
-        ),
-        .adaptiveWithHeaders(
-            _,
-            _,
-            _,
-            let headers
-        ):
+        case .directWithHeaders(_, let headers),
+             .adaptiveWithHeaders(_, _, _, let headers):
             return headers.isLive
-
-        case .direct,
-             .adaptive:
+        case .direct, .adaptive:
             return nil
         }
     }
 
     var diagnosticIsLiveContent: Bool? {
         switch self {
-        case .directWithHeaders(
-            _,
-            let headers
-        ),
-        .adaptiveWithHeaders(
-            _,
-            _,
-            _,
-            let headers
-        ):
+        case .directWithHeaders(_, let headers),
+             .adaptiveWithHeaders(_, _, _, let headers):
             return headers.isLiveContent
-
-        case .direct,
-             .adaptive:
+        case .direct, .adaptive:
             return nil
         }
     }
 
     var diagnosticAdvertisingMetadataDetected: Bool? {
         switch self {
-        case .directWithHeaders(
-            _,
-            let headers
-        ),
-        .adaptiveWithHeaders(
-            _,
-            _,
-            _,
-            let headers
-        ):
-            return headers
-                .advertisingMetadataDetected
-
-        case .direct,
-             .adaptive:
+        case .directWithHeaders(_, let headers),
+             .adaptiveWithHeaders(_, _, _, let headers):
+            return headers.advertisingMetadataDetected
+        case .direct, .adaptive:
             return nil
         }
     }
@@ -181,7 +133,6 @@ enum PlaybackSource: Hashable {
         case .directWithHeaders(_, let headers),
              .adaptiveWithHeaders(_, _, _, let headers):
             return headers.availableHeights
-
         case .direct, .adaptive:
             return []
         }
@@ -192,7 +143,6 @@ enum PlaybackSource: Hashable {
         case .directWithHeaders(_, let headers),
              .adaptiveWithHeaders(_, _, _, let headers):
             return headers.audioTracks
-
         case .direct, .adaptive:
             return []
         }
@@ -200,33 +150,17 @@ enum PlaybackSource: Hashable {
 
     var activeAudioTrackID: String? {
         switch self {
-        case .adaptiveWithHeaders(
-            _,
-            let audioURL,
-            _,
-            let headers
-        ):
+        case .adaptiveWithHeaders(_, let audioURL, _, let headers):
             return headers.audioTracks
-                .first(where: {
-                    $0.url == audioURL
-                })?
+                .first(where: { $0.url == audioURL })?
                 .id
-
-        case .direct,
-             .directWithHeaders,
-             .adaptive:
+        case .direct, .directWithHeaders, .adaptive:
             return nil
         }
     }
 
-    func replacingAudioTrack(
-        id: String
-    ) -> PlaybackSource? {
-        guard let track =
-                availableAudioTracks
-                    .first(where: {
-                        $0.id == id
-                    }) else {
+    func replacingAudioTrack(id: String) -> PlaybackSource? {
+        guard let track = availableAudioTracks.first(where: { $0.id == id }) else {
             return nil
         }
 
@@ -243,10 +177,7 @@ enum PlaybackSource: Hashable {
                 fallback: fallback,
                 headers: headers
             )
-
-        case .direct,
-             .directWithHeaders,
-             .adaptive:
+        case .direct, .directWithHeaders, .adaptive:
             return nil
         }
     }
@@ -276,10 +207,6 @@ enum StreamResolverError: LocalizedError {
         reason: String
     ) -> StreamResolverError? {
         let lowerReason = reason.lowercased()
-
-        // Match SmartTubeIOS IPBlockDetectionTests. This must run
-        // before generic LOGIN_REQUIRED handling because YouTube uses
-        // LOGIN_REQUIRED for "Sign in to confirm you're not a bot".
         let ipBlockKeywords = [
             "your ip",
             "ip address",
@@ -289,9 +216,7 @@ enum StreamResolverError: LocalizedError {
             "sign in to confirm"
         ]
 
-        if ipBlockKeywords.contains(
-            where: { lowerReason.contains($0) }
-        ) {
+        if ipBlockKeywords.contains(where: { lowerReason.contains($0) }) {
             return .ipBlocked(reason)
         }
 
@@ -300,7 +225,6 @@ enum StreamResolverError: LocalizedError {
             "AGE_VERIFICATION_REQUIRED",
             "AGE_CHECK_REQUIRED"
         ]
-
         let signInKeywords = [
             "sign in",
             "age-restricted",
@@ -310,46 +234,11 @@ enum StreamResolverError: LocalizedError {
         ]
 
         if signInStatuses.contains(status)
-            || signInKeywords.contains(
-                where: { lowerReason.contains($0) }
-            ) {
+            || signInKeywords.contains(where: { lowerReason.contains($0) }) {
             return .signInRequired
         }
 
         return nil
-    }
-}
-
-private enum PlaybackProfilePreferenceStore {
-    private static let key =
-        "tubetv.playback.lastWorkingProfile"
-
-    static func load() -> String? {
-        guard let value =
-                UserDefaults.standard
-                    .string(forKey: key),
-              !value.isEmpty else {
-            return nil
-        }
-
-        return value
-    }
-
-    static func save(_ profile: String) {
-        guard !profile.isEmpty,
-              profile != "TV_AUTH" else {
-            return
-        }
-
-        UserDefaults.standard.set(
-            profile,
-            forKey: key
-        )
-    }
-
-    static func clear() {
-        UserDefaults.standard
-            .removeObject(forKey: key)
     }
 }
 
@@ -362,37 +251,24 @@ private actor StreamResolutionBudget {
     }
 
     private var windows: [String: Window] = [:]
-    // SmartTube-style recovery: allow several independent resolver passes
-    // before we ever surface a terminal playback error. Per-request timeouts
-    // still protect against a single hung client.
-    private let maximumWindow: TimeInterval = 60
-    private let maximumAttempts = 8
+    private let maximumWindow: TimeInterval = 20
+    private let maximumAttempts = 4
     private let staleWindowAge: TimeInterval = 120
 
-    func beginAttempt(
-        videoID: String,
-        reset: Bool
-    ) -> Bool {
+    func beginAttempt(videoID: String, reset: Bool) -> Bool {
         let now = Date()
 
         windows = windows.filter {
-            now.timeIntervalSince(
-                $0.value.startedAt
-            ) < staleWindowAge
+            now.timeIntervalSince($0.value.startedAt) < staleWindowAge
         }
 
         if reset || windows[videoID] == nil {
-            windows[videoID] = Window(
-                startedAt: now,
-                attempts: 1
-            )
+            windows[videoID] = Window(startedAt: now, attempts: 1)
             return true
         }
 
         guard var window = windows[videoID],
-              now.timeIntervalSince(
-                window.startedAt
-              ) < maximumWindow,
+              now.timeIntervalSince(window.startedAt) < maximumWindow,
               window.attempts < maximumAttempts else {
             return false
         }
@@ -401,6 +277,12 @@ private actor StreamResolutionBudget {
         windows[videoID] = window
         return true
     }
+}
+
+private enum ResolverAttemptResult: @unchecked Sendable {
+    case source(PlaybackSource, String)
+    case failure(StreamResolverError?)
+    case timeout
 }
 
 enum StreamResolver {
@@ -414,25 +296,213 @@ enum StreamResolver {
         }
 
         let isInitialAttempt = excludingProfiles.isEmpty
-        let allowed =
-            await StreamResolutionBudget.shared.beginAttempt(
-                videoID: videoID,
-                reset: isInitialAttempt
-            )
+        let allowed = await StreamResolutionBudget.shared.beginAttempt(
+            videoID: videoID,
+            reset: isInitialAttempt
+        )
 
         guard allowed else {
             throw StreamResolverError.noPlayableStream
         }
 
-        // Prefer a longer search over an early error. The first playable
-        // source still returns immediately, but slow fallbacks now have enough
-        // time to run before the whole resolver is considered exhausted.
-        return try await resolveWithTimeout(
+        // SmartTube-style behavior: independent playback paths race instead
+        // of waiting for one whole client chain to fail before starting the
+        // next one. The first usable source returns immediately. A failure in
+        // one path never terminates the other paths.
+        return try await resolveCandidateRace(
             videoID: videoID,
             preferredQuality: preferredQuality,
             excludingProfiles: excludingProfiles,
-            timeoutSeconds: isInitialAttempt ? 30 : 20
+            timeoutSeconds: isInitialAttempt ? 9.0 : 4.5
         )
+    }
+
+    private static func resolveCandidateRace(
+        videoID: String,
+        preferredQuality: String,
+        excludingProfiles: Set<String>,
+        timeoutSeconds: TimeInterval
+    ) async throws -> PlaybackSource {
+        let canUseAuthenticatedTV =
+            !excludingProfiles.contains("TV_AUTH")
+            && await SmartTubeAuthService.shared.signedIn()
+
+        let retryDelay = min(
+            2.7,
+            max(1.2, timeoutSeconds * 0.30)
+        )
+        let timeoutNanoseconds = UInt64(
+            max(1.0, timeoutSeconds) * 1_000_000_000
+        )
+        let retryDelayNanoseconds = UInt64(
+            retryDelay * 1_000_000_000
+        )
+
+        return try await withThrowingTaskGroup(
+            of: ResolverAttemptResult.self
+        ) { group in
+            var remainingCandidates = 3
+
+            if canUseAuthenticatedTV {
+                remainingCandidates += 1
+                group.addTask {
+                    await authenticatedCandidate(
+                        videoID: videoID,
+                        preferredQuality: preferredQuality
+                    )
+                }
+            }
+
+            // Existing multi-client InnerTube resolver. It still has short
+            // per-wave timeouts, but it now runs beside every other fallback.
+            group.addTask {
+                await alternativeCandidate(
+                    videoID: videoID,
+                    preferredQuality: preferredQuality,
+                    excludingProfiles: excludingProfiles
+                )
+            }
+
+            // Start YouTubeKit immediately instead of only after the complete
+            // InnerTube chain has timed out. This removes the old ~5 s dead end.
+            group.addTask {
+                await youtubeKitCandidate(
+                    videoID: videoID,
+                    preferredQuality: preferredQuality
+                )
+            }
+
+            // A second InnerTube pass starts after the first short wave. The
+            // first pass can meanwhile seed visitorData / signatureTimestamp;
+            // the warm pass therefore gets a real chance to reach clients that
+            // were previously cancelled while still preparing their request.
+            group.addTask {
+                do {
+                    try await Task.sleep(
+                        nanoseconds: retryDelayNanoseconds
+                    )
+                    try Task.checkCancellation()
+                } catch {
+                    return .failure(nil)
+                }
+
+                return await alternativeCandidate(
+                    videoID: videoID,
+                    preferredQuality: preferredQuality,
+                    excludingProfiles: excludingProfiles
+                )
+            }
+
+            group.addTask {
+                do {
+                    try await Task.sleep(
+                        nanoseconds: timeoutNanoseconds
+                    )
+                    try Task.checkCancellation()
+                    return .timeout
+                } catch {
+                    return .failure(nil)
+                }
+            }
+
+            var meaningfulError: StreamResolverError?
+            var meaningfulPriority = -1
+
+            while let outcome = try await group.next() {
+                switch outcome {
+                case .source(let source, _):
+                    group.cancelAll()
+                    return source
+
+                case .failure(let error):
+                    remainingCandidates -= 1
+                    if let error {
+                        let priority = errorPriority(error)
+                        if priority > meaningfulPriority {
+                            meaningfulPriority = priority
+                            meaningfulError = error
+                        }
+                    }
+
+                case .timeout:
+                    group.cancelAll()
+                    throw meaningfulError
+                        ?? StreamResolverError.noPlayableStream
+                }
+
+                if remainingCandidates <= 0 {
+                    group.cancelAll()
+                    throw meaningfulError
+                        ?? StreamResolverError.noPlayableStream
+                }
+            }
+
+            throw meaningfulError
+                ?? StreamResolverError.noPlayableStream
+        }
+    }
+
+    private static func authenticatedCandidate(
+        videoID: String,
+        preferredQuality: String
+    ) async -> ResolverAttemptResult {
+        do {
+            let source = try await resolveAuthenticatedWithTimeout(
+                videoID: videoID,
+                preferredQuality: preferredQuality,
+                timeoutSeconds: 2.5
+            )
+            return .source(source, "TV_AUTH")
+        } catch let error as StreamResolverError {
+            return .failure(error)
+        } catch is CancellationError {
+            return .failure(nil)
+        } catch {
+            return .failure(nil)
+        }
+    }
+
+    private static func alternativeCandidate(
+        videoID: String,
+        preferredQuality: String,
+        excludingProfiles: Set<String>
+    ) async -> ResolverAttemptResult {
+        do {
+            let source = try await AlternativePlayerService.shared.resolve(
+                videoID: videoID,
+                preferredQuality: preferredQuality,
+                excludingProfiles: excludingProfiles
+            )
+            return .source(
+                source,
+                source.clientProfile ?? "INNERTUBE"
+            )
+        } catch let error as StreamResolverError {
+            return .failure(error)
+        } catch is CancellationError {
+            return .failure(nil)
+        } catch {
+            return .failure(nil)
+        }
+    }
+
+    private static func youtubeKitCandidate(
+        videoID: String,
+        preferredQuality: String
+    ) async -> ResolverAttemptResult {
+        do {
+            let source = try await resolveWithYouTubeKit(
+                videoID: videoID,
+                preferredQuality: preferredQuality
+            )
+            return .source(source, "YOUTUBE_KIT")
+        } catch let error as StreamResolverError {
+            return .failure(error)
+        } catch is CancellationError {
+            return .failure(nil)
+        } catch {
+            return .failure(nil)
+        }
     }
 
     private static func resolveAuthenticatedWithTimeout(
@@ -441,7 +511,7 @@ enum StreamResolver {
         timeoutSeconds: TimeInterval
     ) async throws -> PlaybackSource {
         let timeoutNanoseconds = UInt64(
-            max(1, timeoutSeconds) * 1_000_000_000
+            max(1.0, timeoutSeconds) * 1_000_000_000
         )
 
         return try await withThrowingTaskGroup(
@@ -472,142 +542,33 @@ enum StreamResolver {
         }
     }
 
-    private static func resolveWithTimeout(
+    private static func resolveWithYouTubeKit(
         videoID: String,
-        preferredQuality: String,
-        excludingProfiles: Set<String>,
-        timeoutSeconds: TimeInterval
+        preferredQuality: String
     ) async throws -> PlaybackSource {
-        let timeoutNanoseconds =
-            UInt64(
-                max(
-                    1,
-                    timeoutSeconds
-                ) * 1_000_000_000
-            )
+        try Task.checkCancellation()
 
-        return try await withThrowingTaskGroup(
-            of: PlaybackSource.self
-        ) { group in
-            group.addTask {
-                try await resolveWithoutTimeout(
-                    videoID: videoID,
-                    preferredQuality: preferredQuality,
-                    excludingProfiles: excludingProfiles
-                )
-            }
+        let streams = try await YouTube(videoID: videoID).streams
+        try Task.checkCancellation()
 
-            group.addTask {
-                try await Task.sleep(
-                    nanoseconds: timeoutNanoseconds
-                )
-                try Task.checkCancellation()
-                throw StreamResolverError.noPlayableStream
-            }
+        let combined = streams
+            .filterVideoAndAudio()
+            .filter { $0.isNativelyPlayable }
+        let fallbackURL = bestVideoStream(combined)?.url
 
-            guard let first = try await group.next() else {
-                group.cancelAll()
-                throw StreamResolverError.noPlayableStream
-            }
+        let videoOnly = streams
+            .filterVideoOnly()
+            .filter { $0.isNativelyPlayable }
+        let audioOnly = streams
+            .filterAudioOnly()
+            .filter { $0.isNativelyPlayable }
 
-            group.cancelAll()
-            return first
-        }
-    }
-
-    private static func resolveWithoutTimeout(
-        videoID: String,
-        preferredQuality: String,
-        excludingProfiles: Set<String>
-    ) async throws -> PlaybackSource {
-        var meaningfulError: StreamResolverError?
-
-        // Keep the reliable order used by the previous Apple TV build:
-        // signed-in TV playback first, then the SmartTube-compatible client
-        // chain, then YouTubeKit. The services themselves still use the
-        // new HLS/muxed fast-start paths.
-        if !excludingProfiles.contains("TV_AUTH"),
-           await SmartTubeAuthService.shared.signedIn() {
-            do {
-                return try await resolveAuthenticatedWithTimeout(
-                    videoID: videoID,
-                    preferredQuality: preferredQuality,
-                    timeoutSeconds: 3
-                )
-            } catch let error as StreamResolverError {
-                try Task.checkCancellation()
-
-                meaningfulError = error
-            } catch {
-                try Task.checkCancellation()
-                // Continue to the SmartTube-compatible fallback chain.
-            }
-        }
-
-        do {
-            return try await AlternativePlayerService.shared.resolve(
-                videoID: videoID,
-                preferredQuality: preferredQuality,
-                excludingProfiles: excludingProfiles
-            )
-        } catch let error as StreamResolverError {
-            try Task.checkCancellation()
-
-            // One client can be blocked/login-only while another
-            // client still has a valid Apple TV stream. Keep the diagnostic
-            // error, but continue through every remaining fallback.
-            meaningfulError = error
-        } catch {
-            try Task.checkCancellation()
-            // Continue to the final direct-stream fallback.
-        }
-
-        do {
-            let streams = try await YouTube(videoID: videoID).streams
-
-            let combined = streams
-                .filterVideoAndAudio()
-                .filter { $0.isNativelyPlayable }
-
-            let fallbackURL = bestVideoStream(combined)?.url
-
-            let videoOnly = streams
-                .filterVideoOnly()
-                .filter { $0.isNativelyPlayable }
-
-            let audioOnly = streams
-                .filterAudioOnly()
-                .filter { $0.isNativelyPlayable }
-
-            if let requestedHeight = requestedHeight(for: preferredQuality) {
-                if let video = bestVideoStream(
-                    videoOnly,
-                    requestedHeight: requestedHeight
-                ),
-                   let audio = audioOnly.highestAudioBitrateStream() {
-                    return .adaptive(
-                        video: video.url,
-                        audio: audio.url,
-                        fallback: fallbackURL
-                    )
-                }
-
-                if let exactCombined = bestVideoStream(
-                    combined,
-                    requestedHeight: requestedHeight
-                ) {
-                    return .direct(exactCombined.url)
-                }
-            } else if preferredQuality == "Auto",
-                      let fallbackURL {
-                // Keep the final YouTubeKit fallback fast on tvOS too.
-                // Separate video/audio makes AVFoundation inspect two remote
-                // assets before playback can begin.
-                return .direct(
-                    fallbackURL
-                )
-            } else if let video = bestVideoStream(videoOnly),
-                      let audio = audioOnly.highestAudioBitrateStream() {
+        if let requestedHeight = requestedHeight(for: preferredQuality) {
+            if let video = bestVideoStream(
+                videoOnly,
+                requestedHeight: requestedHeight
+            ),
+               let audio = audioOnly.highestAudioBitrateStream() {
                 return .adaptive(
                     video: video.url,
                     audio: audio.url,
@@ -615,20 +576,43 @@ enum StreamResolver {
                 )
             }
 
-            guard let fallbackURL else {
-                throw meaningfulError
-                    ?? StreamResolverError.noPlayableStream
+            if let exactCombined = bestVideoStream(
+                combined,
+                requestedHeight: requestedHeight
+            ) {
+                return .direct(exactCombined.url)
             }
-
+        } else if preferredQuality == "Auto",
+                  let fallbackURL {
             return .direct(fallbackURL)
-        } catch {
-            try Task.checkCancellation()
+        } else if let video = bestVideoStream(videoOnly),
+                  let audio = audioOnly.highestAudioBitrateStream() {
+            return .adaptive(
+                video: video.url,
+                audio: audio.url,
+                fallback: fallbackURL
+            )
+        }
 
-            if let meaningfulError {
-                throw meaningfulError
-            }
+        guard let fallbackURL else {
+            throw StreamResolverError.noPlayableStream
+        }
 
-            throw error
+        return .direct(fallbackURL)
+    }
+
+    private static func errorPriority(
+        _ error: StreamResolverError
+    ) -> Int {
+        switch error {
+        case .invalidVideoID:
+            return 4
+        case .ipBlocked:
+            return 3
+        case .signInRequired:
+            return 2
+        case .noPlayableStream:
+            return 1
         }
     }
 
@@ -654,21 +638,16 @@ enum StreamResolver {
                 return leftHeight < rightHeight
             }
 
-            let leftBitrate =
-                lhs.averageBitrate
-                ?? lhs.bitrate
-                ?? 0
-            let rightBitrate =
-                rhs.averageBitrate
-                ?? rhs.bitrate
-                ?? 0
-
+            let leftBitrate = lhs.averageBitrate ?? lhs.bitrate ?? 0
+            let rightBitrate = rhs.averageBitrate ?? rhs.bitrate ?? 0
             return leftBitrate < rightBitrate
         }
     }
 
     static func videoID(from input: String) -> String? {
-        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = input.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
 
         if isLikelyVideoID(trimmed) {
             return trimmed
@@ -691,14 +670,23 @@ enum StreamResolver {
             return nil
         }
 
-        if let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-           let id = components.queryItems?.first(where: { $0.name == "v" })?.value,
+        if let components = URLComponents(
+            url: url,
+            resolvingAgainstBaseURL: false
+        ),
+           let id = components.queryItems?
+            .first(where: { $0.name == "v" })?
+            .value,
            isLikelyVideoID(id) {
             return id
         }
 
         let parts = url.pathComponents.filter { $0 != "/" }
-        if let marker = parts.firstIndex(where: { $0 == "shorts" || $0 == "embed" || $0 == "live" }),
+        if let marker = parts.firstIndex(
+            where: {
+                $0 == "shorts" || $0 == "embed" || $0 == "live"
+            }
+        ),
            parts.indices.contains(marker + 1) {
             let id = parts[marker + 1]
             return isLikelyVideoID(id) ? id : nil
@@ -707,20 +695,28 @@ enum StreamResolver {
         return nil
     }
 
-    private static func requestedHeight(for preference: String) -> Int? {
+    private static func requestedHeight(
+        for preference: String
+    ) -> Int? {
         guard preference.hasSuffix("p") else {
             return nil
         }
-
         return Int(preference.dropLast())
     }
 
-    private static func isLikelyVideoID(_ value: String) -> Bool {
-        guard value.count == 11 else { return false }
+    private static func isLikelyVideoID(
+        _ value: String
+    ) -> Bool {
+        guard value.count == 11 else {
+            return false
+        }
 
         let allowed = CharacterSet(
-            charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
+            charactersIn:
+                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
         )
-        return value.unicodeScalars.allSatisfy { allowed.contains($0) }
+        return value.unicodeScalars.allSatisfy {
+            allowed.contains($0)
+        }
     }
 }
