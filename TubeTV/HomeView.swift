@@ -510,6 +510,7 @@ struct VideoRow: View {
                             VideoCard(video: video)
                         }
                         .buttonStyle(.plain)
+                        .focusEffectDisabled()
                         .onAppear {
                             let nearEndIDs =
                                 videos

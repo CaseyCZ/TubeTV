@@ -232,6 +232,10 @@ actor SmartTubeAuthService {
         TubeTVKeychain.string(for: refreshTokenKey) != nil
     }
 
+    func cachedVisitorData() -> String? {
+        cachedBootstrap?.visitorData
+    }
+
     func bootstrap() async throws -> TVBootstrap {
         if let cachedBootstrap {
             return cachedBootstrap

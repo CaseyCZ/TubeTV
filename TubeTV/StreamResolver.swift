@@ -362,7 +362,7 @@ private actor StreamResolutionBudget {
     }
 
     private var windows: [String: Window] = [:]
-    private let maximumWindow: TimeInterval = 28
+    private let maximumWindow: TimeInterval = 20
     private let maximumAttempts = 3
     private let staleWindowAge: TimeInterval = 120
 
@@ -445,7 +445,7 @@ enum StreamResolver {
             videoID: videoID,
             preferredQuality: preferredQuality,
             excludingProfiles: excludingProfiles,
-            timeoutSeconds: isInitialAttempt ? 12 : 8
+            timeoutSeconds: isInitialAttempt ? 9 : 5
         )
 
         if let profile = resolved.clientProfile {
@@ -460,6 +460,43 @@ enum StreamResolver {
         }
 
         return resolved
+    }
+
+    private static func resolveAuthenticatedWithTimeout(
+        videoID: String,
+        preferredQuality: String,
+        timeoutSeconds: TimeInterval
+    ) async throws -> PlaybackSource {
+        let timeoutNanoseconds = UInt64(
+            max(1, timeoutSeconds) * 1_000_000_000
+        )
+
+        return try await withThrowingTaskGroup(
+            of: PlaybackSource.self
+        ) { group in
+            group.addTask {
+                try await AuthenticatedPlayerService.shared.resolve(
+                    videoID: videoID,
+                    preferredQuality: preferredQuality
+                )
+            }
+
+            group.addTask {
+                try await Task.sleep(
+                    nanoseconds: timeoutNanoseconds
+                )
+                try Task.checkCancellation()
+                throw StreamResolverError.noPlayableStream
+            }
+
+            defer { group.cancelAll() }
+
+            guard let first = try await group.next() else {
+                throw StreamResolverError.noPlayableStream
+            }
+
+            return first
+        }
     }
 
     private static func resolveWithTimeout(
@@ -519,9 +556,10 @@ enum StreamResolver {
         if !excludingProfiles.contains("TV_AUTH"),
            await SmartTubeAuthService.shared.signedIn() {
             do {
-                return try await AuthenticatedPlayerService.shared.resolve(
+                return try await resolveAuthenticatedWithTimeout(
                     videoID: videoID,
-                    preferredQuality: preferredQuality
+                    preferredQuality: preferredQuality,
+                    timeoutSeconds: 3
                 )
             } catch let error as StreamResolverError {
                 try Task.checkCancellation()

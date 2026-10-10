@@ -123,8 +123,8 @@ actor AlternativePlayerService {
 
     init() {
         let configuration = URLSessionConfiguration.default
-        configuration.timeoutIntervalForRequest = 12
-        configuration.timeoutIntervalForResource = 20
+        configuration.timeoutIntervalForRequest = 3
+        configuration.timeoutIntervalForResource = 8
         configuration.httpCookieStorage = HTTPCookieStorage.shared
         configuration.httpShouldSetCookies = true
         session = URLSession(configuration: configuration)
@@ -171,6 +171,27 @@ actor AlternativePlayerService {
                 supportXhr: false,
                 seedWebSession: false,
                 extraClientFields: [:],
+                thirdParty: nil
+            ),
+            AlternativePlayerClient(
+                profile: "IOS",
+                name: "iOS",
+                version: "21.26.4",
+                innerTubeName: "5",
+                userAgent:
+                    "com.google.ios.youtube/21.26.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)",
+                referer: nil,
+                origin: nil,
+                apiKey: Self.webAPIKey,
+                clientScreen: "WATCH",
+                supportXhr: true,
+                seedWebSession: false,
+                extraClientFields: [
+                    "deviceMake": "Apple",
+                    "deviceModel": "iPhone16,2",
+                    "osName": "iPhone",
+                    "osVersion": "18.3.2.22D82"
+                ],
                 thirdParty: nil
             ),
             AlternativePlayerClient(
@@ -233,27 +254,6 @@ actor AlternativePlayerService {
                     "browserVersion": "15.5",
                     "timeZone": "UTC",
                     "utcOffsetMinutes": 0
-                ],
-                thirdParty: nil
-            ),
-            AlternativePlayerClient(
-                profile: "IOS",
-                name: "iOS",
-                version: "21.26.4",
-                innerTubeName: "5",
-                userAgent:
-                    "com.google.ios.youtube/21.26.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)",
-                referer: nil,
-                origin: nil,
-                apiKey: Self.webAPIKey,
-                clientScreen: "WATCH",
-                supportXhr: true,
-                seedWebSession: false,
-                extraClientFields: [
-                    "deviceMake": "Apple",
-                    "deviceModel": "iPhone16,2",
-                    "osName": "iPhone",
-                    "osVersion": "18.3.2.22D82"
                 ],
                 thirdParty: nil
             ),
@@ -340,11 +340,9 @@ actor AlternativePlayerService {
         // so the first video doesn't need an extra youtube.com/watch page
         // request just to seed the resolver.
         if visitorData == nil,
-           let bootstrap =
-                try? await SmartTubeAuthService
-                    .shared.bootstrap(),
            let bootstrapVisitor =
-                bootstrap.visitorData,
+                await SmartTubeAuthService
+                    .shared.cachedVisitorData(),
            !bootstrapVisitor.isEmpty {
             visitorData = bootstrapVisitor
         }
@@ -561,13 +559,10 @@ actor AlternativePlayerService {
         var clientFields =
             clientFields(for: client)
 
-        let bootstrap =
-            try? await SmartTubeAuthService
-                .shared.bootstrap()
-        try Task.checkCancellation()
-
         let bootstrapVisitor =
-            bootstrap?.visitorData
+            await SmartTubeAuthService
+                .shared.cachedVisitorData()
+        try Task.checkCancellation()
 
         let effectiveVisitor =
             visitorData ?? bootstrapVisitor
@@ -691,7 +686,7 @@ actor AlternativePlayerService {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = 10
+        request.timeoutInterval = 2.5
         request.setValue(
             "application/json",
             forHTTPHeaderField:
@@ -1256,7 +1251,7 @@ actor AlternativePlayerService {
         }
 
         var request = URLRequest(url: url)
-        request.timeoutInterval = 8
+        request.timeoutInterval = 2.5
         request.setValue(
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.5 Safari/605.1.15,gzip(gfe)",
             forHTTPHeaderField: "User-Agent"
