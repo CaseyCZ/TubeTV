@@ -401,7 +401,7 @@ struct SearchView: View {
 private struct SearchChannelCard: View {
     @Environment(\.isFocused) private var isFocused
 
-    let channel: YouTubeChannelSearchResult
+    let channel: YouTubeSubscribedChannel
 
     var body: some View {
         VStack(spacing: 16) {
