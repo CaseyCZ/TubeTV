@@ -424,7 +424,7 @@ final class NativePlayerModel: ObservableObject {
 
     private var didPrepare = false
     private var playerStartupStartedAt: Date?
-    private let maximumFailoverDuration: TimeInterval = 12
+    private let maximumFailoverDuration: TimeInterval = 18
     private var cues: [CaptionCue] = []
     private var captionLoadGeneration = UUID()
     private var timeObserver: Any?
@@ -672,9 +672,9 @@ final class NativePlayerModel: ObservableObject {
                     failedProfile
                 )
 
-                // A retry resolver can consume up to five seconds. Do not
+                // A retry resolver can consume up to eight seconds. Do not
                 // start one if it cannot finish inside this failover window.
-                guard failoverDeadline.timeIntervalSinceNow >= 5 else {
+                guard failoverDeadline.timeIntervalSinceNow >= 8 else {
                     playbackLogger.error(
                         "Startup budget too small for another resolver retry"
                     )
@@ -816,7 +816,7 @@ final class NativePlayerModel: ObservableObject {
         // spend tens of seconds on a source that AVPlayer can't prepare;
         // fail over to the next SmartTube client instead. During initial
         // failover, all sources also share one global player deadline.
-        for _ in 0..<45 {
+        for _ in 0..<80 {
             if let deadline,
                Date() >= deadline {
                 playbackLogger.notice(
