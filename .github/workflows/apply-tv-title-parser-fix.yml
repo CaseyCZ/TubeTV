@@ -4,18 +4,16 @@ on:
   push:
     branches:
       - playback-faststart
-    paths:
-      - .github/workflows/apply-tv-title-parser-fix.yml
 
 permissions:
   contents: write
 
 jobs:
   patch:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - name: Checkout
+        uses: actions/checkout@v7
         with:
           ref: playback-faststart
           fetch-depth: 0
@@ -26,11 +24,11 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          path = Path('TubeTV/InnerTubeService.swift')
+          path = Path("TubeTV/InnerTubeService.swift")
           text = path.read_text()
 
-          start = text.index('    private static func videoTitle(\n')
-          end = text.index('\n    private static func extractVideos', start)
+          start = text.index("    private static func videoTitle(\n")
+          end = text.index("\n    private static func extractVideos", start)
           replacement = '''    private static func videoTitle(
               from renderer: [String: Any]
           ) -> String? {
@@ -41,9 +39,9 @@ jobs:
                   return direct
               }
 
-              // SmartTube MediaServiceCore reads current TV tile titles from
-              // tile metadata first, then from metadata embedded in the
-              // thumbnail overlay. Newer TV feeds use both shapes.
+              // Keep current TV tile parsing aligned with SmartTube's
+              // MediaServiceCore. YouTube can place the title either in
+              // tile metadata or inside the thumbnail overlay.
               if let value = nested(
                   renderer,
                   path: [
@@ -158,7 +156,7 @@ jobs:
                 ?? "YouTube"
 '''
           if old not in text:
-              raise SystemExit('channel fallback block not found')
+              raise SystemExit("channel fallback block not found")
           text = text.replace(old, new, 1)
 
           path.write_text(text)
@@ -170,9 +168,9 @@ jobs:
       - name: Commit product fix and remove helper
         run: |
           set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm .github/workflows/apply-tv-title-parser-fix.yml
           git add TubeTV/InnerTubeService.swift
-          git commit -m 'Parse TV video titles like SmartTube'
+          git commit -m "Parse TV video titles like SmartTube"
           git push origin HEAD:playback-faststart
