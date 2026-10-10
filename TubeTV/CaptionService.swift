@@ -340,6 +340,8 @@ actor CaptionService {
                     translated: true
                 )
             } catch {
+                try Task.checkCancellation()
+
                 // A forced translation is deliberately optimistic. If the
                 // endpoint really refuses that language, keep captions usable
                 // by falling back to the source track instead of showing none.
@@ -399,18 +401,26 @@ actor CaptionService {
 
             // SmartTube supplements TV caption metadata from WEB when the
             // TV response exposes only a reduced translation-language list.
-            if translations.count < 100,
-               let webRenderer =
-                    try? await watchPageCaptionRenderer(
-                        videoID: videoID
-                    ),
-               let webTranslations =
-                    webRenderer["translationLanguages"]
-                        as? [[String: Any]],
-               webTranslations.count
-                    > translations.count {
-                renderer["translationLanguages"] =
-                    webTranslations
+            if translations.count < 100 {
+                do {
+                    let webRenderer =
+                        try await watchPageCaptionRenderer(
+                            videoID: videoID
+                        )
+                    let webTranslations =
+                        webRenderer["translationLanguages"]
+                            as? [[String: Any]]
+                        ?? []
+
+                    if webTranslations.count > translations.count {
+                        renderer["translationLanguages"] =
+                            webTranslations
+                    }
+                } catch {
+                    try Task.checkCancellation()
+                    // WEB metadata is supplemental; keep the cached renderer
+                    // when the page request fails for a non-cancellation reason.
+                }
             }
 
             return renderer
