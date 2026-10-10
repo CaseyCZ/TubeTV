@@ -320,6 +320,53 @@ enum StreamResolverError: LocalizedError {
     }
 }
 
+private actor StreamResolutionBudget {
+    static let shared = StreamResolutionBudget()
+
+    private struct Window {
+        let startedAt: Date
+        var attempts: Int
+    }
+
+    private var windows: [String: Window] = [:]
+    private let maximumWindow: TimeInterval = 32
+    private let maximumAttempts = 4
+    private let staleWindowAge: TimeInterval = 120
+
+    func beginAttempt(
+        videoID: String,
+        reset: Bool
+    ) -> Bool {
+        let now = Date()
+
+        windows = windows.filter {
+            now.timeIntervalSince(
+                $0.value.startedAt
+            ) < staleWindowAge
+        }
+
+        if reset || windows[videoID] == nil {
+            windows[videoID] = Window(
+                startedAt: now,
+                attempts: 1
+            )
+            return true
+        }
+
+        guard var window = windows[videoID],
+              now.timeIntervalSince(
+                window.startedAt
+              ) < maximumWindow,
+              window.attempts < maximumAttempts else {
+            return false
+        }
+
+        window.attempts += 1
+        windows[videoID] = window
+        return true
+    }
+}
+
 enum StreamResolver {
     static func resolveYouTubeVideo(
         videoID: String,
@@ -330,6 +377,73 @@ enum StreamResolver {
             throw StreamResolverError.invalidVideoID
         }
 
+        let isInitialAttempt = excludingProfiles.isEmpty
+        let allowed =
+            await StreamResolutionBudget.shared.beginAttempt(
+                videoID: videoID,
+                reset: isInitialAttempt
+            )
+
+        guard allowed else {
+            throw StreamResolverError.noPlayableStream
+        }
+
+        return try await resolveWithTimeout(
+            videoID: videoID,
+            preferredQuality: preferredQuality,
+            excludingProfiles: excludingProfiles,
+            timeoutSeconds: isInitialAttempt ? 15 : 10
+        )
+    }
+
+    private static func resolveWithTimeout(
+        videoID: String,
+        preferredQuality: String,
+        excludingProfiles: Set<String>,
+        timeoutSeconds: TimeInterval
+    ) async throws -> PlaybackSource {
+        let timeoutNanoseconds =
+            UInt64(
+                max(
+                    1,
+                    timeoutSeconds
+                ) * 1_000_000_000
+            )
+
+        return try await withThrowingTaskGroup(
+            of: PlaybackSource.self
+        ) { group in
+            group.addTask {
+                try await resolveWithoutTimeout(
+                    videoID: videoID,
+                    preferredQuality: preferredQuality,
+                    excludingProfiles: excludingProfiles
+                )
+            }
+
+            group.addTask {
+                try await Task.sleep(
+                    nanoseconds: timeoutNanoseconds
+                )
+                try Task.checkCancellation()
+                throw StreamResolverError.noPlayableStream
+            }
+
+            guard let first = try await group.next() else {
+                group.cancelAll()
+                throw StreamResolverError.noPlayableStream
+            }
+
+            group.cancelAll()
+            return first
+        }
+    }
+
+    private static func resolveWithoutTimeout(
+        videoID: String,
+        preferredQuality: String,
+        excludingProfiles: Set<String>
+    ) async throws -> PlaybackSource {
         var meaningfulError: StreamResolverError?
 
         // Keep the reliable order used by the previous Apple TV build:
@@ -440,7 +554,6 @@ enum StreamResolver {
 
             throw error
         }
-
     }
 
     private static func bestVideoStream(
