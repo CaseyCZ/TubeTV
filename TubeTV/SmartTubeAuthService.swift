@@ -634,17 +634,34 @@ actor SmartTubeAuthService {
         _ token: TVTokenResponse,
         refreshToken: String
     ) throws {
-        try TubeTVKeychain.set(refreshToken, for: refreshTokenKey)
-
+        // signedIn() uses the refresh token as the durable account marker.
+        // Persist derived session state first so a failed first-time write
+        // can never leave TubeTV looking signed in with incomplete tokens.
         if let accessToken = token.accessToken {
-            try TubeTVKeychain.set(accessToken, for: accessTokenKey)
+            try TubeTVKeychain.set(
+                accessToken,
+                for: accessTokenKey
+            )
         }
 
         let expiry = Date()
-            .addingTimeInterval(TimeInterval(token.expiresIn ?? 3600))
+            .addingTimeInterval(
+                TimeInterval(
+                    token.expiresIn
+                    ?? 3600
+                )
+            )
             .timeIntervalSince1970
 
-        try TubeTVKeychain.set(String(expiry), for: accessTokenExpiryKey)
+        try TubeTVKeychain.set(
+            String(expiry),
+            for: accessTokenExpiryKey
+        )
+
+        try TubeTVKeychain.set(
+            refreshToken,
+            for: refreshTokenKey
+        )
     }
 
     private func persistentDeviceID() -> String {
