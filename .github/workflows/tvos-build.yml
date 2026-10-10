@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - Master
+      - ui-ioshub-refresh
   workflow_dispatch:
 
 concurrency:
@@ -151,7 +152,7 @@ jobs:
             > tubetv-simulator.log 2>&1 || true
 
       - name: Publish IPA to GitHub Release
-        if: success()
+        if: success() && github.ref == 'refs/heads/Master'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -160,7 +161,13 @@ jobs:
           TAG="tvos-build-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
           TITLE="TubeTV Apple TV Build ${GITHUB_RUN_NUMBER}"
 
-          gh release create "$TAG"             TubeTV-unsigned.ipa             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "$TITLE"             --notes "Unsigned tvOS IPA for Apple TV testing via ATVLoadly. Built from commit $GITHUB_SHA."             --prerelease
+          gh release create "$TAG" \
+            TubeTV-unsigned.ipa \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "$TITLE" \
+            --notes "Unsigned tvOS IPA for Apple TV testing via ATVLoadly. Built from commit $GITHUB_SHA." \
+            --prerelease
 
       - name: Shutdown simulator
         if: always()
