@@ -4095,6 +4095,14 @@ actor InnerTubeService {
                 return simpleText
             }
 
+            // Current TV TextItem objects often carry their visible value in
+            // `content` instead of the legacy `simpleText`/`runs` shapes.
+            // SmartTube's TextItem.getText() handles this representation too.
+            if let content = dictionary["content"] as? String,
+               !content.isEmpty {
+                return content
+            }
+
             if let runs = dictionary["runs"] as? [[String: Any]] {
                 let joined = runs
                     .compactMap { $0["text"] as? String }
