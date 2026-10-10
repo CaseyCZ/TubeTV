@@ -222,7 +222,7 @@ struct RootView: View {
                         isCollapsed: sidebarCollapsed
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(TubeTVSidebarButtonStyle())
                 .focusEffectDisabled()
                 .focused(
                     $focusedSidebarItem,
@@ -247,6 +247,7 @@ struct RootView: View {
                 .transition(.opacity)
             }
         }
+        .focusEffectDisabled()
         .padding(
             .horizontal,
             sidebarCollapsed ? 10 : 24
@@ -346,6 +347,13 @@ struct RootView: View {
     }
 }
 
+private struct TubeTVSidebarButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.72 : 1.0)
+    }
+}
+
 private struct TubeTVSidebarItem: View {
     @Environment(\.isFocused) private var isFocused
 
@@ -372,6 +380,7 @@ private struct TubeTVSidebarItem: View {
             if !isCollapsed {
                 Text(title)
                     .font(.title3.weight(.semibold))
+                    .foregroundStyle(titleForeground)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
                     .layoutPriority(1)
@@ -423,6 +432,14 @@ private struct TubeTVSidebarItem: View {
         )
     }
 
+    private var titleForeground: Color {
+        if isFocused || isSelected {
+            return .white
+        }
+
+        return .white.opacity(0.76)
+    }
+
     private var rowBackground: Color {
         if isFocused {
             return TubeTVTheme.panelRaised.opacity(0.98)
@@ -460,6 +477,6 @@ private struct TubeTVSidebarItem: View {
             return TubeTVTheme.accent
         }
 
-        return .white.opacity(0.76)
+        return .white.opacity(0.62)
     }
 }
