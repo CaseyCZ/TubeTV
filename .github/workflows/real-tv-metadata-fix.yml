@@ -1,4 +1,4 @@
-name: Apply real Apple TV metadata fix
+name: Real TV metadata patch
 
 on:
   push:
@@ -13,171 +13,18 @@ permissions:
 jobs:
   patch:
     runs-on: ubuntu-latest
+    env:
+      PATCH_B64: "CmZyb20gcGF0aGxpYiBpbXBvcnQgUGF0aAoKaW5uZXJfcGF0aCA9IFBhdGgoIlR1YmVUVi9Jbm5lclR1YmVTZXJ2aWNlLnN3aWZ0IikKdGV4dCA9IGlubmVyX3BhdGgucmVhZF90ZXh0KCkKCm1hcmtlciA9ICIiIiAgICBwcml2YXRlIHN0YXRpYyBmdW5jIGlzTW9kZXJuVFZWaWRlb1JlbmRlcmVyKAogICAgICAgIF8gcmVuZGVyZXI6IFtTdHJpbmc6IEFueV0KICAgICkgLT4gQm9vbCB7CiIiIgoKaGVscGVyID0gIiIiICAgIHByaXZhdGUgc3RhdGljIGZ1bmMgbW9kZXJuVFZDaGFubmVsTmFtZSgKICAgICAgICBmcm9tIHJlbmRlcmVyOiBbU3RyaW5nOiBBbnldCiAgICApIC0+IFN0cmluZz8gewogICAgICAgIC8vIEN1cnJlbnQgWW91VHViZSBUViB0aWxlcyBrZWVwIHRoZSBjcmVhdG9yIGluIGRlZGljYXRlZCB0aWxlCiAgICAgICAgLy8gbWV0YWRhdGEgcmF0aGVyIHRoYW4gbGVnYWN5IGJ5bGluZSBmaWVsZHMuIFJlYWQgb25seSB0aG9zZQogICAgICAgIC8vIGtub3duIGxvY2F0aW9ucyBzbyBtZW51IGFjdGlvbnMgc3VjaCBhcyAiUGxheSIgY2FuIG5ldmVyIGJlCiAgICAgICAgLy8gbWlzdGFrZW4gZm9yIGEgY2hhbm5lbCBuYW1lLgogICAgICAgIGxldCBzdWJ0aXRsZVBhdGhzID0gWwogICAgICAgICAgICBbCiAgICAgICAgICAgICAgICAib25Mb25nUHJlc3NDb21tYW5kIiwKICAgICAgICAgICAgICAgICJzaG93TWVudUNvbW1hbmQiLAogICAgICAgICAgICAgICAgInN1YnRpdGxlIgogICAgICAgICAgICBdLAogICAgICAgICAgICBbCiAgICAgICAgICAgICAgICAibWV0YWRhdGEiLAogICAgICAgICAgICAgICAgInRpbGVNZXRhZGF0YVJlbmRlcmVyIiwKICAgICAgICAgICAgICAgICJzdWJ0aXRsZSIKICAgICAgICAgICAgXQogICAgICAgIF0KCiAgICAgICAgZm9yIHBhdGggaW4gc3VidGl0bGVQYXRocyB7CiAgICAgICAgICAgIGlmIGxldCB2YWx1ZSA9IG5lc3RlZChyZW5kZXJlciwgcGF0aDogcGF0aCksCiAgICAgICAgICAgICAgIGxldCByYXcgPSB0ZXh0KGZyb206IHZhbHVlKSB7CiAgICAgICAgICAgICAgICBsZXQgY2FuZGlkYXRlID0KICAgICAgICAgICAgICAgICAgICByYXcuY29tcG9uZW50cyhzZXBhcmF0ZWRCeTogIiDigKIgIikKICAgICAgICAgICAgICAgICAgICAgICAgLmZpcnN0PwogICAgICAgICAgICAgICAgICAgICAgICAudHJpbW1pbmdDaGFyYWN0ZXJzKAogICAgICAgICAgICAgICAgICAgICAgICAgICAgaW46IC53aGl0ZXNwYWNlc0FuZE5ld2xpbmVzCiAgICAgICAgICAgICAgICAgICAgICAgICkKICAgICAgICAgICAgICAgICAgICAgICAgPz8gIiIKCiAgICAgICAgICAgICAgICBpZiBpc1VzZWZ1bENoYW5uZWxOYW1lKGNhbmRpZGF0ZSkgewogICAgICAgICAgICAgICAgICAgIHJldHVybiBjYW5kaWRhdGUKICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgfQogICAgICAgIH0KCiAgICAgICAgLy8gVFYgdGlsZU1ldGFkYXRhUmVuZGVyZXIgbGluZXMgbm9ybWFsbHkgZXhwb3NlIHRoZSBjaGFubmVsIGluCiAgICAgICAgLy8gdGhlIGZpcnN0IGxpbmUsIHdpdGggdmlld3MvZGF0ZSBvbiB0aGUgZm9sbG93aW5nIGxpbmUuCiAgICAgICAgaWYgbGV0IGxpbmVzID0gbmVzdGVkKAogICAgICAgICAgICByZW5kZXJlciwKICAgICAgICAgICAgcGF0aDogWwogICAgICAgICAgICAgICAgIm1ldGFkYXRhIiwKICAgICAgICAgICAgICAgICJ0aWxlTWV0YWRhdGFSZW5kZXJlciIsCiAgICAgICAgICAgICAgICAibGluZXMiCiAgICAgICAgICAgIF0KICAgICAgICApIGFzPyBbQW55XSwKICAgICAgICAgICBsZXQgZmlyc3RMaW5lID0gbGluZXMuZmlyc3QgYXM/IFtTdHJpbmc6IEFueV0sCiAgICAgICAgICAgbGV0IGl0ZW1zID0gbmVzdGVkKAogICAgICAgICAgICBmaXJzdExpbmUsCiAgICAgICAgICAgIHBhdGg6IFsibGluZVJlbmRlcmVyIiwgIml0ZW1zIl0KICAgICAgICAgICApIGFzPyBbQW55XSB7CiAgICAgICAgICAgIGZvciBpdGVtIGluIGl0ZW1zIHsKICAgICAgICAgICAgICAgIGd1YXJkIGxldCBpdGVtRGljdGlvbmFyeSA9IGl0ZW0gYXM/IFtTdHJpbmc6IEFueV0sCiAgICAgICAgICAgICAgICAgICAgICBsZXQgdmFsdWUgPSBuZXN0ZWQoCiAgICAgICAgICAgICAgICAgICAgICAgIGl0ZW1EaWN0aW9uYXJ5LAogICAgICAgICAgICAgICAgICAgICAgICBwYXRoOiBbImxpbmVJdGVtUmVuZGVyZXIiLCAidGV4dCJdCiAgICAgICAgICAgICAgICAgICAgICApLAogICAgICAgICAgICAgICAgICAgICAgbGV0IGNhbmRpZGF0ZSA9IHRleHQoZnJvbTogdmFsdWUpPwogICAgICAgICAgICAgICAgICAgICAgICAudHJpbW1pbmdDaGFyYWN0ZXJzKAogICAgICAgICAgICAgICAgICAgICAgICAgICAgaW46IC53aGl0ZXNwYWNlc0FuZE5ld2xpbmVzCiAgICAgICAgICAgICAgICAgICAgICAgICksCiAgICAgICAgICAgICAgICAgICAgICBpc1VzZWZ1bENoYW5uZWxOYW1lKGNhbmRpZGF0ZSkgZWxzZSB7CiAgICAgICAgICAgICAgICAgICAgY29udGludWUKICAgICAgICAgICAgICAgIH0KCiAgICAgICAgICAgICAgICByZXR1cm4gY2FuZGlkYXRlCiAgICAgICAgICAgIH0KICAgICAgICB9CgogICAgICAgIHJldHVybiBuaWwKICAgIH0KCiAgICBwcml2YXRlIHN0YXRpYyBmdW5jIGlzVXNlZnVsQ2hhbm5lbE5hbWUoCiAgICAgICAgXyB2YWx1ZTogU3RyaW5nCiAgICApIC0+IEJvb2wgewogICAgICAgIGxldCB0cmltbWVkID0gdmFsdWUudHJpbW1pbmdDaGFyYWN0ZXJzKAogICAgICAgICAgICBpbjogLndoaXRlc3BhY2VzQW5kTmV3bGluZXMKICAgICAgICApCgogICAgICAgIGd1YXJkICF0cmltbWVkLmlzRW1wdHksCiAgICAgICAgICAgICAgdHJpbW1lZCAhPSAi4oCiIiwKICAgICAgICAgICAgICAhbG9va3NMaWtlRHVyYXRpb24odHJpbW1lZCkgZWxzZSB7CiAgICAgICAgICAgIHJldHVybiBmYWxzZQogICAgICAgIH0KCiAgICAgICAgbGV0IHJlamVjdGVkID0gU2V0KFsKICAgICAgICAgICAgInBsYXkiLAogICAgICAgICAgICAic2F2ZSB0byB3YXRjaCBsYXRlciIsCiAgICAgICAgICAgICJzYXZlIHRvIHBsYXlsaXN0IiwKICAgICAgICAgICAgIm5vdCBpbnRlcmVzdGVkIiwKICAgICAgICAgICAgImRvbid0IHJlY29tbWVuZCBjaGFubmVsIgogICAgICAgIF0pCgogICAgICAgIHJldHVybiAhcmVqZWN0ZWQuY29udGFpbnModHJpbW1lZC5sb3dlcmNhc2VkKCkpCiAgICB9CgoiIiIKCmlmIG1hcmtlciBub3QgaW4gdGV4dDoKICAgIHJhaXNlIFN5c3RlbUV4aXQoIklubmVyVHViZSBpbnNlcnRpb24gbWFya2VyIG5vdCBmb3VuZCIpCmlmICJwcml2YXRlIHN0YXRpYyBmdW5jIG1vZGVyblRWQ2hhbm5lbE5hbWUoIiBub3QgaW4gdGV4dDoKICAgIHRleHQgPSB0ZXh0LnJlcGxhY2UobWFya2VyLCBoZWxwZXIgKyBtYXJrZXIsIDEpCgpvbGQgPSAiIiIgICAgICAgICAgICBsZXQgY2hhbm5lbCA9CiAgICAgICAgICAgICAgICBbcmF3Q2hhbm5lbF0KICAgICAgICAgICAgICAgICAgICAuY29tcGFjdE1hcCB7ICQwIH0KIiIiCm5ldyA9ICIiIiAgICAgICAgICAgIGxldCBjaGFubmVsID0KICAgICAgICAgICAgICAgIFsKICAgICAgICAgICAgICAgICAgICByYXdDaGFubmVsLAogICAgICAgICAgICAgICAgICAgIG1vZGVyblRWQ2hhbm5lbE5hbWUoZnJvbTogcmVuZGVyZXIpCiAgICAgICAgICAgICAgICBdCiAgICAgICAgICAgICAgICAgICAgLmNvbXBhY3RNYXAgeyAkMCB9CiIiIgppZiBvbGQgbm90IGluIHRleHQ6CiAgICByYWlzZSBTeXN0ZW1FeGl0KCJDaGFubmVsIGNhbmRpZGF0ZSBibG9jayBub3QgZm91bmQiKQp0ZXh0ID0gdGV4dC5yZXBsYWNlKG9sZCwgbmV3LCAxKQppbm5lcl9wYXRoLndyaXRlX3RleHQodGV4dCkKCmhvbWVfcGF0aCA9IFBhdGgoIlR1YmVUVi9Ib21lVmlldy5zd2lmdCIpCmhvbWUgPSBob21lX3BhdGgucmVhZF90ZXh0KCkKb2xkX2hvbWUgPSAiIiIgICAgICAgICAgICAgICAgaWYgIXZpZGVvLnN1YnRpdGxlLmlzRW1wdHkgewogICAgICAgICAgICAgICAgICAgIFRleHQodmlkZW8uc3VidGl0bGUpCiAgICAgICAgICAgICAgICAgICAgICAgIC5mb250KC5jYXB0aW9uKQogICAgICAgICAgICAgICAgICAgICAgICAuZm9yZWdyb3VuZFN0eWxlKC50ZXJ0aWFyeSkKICAgICAgICAgICAgICAgICAgICAgICAgLmxpbmVMaW1pdCgxKQogICAgICAgICAgICAgICAgfQoiIiIKbmV3X2hvbWUgPSAiIiIgICAgICAgICAgICAgICAgaWYgIXZpZGVvLnN1YnRpdGxlLmlzRW1wdHkgewogICAgICAgICAgICAgICAgICAgIFRleHQodmlkZW8uc3VidGl0bGUpCiAgICAgICAgICAgICAgICAgICAgICAgIC5mb250KC5jYXB0aW9uKQogICAgICAgICAgICAgICAgICAgICAgICAuZm9yZWdyb3VuZFN0eWxlKENvbG9yLndoaXRlLm9wYWNpdHkoMC43MCkpCiAgICAgICAgICAgICAgICAgICAgICAgIC5saW5lTGltaXQoMSkKICAgICAgICAgICAgICAgIH0KIiIiCmlmIG9sZF9ob21lIG5vdCBpbiBob21lOgogICAgcmFpc2UgU3lzdGVtRXhpdCgiVmlkZW8gc3VidGl0bGUgc3R5bGUgYmxvY2sgbm90IGZvdW5kIikKaG9tZSA9IGhvbWUucmVwbGFjZShvbGRfaG9tZSwgbmV3X2hvbWUsIDEpCmhvbWVfcGF0aC53cml0ZV90ZXh0KGhvbWUpCg=="
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: playback-faststart
 
-      - name: Patch TV channel metadata and card contrast
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
+      - name: Apply patch
+        run: python3 -c 'import base64, os; exec(base64.b64decode(os.environ["PATCH_B64"]).decode())'
 
-          inner_path = Path('TubeTV/InnerTubeService.swift')
-          text = inner_path.read_text()
-
-          marker = '''    private static func isModernTVVideoRenderer(
-              _ renderer: [String: Any]
-          ) -> Bool {
-          '''
-
-          helper = '''    private static func modernTVChannelName(
-              from renderer: [String: Any]
-          ) -> String? {
-              // Current YouTube TV tiles keep the creator in dedicated tile
-              // metadata rather than legacy byline fields. Read only those
-              // known locations so menu actions such as "Play" can never be
-              // mistaken for a channel name.
-              let subtitlePaths = [
-                  [
-                      "onLongPressCommand",
-                      "showMenuCommand",
-                      "subtitle"
-                  ],
-                  [
-                      "metadata",
-                      "tileMetadataRenderer",
-                      "subtitle"
-                  ]
-              ]
-
-              for path in subtitlePaths {
-                  if let value = nested(renderer, path: path),
-                     let raw = text(from: value) {
-                      let candidate =
-                          raw.components(separatedBy: " • ")
-                              .first?
-                              .trimmingCharacters(
-                                  in: .whitespacesAndNewlines
-                              )
-                              ?? ""
-
-                      if isUsefulChannelName(candidate) {
-                          return candidate
-                      }
-                  }
-              }
-
-              // TV tileMetadataRenderer lines normally expose the channel in
-              // the first line, with views/date on the following line.
-              if let lines = nested(
-                  renderer,
-                  path: [
-                      "metadata",
-                      "tileMetadataRenderer",
-                      "lines"
-                  ]
-              ) as? [Any],
-                 let firstLine = lines.first as? [String: Any],
-                 let items = nested(
-                  firstLine,
-                  path: ["lineRenderer", "items"]
-                 ) as? [Any] {
-                  for item in items {
-                      guard let itemDictionary = item as? [String: Any],
-                            let value = nested(
-                              itemDictionary,
-                              path: ["lineItemRenderer", "text"]
-                            ),
-                            let candidate = text(from: value)?
-                              .trimmingCharacters(
-                                  in: .whitespacesAndNewlines
-                              ),
-                            isUsefulChannelName(candidate) else {
-                          continue
-                      }
-
-                      return candidate
-                  }
-              }
-
-              return nil
-          }
-
-          private static func isUsefulChannelName(
-              _ value: String
-          ) -> Bool {
-              let trimmed = value.trimmingCharacters(
-                  in: .whitespacesAndNewlines
-              )
-
-              guard !trimmed.isEmpty,
-                    trimmed != "•",
-                    !looksLikeDuration(trimmed) else {
-                  return false
-              }
-
-              let rejected = Set([
-                  "play",
-                  "save to watch later",
-                  "save to playlist",
-                  "not interested",
-                  "don't recommend channel"
-              ])
-
-              return !rejected.contains(trimmed.lowercased())
-          }
-
-'''
-
-          if marker not in text:
-              raise SystemExit('InnerTube insertion marker not found')
-          if 'private static func modernTVChannelName(' not in text:
-              text = text.replace(marker, helper + marker, 1)
-
-          old = '''            let channel =
-                  [rawChannel]
-                      .compactMap { $0 }
-          '''
-          new = '''            let channel =
-                  [
-                      rawChannel,
-                      modernTVChannelName(from: renderer)
-                  ]
-                      .compactMap { $0 }
-          '''
-          if old not in text:
-              raise SystemExit('Channel candidate block not found')
-          text = text.replace(old, new, 1)
-          inner_path.write_text(text)
-
-          home_path = Path('TubeTV/HomeView.swift')
-          home = home_path.read_text()
-          old_home = '''                if !video.subtitle.isEmpty {
-                      Text(video.subtitle)
-                          .font(.caption)
-                          .foregroundStyle(.tertiary)
-                          .lineLimit(1)
-                  }
-          '''
-          new_home = '''                if !video.subtitle.isEmpty {
-                      Text(video.subtitle)
-                          .font(.caption)
-                          .foregroundStyle(Color.white.opacity(0.70))
-                          .lineLimit(1)
-                  }
-          '''
-          if old_home not in home:
-              raise SystemExit('Video subtitle style block not found')
-          home = home.replace(old_home, new_home, 1)
-          home_path.write_text(home)
-          PY
-
-      - name: Commit patch and remove helper workflow
-        shell: bash
+      - name: Commit patch
         run: |
           set -euo pipefail
           git config user.name "Lukáš"
