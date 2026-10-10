@@ -33,7 +33,6 @@ jobs:
                   raise SystemExit(f'{label} marker not found in {path}')
               p.write_text(text.replace(old, new, 1))
 
-          # Remove the native tvOS white focus halo around video NavigationLinks.
           replace_once(
               'TubeTV/HomeView.swift',
               '''                        .buttonStyle(.plain)\n                        .onAppear {\n''',
@@ -41,7 +40,6 @@ jobs:
               'Home video focus effect'
           )
 
-          # Keep search video cards visually consistent as well.
           replace_once(
               'TubeTV/SearchView.swift',
               '''            .buttonStyle(.plain)\n\n        case .channel(let channel):\n''',
@@ -49,8 +47,6 @@ jobs:
               'Search video focus effect'
           )
 
-          # Playback must never wait on the full TV OAuth bootstrap just to get
-          # anonymous visitorData. Only reuse it when already cached.
           auth = Path('TubeTV/SmartTubeAuthService.swift')
           auth_text = auth.read_text()
           marker = '''    func signedIn() -> Bool {\n        TubeTVKeychain.string(for: refreshTokenKey) != nil\n    }\n\n'''
@@ -62,17 +58,16 @@ jobs:
           alt = Path('TubeTV/AlternativePlayerService.swift')
           text = alt.read_text()
 
-          replacements = [
-              ('configuration.timeoutIntervalForRequest = 12', 'configuration.timeoutIntervalForRequest = 3'),
-              ('configuration.timeoutIntervalForResource = 20', 'configuration.timeoutIntervalForResource = 8'),
-              ('request.timeoutInterval = 8\n        request.setValue(\n            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', 'request.timeoutInterval = 2.5\n        request.setValue(\n            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'),
-              ('request.timeoutInterval = 10\n        request.setValue(\n            "application/json"', 'request.timeoutInterval = 2.5\n        request.setValue(\n            "application/json"'),
-              ('request.timeoutInterval = 8\n        request.setValue(\n            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.5 Safari/605.1.15,gzip(gfe)"', 'request.timeoutInterval = 2.0\n        request.setValue(\n            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.5 Safari/605.1.15,gzip(gfe)"'),
-          ]
-          for old, new in replacements:
-              if old not in text:
-                  raise SystemExit(f'Alternative timeout marker missing: {old[:60]}')
-              text = text.replace(old, new, 1)
+          for old, new, minimum in [
+              ('configuration.timeoutIntervalForRequest = 12', 'configuration.timeoutIntervalForRequest = 3', 1),
+              ('configuration.timeoutIntervalForResource = 20', 'configuration.timeoutIntervalForResource = 8', 1),
+              ('request.timeoutInterval = 8', 'request.timeoutInterval = 2.5', 2),
+              ('request.timeoutInterval = 10', 'request.timeoutInterval = 2.5', 1),
+          ]:
+              count = text.count(old)
+              if count < minimum:
+                  raise SystemExit(f'Alternative timeout marker missing: {old} count={count}')
+              text = text.replace(old, new)
 
           old_bootstrap = '''        if visitorData == nil,\n           let bootstrap =\n                try? await SmartTubeAuthService\n                    .shared.bootstrap(),\n           let bootstrapVisitor =\n                bootstrap.visitorData,\n           !bootstrapVisitor.isEmpty {\n            visitorData = bootstrapVisitor\n        }\n'''
           new_bootstrap = '''        if visitorData == nil,\n           let bootstrapVisitor =\n                await SmartTubeAuthService\n                    .shared.cachedVisitorData(),\n           !bootstrapVisitor.isEmpty {\n            visitorData = bootstrapVisitor\n        }\n'''
@@ -86,8 +81,6 @@ jobs:
               raise SystemExit('Per-client bootstrap marker missing')
           text = text.replace(old_client_bootstrap, new_client_bootstrap, 1)
 
-          # Move iOS ahead of web profiles. It often returns Apple-native URLs
-          # immediately and doesn't need signatureTimestamp bootstrap work.
           ios_start = text.index('            AlternativePlayerClient(\n                profile: "IOS",')
           geo_start = text.index('            AlternativePlayerClient(\n                profile: "GEO",', ios_start)
           ios_block = text[ios_start:geo_start]
@@ -96,8 +89,6 @@ jobs:
           text = text[:web_start] + ios_block + text[web_start:]
           alt.write_text(text)
 
-          # Bound the resolver: quick client probes, but still enough profiles
-          # to rescue a video before reporting no Apple TV stream.
           stream = Path('TubeTV/StreamResolver.swift')
           s = stream.read_text()
           for old, new in [
