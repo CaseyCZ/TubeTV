@@ -1,0 +1,35 @@
+name: Apply player UI patch
+
+on:
+  push:
+    branches:
+      - playback-faststart
+    paths:
+      - tools/apply-player-ui-patch.py
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Patch PlayerView
+        run: python3 tools/apply-player-ui-patch.py
+
+      - name: Commit player UI
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- TubeTV/PlayerView.swift; then
+            echo "PlayerView already patched"
+            exit 0
+          fi
+
+          git config user.name "Lukáš"
+          git config user.email "kyselalukas@seznam.cz"
+          git add TubeTV/PlayerView.swift
+          git commit -m "Refresh player controls with TubeTV styling"
+          git push
