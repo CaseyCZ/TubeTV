@@ -299,7 +299,6 @@ struct SettingsView: View {
                     }
                 }
                 .tint(TubeTVTheme.accent)
-                .scrollContentBackground(.hidden)
             }
             .task {
                 await loadAccountState()
