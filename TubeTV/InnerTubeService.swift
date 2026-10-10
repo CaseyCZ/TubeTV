@@ -2339,30 +2339,95 @@ actor InnerTubeService {
     private static func videoTitle(
         from renderer: [String: Any]
     ) -> String? {
-        firstText(
+        if let direct = firstText(
             in: renderer,
             keys: ["title", "headline", "primaryText"]
-        )
-        ?? text(
-            from: nested(
+        ), !direct.isEmpty {
+            return direct
+        }
+
+        // Keep current TV tile parsing aligned with SmartTube's
+        // MediaServiceCore. YouTube can place the title either in
+        // tile metadata or inside the thumbnail overlay.
+        if let value = nested(
+            renderer,
+            path: [
+                "metadata",
+                "tileMetadataRenderer",
+                "title"
+            ]
+        ), let title = text(from: value), !title.isEmpty {
+            return title
+        }
+
+        if let overlays = nested(
+            renderer,
+            path: [
+                "header",
+                "tileHeaderRenderer",
+                "thumbnailOverlays"
+            ]
+        ) as? [Any] {
+            for overlay in overlays {
+                guard let dictionary = overlay as? [String: Any],
+                      let value = nested(
+                        dictionary,
+                        path: [
+                            "tileMetadataRenderer",
+                            "title"
+                        ]
+                      ),
+                      let title = text(from: value),
+                      !title.isEmpty else {
+                    continue
+                }
+
+                return title
+            }
+        }
+
+        if let value = nested(
+            renderer,
+            path: [
+                "header",
+                "trackTileHeaderRenderer",
+                "title"
+            ]
+        ), let title = text(from: value), !title.isEmpty {
+            return title
+        }
+
+        if let value = nested(
+            renderer,
+            path: [
+                "metadata",
+                "lockupMetadataViewModel",
+                "title"
+            ]
+        ), let title = text(from: value), !title.isEmpty {
+            return title
+        }
+
+        return nil
+    }
+
+    private static func isModernTVVideoRenderer(
+        _ renderer: [String: Any]
+    ) -> Bool {
+        if let contentType = renderer["contentType"] as? String,
+           contentType.hasPrefix("TILE_")
+            || contentType.hasPrefix("LOCKUP_") {
+            return true
+        }
+
+        return nested(
+            renderer,
+            path: ["metadata", "tileMetadataRenderer"]
+        ) != nil
+            || nested(
                 renderer,
-                path: [
-                    "metadata",
-                    "tileMetadataRenderer",
-                    "title"
-                ]
-            )
-        )
-        ?? text(
-            from: nested(
-                renderer,
-                path: [
-                    "metadata",
-                    "lockupMetadataViewModel",
-                    "title"
-                ]
-            )
-        )
+                path: ["metadata", "lockupMetadataViewModel"]
+            ) != nil
     }
 
     private static func extractVideos(from root: Any) -> [VideoItem] {
@@ -2425,10 +2490,14 @@ actor InnerTubeService {
                     .first(where: {
                         !looksLikeDuration($0)
                     })
-                ?? metadata.first(
-                    where: {
-                        !looksLikeDuration($0)
-                    }
+                ?? (
+                    isModernTVVideoRenderer(renderer)
+                    ? nil
+                    : metadata.first(
+                        where: {
+                            !looksLikeDuration($0)
+                        }
+                    )
                 )
                 ?? "YouTube"
 
