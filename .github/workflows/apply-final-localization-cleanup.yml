@@ -1,0 +1,47 @@
+name: Apply final localization cleanup
+
+on:
+  push:
+    branches:
+      - playback-faststart
+    paths:
+      - .github/workflows/apply-final-localization-cleanup.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: playback-faststart
+          fetch-depth: 0
+
+      - name: Apply cleanup
+        run: python3 tools/apply-final-localization-cleanup.py
+
+      - name: Validate patch
+        run: |
+          set -euo pipefail
+          grep -q 'URLQueryItem(name: "hl", value: L10n.currentLanguageCode)' TubeTV/YouTubeService.swift
+          if grep -q '\.id(appLanguage)' TubeTV/SettingsView.swift; then
+            echo 'Settings still resets identity on language change'
+            exit 1
+          fi
+          git diff --check
+
+      - name: Commit product cleanup and remove helpers
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/apply-final-localization-cleanup.yml tools/apply-final-localization-cleanup.py
+          if test -f .github/tubetv-parser-validation; then
+            git rm .github/tubetv-parser-validation
+          fi
+          git add TubeTV/YouTubeService.swift TubeTV/SettingsView.swift
+          git commit -m 'Finish localization and settings cleanup'
+          git push origin HEAD:playback-faststart
