@@ -223,6 +223,7 @@ struct RootView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .focusEffectDisabled()
                 .focused(
                     $focusedSidebarItem,
                     equals: item
@@ -237,7 +238,7 @@ struct RootView: View {
                         .fill(TubeTVTheme.accent)
                         .frame(width: 8, height: 8)
 
-                    Text("tvOS · SmartTube inspired")
+                    Text("tvOS · Clean playback")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
