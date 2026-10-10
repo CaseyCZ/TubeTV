@@ -1,14 +1,7 @@
 name: tvOS Build — disabled (use external Builder)
 
 on:
-  push:
-    branches:
-      - playback-faststart
   workflow_dispatch:
-
-concurrency:
-  group: tvos-build-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   disabled:
