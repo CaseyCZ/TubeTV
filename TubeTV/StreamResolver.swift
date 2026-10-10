@@ -362,8 +362,8 @@ private actor StreamResolutionBudget {
     }
 
     private var windows: [String: Window] = [:]
-    private let maximumWindow: TimeInterval = 32
-    private let maximumAttempts = 4
+    private let maximumWindow: TimeInterval = 28
+    private let maximumAttempts = 3
     private let staleWindowAge: TimeInterval = 120
 
     func beginAttempt(
@@ -445,7 +445,7 @@ enum StreamResolver {
             videoID: videoID,
             preferredQuality: preferredQuality,
             excludingProfiles: excludingProfiles,
-            timeoutSeconds: isInitialAttempt ? 15 : 10
+            timeoutSeconds: isInitialAttempt ? 12 : 8
         )
 
         if let profile = resolved.clientProfile {
