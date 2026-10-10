@@ -411,26 +411,6 @@ enum StreamResolver {
         }
 
         let isInitialAttempt = excludingProfiles.isEmpty
-        let storedProfile =
-            PlaybackProfilePreferenceStore.load()
-
-        if let storedProfile,
-           excludingProfiles.contains(
-            storedProfile
-           ) {
-            PlaybackProfilePreferenceStore.clear()
-        } else if isInitialAttempt,
-                  let storedProfile {
-            // Rehydrate AlternativePlayerService's in-memory preference after
-            // an app restart. If this profile fails AVPlayer verification,
-            // PlayerView will exclude it on the next resolver pass and the
-            // persisted preference is cleared above.
-            await AlternativePlayerService.shared
-                .markPlaybackSuccessful(
-                    profile: storedProfile
-                )
-        }
-
         let allowed =
             await StreamResolutionBudget.shared.beginAttempt(
                 videoID: videoID,
@@ -441,25 +421,15 @@ enum StreamResolver {
             throw StreamResolverError.noPlayableStream
         }
 
-        let resolved = try await resolveWithTimeout(
+        // Resolve every video independently. Different YouTube videos can
+        // require different client identities; no cross-video preferred
+        // profile is allowed to starve the working client for this video.
+        return try await resolveWithTimeout(
             videoID: videoID,
             preferredQuality: preferredQuality,
             excludingProfiles: excludingProfiles,
             timeoutSeconds: isInitialAttempt ? 9 : 5
         )
-
-        if let profile = resolved.clientProfile {
-            PlaybackProfilePreferenceStore.save(
-                profile
-            )
-        } else if isInitialAttempt {
-            // A direct YouTubeKit fallback means the previous Alternative
-            // profile was not useful for this startup. Do not keep preferring
-            // a stale profile on future launches.
-            PlaybackProfilePreferenceStore.clear()
-        }
-
-        return resolved
     }
 
     private static func resolveAuthenticatedWithTimeout(
@@ -559,14 +529,10 @@ enum StreamResolver {
                 return try await resolveAuthenticatedWithTimeout(
                     videoID: videoID,
                     preferredQuality: preferredQuality,
-                    timeoutSeconds: 3
+                    timeoutSeconds: 1.5
                 )
             } catch let error as StreamResolverError {
                 try Task.checkCancellation()
-
-                if case .ipBlocked = error {
-                    throw error
-                }
 
                 meaningfulError = error
             } catch {
@@ -584,14 +550,9 @@ enum StreamResolver {
         } catch let error as StreamResolverError {
             try Task.checkCancellation()
 
-            if case .ipBlocked = error {
-                throw error
-            }
-
-            if case .signInRequired = error {
-                throw error
-            }
-
+            // One client can be blocked/login-only while another
+            // client still has a valid Apple TV stream. Keep the diagnostic
+            // error, but continue through every remaining fallback.
             meaningfulError = error
         } catch {
             try Task.checkCancellation()

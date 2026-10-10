@@ -488,6 +488,15 @@ struct HomeSearchTileRow: View {
     }
 }
 
+struct TubeTVVideoButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .contentShape(Rectangle())
+            .opacity(configuration.isPressed ? 0.88 : 1.0)
+            .focusEffectDisabled()
+    }
+}
+
 struct VideoRow: View {
     let title: String
     let videos: [VideoItem]
@@ -509,7 +518,7 @@ struct VideoRow: View {
                         ) {
                             VideoCard(video: video)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(TubeTVVideoButtonStyle())
                         .focusEffectDisabled()
                         .onAppear {
                             let nearEndIDs =

@@ -3,7 +3,7 @@ import Foundation
 import OSLog
 import VideoToolbox
 
-private struct AlternativePlayerClient {
+private struct AlternativePlayerClient: @unchecked Sendable {
     let profile: String
     let name: String
     let version: String
@@ -101,6 +101,20 @@ private struct AlternativeFormat {
     }
 }
 
+private enum AlternativeProbeOutcome: @unchecked Sendable {
+    case source(PlaybackSource, String)
+    case signInRequired
+    case ipBlocked(String)
+    case failed
+    case timeout
+}
+
+private struct AlternativeRaceResult: @unchecked Sendable {
+    let source: PlaybackSource?
+    let sawSignInRequired: Bool
+    let ipBlockReason: String?
+}
+
 actor AlternativePlayerService {
     static let shared = AlternativePlayerService()
 
@@ -118,7 +132,6 @@ actor AlternativePlayerService {
     private var visitorData: String?
     private var signatureTimestamp: Int?
     private var signatureTimestampFetchedAt: Date?
-    private var lastSuccessfulProfile: String?
     private var captionRendererCache: [String: Data] = [:]
 
     init() {
@@ -325,20 +338,11 @@ actor AlternativePlayerService {
         preferredQuality: String,
         excludingProfiles: Set<String> = []
     ) async throws -> PlaybackSource {
-        var lastError: Error =
-            StreamResolverError.noPlayableStream
-
         let availableClients =
             clients.filter {
-                !excludingProfiles.contains(
-                    $0.profile
-                )
+                !excludingProfiles.contains($0.profile)
             }
-        let orderedClients: [AlternativePlayerClient]
 
-        // The auth/bootstrap layer already caches visitorData. Reuse it here
-        // so the first video doesn't need an extra youtube.com/watch page
-        // request just to seed the resolver.
         if visitorData == nil,
            let bootstrapVisitor =
                 await SmartTubeAuthService
@@ -349,100 +353,211 @@ actor AlternativePlayerService {
 
         try Task.checkCancellation()
 
-        if let lastSuccessfulProfile,
-           let preferred =
-                availableClients.first(
-                    where: {
-                        $0.profile
-                            == lastSuccessfulProfile
-                    }
-                ) {
-            orderedClients =
-                [preferred]
-                + availableClients.filter {
-                    $0.profile
-                        != lastSuccessfulProfile
-                }
-        } else {
-            orderedClients = availableClients
+        // SmartTube-like strategy: clients suitable for native Apple playback
+        // race first. If none wins quickly, compatibility/web clients race next.
+        // A slow profile can never consume the whole startup budget by itself.
+        let fastProfiles: Set<String> = [
+            "VISIONOS",
+            "TV_DOWNGRADED",
+            "IOS",
+            "ANDROID_VR"
+        ]
+        let fastClients = availableClients.filter {
+            fastProfiles.contains($0.profile)
+        }
+        let compatibilityClients = availableClients.filter {
+            !fastProfiles.contains($0.profile)
         }
 
-        let resolveStartedAt = Date()
+        var sawSignInRequired = false
+        var ipBlockReason: String?
 
-        for client in orderedClients {
+        let fast = await raceClients(
+            fastClients,
+            videoID: videoID,
+            preferredQuality: preferredQuality,
+            timeoutSeconds: 2.6
+        )
+        if let source = fast.source {
+            return source
+        }
+        sawSignInRequired = fast.sawSignInRequired
+        ipBlockReason = fast.ipBlockReason
+
+        try Task.checkCancellation()
+
+        let compatibility = await raceClients(
+            compatibilityClients,
+            videoID: videoID,
+            preferredQuality: preferredQuality,
+            timeoutSeconds: 2.6
+        )
+        if let source = compatibility.source {
+            return source
+        }
+        sawSignInRequired =
+            sawSignInRequired
+            || compatibility.sawSignInRequired
+        if ipBlockReason == nil {
+            ipBlockReason = compatibility.ipBlockReason
+        }
+
+        if let ipBlockReason {
+            throw StreamResolverError.ipBlocked(ipBlockReason)
+        }
+        if sawSignInRequired {
+            throw StreamResolverError.signInRequired
+        }
+        throw StreamResolverError.noPlayableStream
+    }
+
+    private func raceClients(
+        _ clients: [AlternativePlayerClient],
+        videoID: String,
+        preferredQuality: String,
+        timeoutSeconds: TimeInterval
+    ) async -> AlternativeRaceResult {
+        guard !clients.isEmpty else {
+            return AlternativeRaceResult(
+                source: nil,
+                sawSignInRequired: false,
+                ipBlockReason: nil
+            )
+        }
+
+        let timeoutNanoseconds = UInt64(
+            max(0.5, timeoutSeconds) * 1_000_000_000
+        )
+
+        return await withTaskGroup(
+            of: AlternativeProbeOutcome.self
+        ) { group in
+            for client in clients {
+                group.addTask { [self] in
+                    await self.probeClient(
+                        client,
+                        videoID: videoID,
+                        preferredQuality: preferredQuality
+                    )
+                }
+            }
+
+            group.addTask {
+                do {
+                    try await Task.sleep(
+                        nanoseconds: timeoutNanoseconds
+                    )
+                } catch {
+                    return .failed
+                }
+                return .timeout
+            }
+
+            var remainingClients = clients.count
+            var sawSignInRequired = false
+            var ipBlockReason: String?
+
+            while let outcome = await group.next() {
+                switch outcome {
+                case .source(let source, let profile):
+                    group.cancelAll()
+                    logger.notice(
+                        "Race winner client=\(profile, privacy: .public)"
+                    )
+                    return AlternativeRaceResult(
+                        source: source,
+                        sawSignInRequired: sawSignInRequired,
+                        ipBlockReason: ipBlockReason
+                    )
+
+                case .signInRequired:
+                    sawSignInRequired = true
+                    remainingClients -= 1
+
+                case .ipBlocked(let reason):
+                    if ipBlockReason == nil {
+                        ipBlockReason = reason
+                    }
+                    remainingClients -= 1
+
+                case .failed:
+                    remainingClients -= 1
+
+                case .timeout:
+                    group.cancelAll()
+                    return AlternativeRaceResult(
+                        source: nil,
+                        sawSignInRequired: sawSignInRequired,
+                        ipBlockReason: ipBlockReason
+                    )
+                }
+
+                if remainingClients <= 0 {
+                    group.cancelAll()
+                    return AlternativeRaceResult(
+                        source: nil,
+                        sawSignInRequired: sawSignInRequired,
+                        ipBlockReason: ipBlockReason
+                    )
+                }
+            }
+
+            return AlternativeRaceResult(
+                source: nil,
+                sawSignInRequired: sawSignInRequired,
+                ipBlockReason: ipBlockReason
+            )
+        }
+    }
+
+    private func probeClient(
+        _ client: AlternativePlayerClient,
+        videoID: String,
+        preferredQuality: String
+    ) async -> AlternativeProbeOutcome {
+        let startedAt = Date()
+
+        do {
             try Task.checkCancellation()
 
-            let clientStartedAt = Date()
-
-            do {
-                // Seeding is useful for WEB/VISIONOS-style clients, but once
-                // visitorData has been obtained repeating the extra page load
-                // for every video only slows startup down.
-                if client.seedWebSession,
-                   visitorData == nil {
-                    await seedWebSession(
-                        videoID: videoID
-                    )
-                    try Task.checkCancellation()
-                }
-
-                if let source = try await resolve(
-                    videoID: videoID,
-                    preferredQuality: preferredQuality,
-                    client: client
-                ) {
-                    let clientMs =
-                        Int(
-                            Date()
-                                .timeIntervalSince(
-                                    clientStartedAt
-                                ) * 1_000
-                        )
-                    let totalMs =
-                        Int(
-                            Date()
-                                .timeIntervalSince(
-                                    resolveStartedAt
-                                ) * 1_000
-                        )
-
-                    logger.notice(
-                        "Resolved with client=\(client.profile, privacy: .public) version=\(client.version, privacy: .public) clientMs=\(clientMs, privacy: .public) totalMs=\(totalMs, privacy: .public)"
-                    )
-                    return source
-                }
-            } catch let error as StreamResolverError {
+            if client.seedWebSession,
+               visitorData == nil {
+                await seedWebSession(videoID: videoID)
                 try Task.checkCancellation()
+            }
 
-                if case .ipBlocked = error {
-                    logger.error(
-                        "IP blocked client=\(client.profile, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
-                    )
-                    throw error
-                }
-
-                lastError = error
-                logger.error(
-                    "Client failed client=\(client.profile, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
+            if let source = try await resolve(
+                videoID: videoID,
+                preferredQuality: preferredQuality,
+                client: client
+            ) {
+                let elapsedMs = Int(
+                    Date().timeIntervalSince(startedAt) * 1_000
                 )
-            } catch {
-                try Task.checkCancellation()
-
-                lastError = error
-                logger.error(
-                    "Client failed client=\(client.profile, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
+                logger.notice(
+                    "Probe playable client=\(client.profile, privacy: .public) ms=\(elapsedMs, privacy: .public)"
                 )
+                return .source(source, client.profile)
+            }
+        } catch let error as StreamResolverError {
+            if case .ipBlocked(let reason) = error {
+                return .ipBlocked(reason)
+            }
+            if case .signInRequired = error {
+                return .signInRequired
+            }
+        } catch {
+            if error is CancellationError {
+                return .failed
             }
         }
 
-        throw lastError
+        return .failed
     }
 
     func markPlaybackSuccessful(
         profile: String
     ) {
-        lastSuccessfulProfile = profile
-
         logger.notice(
             "Playback profile confirmed=\(profile, privacy: .public)"
         )
@@ -451,10 +566,6 @@ actor AlternativePlayerService {
     func markPlaybackFailed(
         profile: String
     ) {
-        if lastSuccessfulProfile == profile {
-            lastSuccessfulProfile = nil
-        }
-
         logger.notice(
             "Playback profile rejected=\(profile, privacy: .public)"
         )

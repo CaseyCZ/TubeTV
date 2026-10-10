@@ -263,7 +263,7 @@ struct SearchView: View {
             NavigationLink(value: video) {
                 VideoCard(video: video)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(TubeTVVideoButtonStyle())
             .focusEffectDisabled()
 
         case .channel(let channel):
