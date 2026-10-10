@@ -424,7 +424,6 @@ final class NativePlayerModel: ObservableObject {
 
     private var didPrepare = false
     private var playerStartupStartedAt: Date?
-    private let maximumFailoverDuration: TimeInterval = 18
     private var cues: [CaptionCue] = []
     private var captionLoadGeneration = UUID()
     private var timeObserver: Any?
@@ -524,19 +523,8 @@ final class NativePlayerModel: ObservableObject {
         var attemptedSources = Set<PlaybackSource>()
         var lastError: Error =
             StreamResolverError.noPlayableStream
-        let failoverDeadline =
-            Date().addingTimeInterval(
-                maximumFailoverDuration
-            )
 
         for attempt in 1...10 {
-            guard Date() < failoverDeadline else {
-                playbackLogger.error(
-                    "Startup failover budget exhausted"
-                )
-                break
-            }
-
             guard let source = nextSource,
                   !attemptedSources.contains(source) else {
                 break
@@ -552,8 +540,7 @@ final class NativePlayerModel: ObservableObject {
 
             do {
                 try await activateAndVerify(
-                    source,
-                    deadline: failoverDeadline
+                    source
                 )
 
                 if let confirmedProfile =
@@ -672,16 +659,6 @@ final class NativePlayerModel: ObservableObject {
                     failedProfile
                 )
 
-                // A retry resolver can consume up to eight seconds. Do not
-                // start one if it cannot finish inside this failover window.
-                guard failoverDeadline.timeIntervalSinceNow >= 8 else {
-                    playbackLogger.error(
-                        "Startup budget too small for another resolver retry"
-                    )
-                    nextSource = nil
-                    break
-                }
-
                 do {
                     nextSource =
                         try await StreamResolver
@@ -706,19 +683,12 @@ final class NativePlayerModel: ObservableObject {
     }
 
     private func activateAndVerify(
-        _ source: PlaybackSource,
-        deadline: Date? = nil
+        _ source: PlaybackSource
     ) async throws {
         let item =
             try await makePlayerItem(
                 from: source
             )
-
-        if let deadline,
-           Date() >= deadline {
-            throw StreamResolverError
-                .noPlayableStream
-        }
 
         guard TubeTVPlayerEngine.shared
                 .owns(playerOwnerID)
@@ -754,8 +724,7 @@ final class NativePlayerModel: ObservableObject {
         play()
 
         try await waitUntilReadyToPlay(
-            item,
-            deadline: deadline
+            item
         )
 
         installPlayerItemFailureObserver(
@@ -809,23 +778,12 @@ final class NativePlayerModel: ObservableObject {
     }
 
     private func waitUntilReadyToPlay(
-        _ item: AVPlayerItem,
-        deadline: Date? = nil
+        _ item: AVPlayerItem
     ) async throws {
         // A healthy HLS/muxed source should become ready quickly. Do not
         // spend tens of seconds on a source that AVPlayer can't prepare;
-        // fail over to the next SmartTube client instead. During initial
-        // failover, all sources also share one global player deadline.
+        // fail over to the next SmartTube client instead.
         for _ in 0..<80 {
-            if let deadline,
-               Date() >= deadline {
-                playbackLogger.notice(
-                    "Startup global player deadline reached"
-                )
-                throw StreamResolverError
-                    .noPlayableStream
-            }
-
             switch item.status {
             case .readyToPlay:
                 return
