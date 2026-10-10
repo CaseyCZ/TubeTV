@@ -20,21 +20,74 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 44) {
-                    HStack {
-                        Text(L10n.text("home", languageCode: appLanguage))
-                            .font(.largeTitle.bold())
+                LazyVStack(alignment: .leading, spacing: 42) {
+                    HStack(alignment: .bottom, spacing: 24) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("TUBETV · YOUTUBE")
+                                .font(.caption.weight(.heavy))
+                                .tracking(1.2)
+                                .foregroundStyle(TubeTVTheme.accent)
+                                .padding(.horizontal, 13)
+                                .padding(.vertical, 7)
+                                .background(
+                                    TubeTVTheme.accent.opacity(0.10),
+                                    in: Capsule()
+                                )
+                                .overlay {
+                                    Capsule()
+                                        .strokeBorder(
+                                            TubeTVTheme.accent.opacity(0.34),
+                                            lineWidth: 1
+                                        )
+                                }
+
+                            Text(L10n.text("home", languageCode: appLanguage))
+                                .font(.system(size: 54, weight: .bold))
+                                .tracking(-1.8)
+                        }
 
                         Spacer()
 
                         if isLoading {
                             ProgressView()
+                                .tint(TubeTVTheme.accent)
+                                .padding(14)
+                                .background(
+                                    TubeTVTheme.panel.opacity(0.88),
+                                    in: RoundedRectangle(
+                                        cornerRadius: 16,
+                                        style: .continuous
+                                    )
+                                )
                         }
                     }
 
                     if let errorMessage {
-                        Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.red)
+                        Label(
+                            errorMessage,
+                            systemImage: "exclamationmark.triangle.fill"
+                        )
+                        .font(.headline)
+                        .foregroundStyle(.red)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 14)
+                        .background(
+                            TubeTVTheme.panel.opacity(0.92),
+                            in: RoundedRectangle(
+                                cornerRadius: 16,
+                                style: .continuous
+                            )
+                        )
+                        .overlay {
+                            RoundedRectangle(
+                                cornerRadius: 16,
+                                style: .continuous
+                            )
+                            .strokeBorder(
+                                Color.red.opacity(0.30),
+                                lineWidth: 1
+                            )
+                        }
                     }
 
                     ForEach(sections) { section in
@@ -77,7 +130,9 @@ struct HomeView: View {
                         }
                     }
                 }
-                .padding(48)
+                .padding(.horizontal, 52)
+                .padding(.top, 42)
+                .padding(.bottom, 56)
             }
             .navigationDestination(for: VideoItem.self) { video in
                 VideoDetailView(video: video)
@@ -397,95 +452,25 @@ struct HomeSearchTileRow: View {
     var body: some View {
         VStack(
             alignment: .leading,
-            spacing: 20
+            spacing: 18
         ) {
-            Text(title)
-                .font(.title2.bold())
+            TubeTVSectionTitle(title: title)
 
             ScrollView(
                 .horizontal,
                 showsIndicators: false
             ) {
-                LazyHStack(spacing: 28) {
+                LazyHStack(spacing: 24) {
                     ForEach(tiles) { tile in
                         Button {
                             onSearch(tile.query)
                         } label: {
-                            VStack(
-                                alignment: .leading,
-                                spacing: 10
-                            ) {
-                                ZStack {
-                                    RoundedRectangle(
-                                        cornerRadius: 18
-                                    )
-                                    .fill(
-                                        .white.opacity(
-                                            0.12
-                                        )
-                                    )
-
-                                    if let thumbnailURL =
-                                            tile.thumbnailURL {
-                                        AsyncImage(
-                                            url: thumbnailURL
-                                        ) { phase in
-                                            switch phase {
-                                            case .success(let image):
-                                                image
-                                                    .resizable()
-                                                    .scaledToFill()
-                                            case .failure:
-                                                Image(
-                                                    systemName:
-                                                        "magnifyingglass"
-                                                )
-                                                .font(
-                                                    .system(
-                                                        size: 58
-                                                    )
-                                                )
-                                            case .empty:
-                                                ProgressView()
-                                            @unknown default:
-                                                EmptyView()
-                                            }
-                                        }
-                                    } else {
-                                        Image(
-                                            systemName:
-                                                "magnifyingglass"
-                                        )
-                                        .font(
-                                            .system(
-                                                size: 58
-                                            )
-                                        )
-                                    }
-                                }
-                                .frame(
-                                    width: 320,
-                                    height: 180
-                                )
-                                .clipped()
-                                .clipShape(
-                                    RoundedRectangle(
-                                        cornerRadius: 18
-                                    )
-                                )
-
-                                Text(tile.title)
-                                    .font(.headline)
-                                    .lineLimit(2)
-                                    .frame(
-                                        width: 320,
-                                        alignment: .leading
-                                    )
-                            }
+                            HomeSearchTileCard(tile: tile)
                         }
-                        .buttonStyle(.card)
+                        .buttonStyle(.plain)
                     }
                 }
+                .padding(.vertical, 12)
             }
         }
         .focusSection()
@@ -499,28 +484,22 @@ struct VideoRow: View {
     var onLoadMore: (() -> Void)?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text(title)
-                .font(.title2.bold())
+        VStack(alignment: .leading, spacing: 18) {
+            TubeTVSectionTitle(title: title)
 
             ScrollView(
                 .horizontal,
                 showsIndicators: false
             ) {
-                LazyHStack(spacing: 28) {
+                LazyHStack(spacing: 24) {
                     ForEach(
-                        videos.indices,
-                        id: \.self
-                    ) { index in
-                        let video =
-                            videos[index]
-
+                        Array(videos.enumerated()),
+                        id: \.element.id
+                    ) { index, video in
                         NavigationLink(
                             value: video
                         ) {
-                            VideoCard(
-                                video: video
-                            )
+                            VideoCard(video: video)
                         }
                         .buttonStyle(.plain)
                         .onAppear {
@@ -538,15 +517,121 @@ struct VideoRow: View {
 
                     if isLoadingMore {
                         ProgressView()
+                            .tint(TubeTVTheme.accent)
                             .frame(
                                 width: 96,
                                 height: 236
                             )
                     }
                 }
+                .padding(.vertical, 14)
             }
         }
         .focusSection()
+    }
+}
+
+struct TubeTVSectionTitle: View {
+    let title: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            RoundedRectangle(
+                cornerRadius: 2,
+                style: .continuous
+            )
+            .fill(TubeTVTheme.accent)
+            .frame(width: 5, height: 26)
+
+            Text(title)
+                .font(.title2.bold())
+                .tracking(-0.4)
+        }
+    }
+}
+
+private struct HomeSearchTileCard: View {
+    @Environment(\.isFocused) private var isFocused
+
+    let tile: YouTubeSearchTile
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ZStack {
+                RoundedRectangle(
+                    cornerRadius: 20,
+                    style: .continuous
+                )
+                .fill(TubeTVTheme.panelRaised)
+
+                if let thumbnailURL = tile.thumbnailURL {
+                    AsyncImage(url: thumbnailURL) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        case .failure:
+                            searchPlaceholder
+                        case .empty:
+                            ProgressView()
+                                .tint(TubeTVTheme.accent)
+                        @unknown default:
+                            searchPlaceholder
+                        }
+                    }
+                } else {
+                    searchPlaceholder
+                }
+            }
+            .frame(width: 320, height: 180)
+            .clipped()
+            .clipShape(
+                RoundedRectangle(
+                    cornerRadius: 20,
+                    style: .continuous
+                )
+            )
+            .overlay {
+                RoundedRectangle(
+                    cornerRadius: 20,
+                    style: .continuous
+                )
+                .strokeBorder(
+                    isFocused
+                        ? TubeTVTheme.accent
+                        : TubeTVTheme.border.opacity(0.72),
+                    lineWidth: isFocused ? 4 : 1
+                )
+            }
+
+            Text(tile.title)
+                .font(.headline)
+                .lineLimit(2)
+                .frame(
+                    width: 320,
+                    alignment: .leading
+                )
+        }
+        .scaleEffect(isFocused ? 1.035 : 1.0)
+        .shadow(
+            color:
+                isFocused
+                ? TubeTVTheme.accent.opacity(0.20)
+                : Color.black.opacity(0.22),
+            radius: isFocused ? 22 : 12,
+            y: 8
+        )
+        .animation(
+            .easeOut(duration: 0.13),
+            value: isFocused
+        )
+    }
+
+    private var searchPlaceholder: some View {
+        Image(systemName: "magnifyingglass")
+            .font(.system(size: 56, weight: .semibold))
+            .foregroundStyle(TubeTVTheme.accent)
     }
 }
 
@@ -557,8 +642,11 @@ struct VideoCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             ZStack(alignment: .bottomTrailing) {
-                RoundedRectangle(cornerRadius: 18)
-                    .fill(.white.opacity(0.12))
+                RoundedRectangle(
+                    cornerRadius: 20,
+                    style: .continuous
+                )
+                .fill(TubeTVTheme.panelRaised)
 
                 if let thumbnailURL = video.thumbnailURL {
                     AsyncImage(url: thumbnailURL) { phase in
@@ -573,6 +661,7 @@ struct VideoCard: View {
 
                         case .empty:
                             ProgressView()
+                                .tint(TubeTVTheme.accent)
 
                         @unknown default:
                             placeholder
@@ -580,7 +669,12 @@ struct VideoCard: View {
                     }
                     .frame(width: 420, height: 236)
                     .clipped()
-                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                    .clipShape(
+                        RoundedRectangle(
+                            cornerRadius: 20,
+                            style: .continuous
+                        )
+                    )
                 } else {
                     placeholder
                 }
@@ -588,52 +682,99 @@ struct VideoCard: View {
                 if video.playbackURL != nil {
                     Text(L10n.text("test"))
                         .font(.caption.bold())
+                        .foregroundStyle(.white)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
-                        .background(.black.opacity(0.75))
-                        .clipShape(Capsule())
+                        .background(
+                            TubeTVTheme.action.opacity(0.94),
+                            in: Capsule()
+                        )
                         .padding(14)
                 }
             }
             .frame(width: 420, height: 236)
             .overlay {
                 RoundedRectangle(
-                    cornerRadius: 18
+                    cornerRadius: 20,
+                    style: .continuous
                 )
                 .strokeBorder(
-                    .white.opacity(
-                        isFocused ? 0.9 : 0
-                    ),
-                    lineWidth: 4
+                    isFocused
+                        ? TubeTVTheme.accent
+                        : TubeTVTheme.border.opacity(0.74),
+                    lineWidth: isFocused ? 4 : 1
                 )
             }
-            .animation(
-                .easeOut(duration: 0.12),
-                value: isFocused
-            )
 
-            Text(video.title)
-                .font(.headline)
-                .lineLimit(2)
-                .frame(width: 420, alignment: .leading)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(video.title)
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
 
-            Text(video.channel)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-
-            if !video.subtitle.isEmpty {
-                Text(video.subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                Text(video.channel)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(
+                        isFocused
+                            ? TubeTVTheme.accent
+                            : .secondary
+                    )
                     .lineLimit(1)
+
+                if !video.subtitle.isEmpty {
+                    Text(video.subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(
+                width: 420,
+                alignment: .leading
+            )
+            .background(
+                TubeTVTheme.panel.opacity(
+                    isFocused ? 0.94 : 0.74
+                ),
+                in: RoundedRectangle(
+                    cornerRadius: 15,
+                    style: .continuous
+                )
+            )
+            .overlay {
+                RoundedRectangle(
+                    cornerRadius: 15,
+                    style: .continuous
+                )
+                .strokeBorder(
+                    isFocused
+                        ? TubeTVTheme.accent.opacity(0.22)
+                        : TubeTVTheme.border.opacity(0.38),
+                    lineWidth: 1
+                )
             }
         }
+        .scaleEffect(isFocused ? 1.025 : 1.0)
+        .shadow(
+            color:
+                isFocused
+                ? TubeTVTheme.accent.opacity(0.22)
+                : Color.black.opacity(0.20),
+            radius: isFocused ? 24 : 14,
+            y: 9
+        )
+        .animation(
+            .easeOut(duration: 0.13),
+            value: isFocused
+        )
     }
 
     private var placeholder: some View {
         Image(systemName: "play.rectangle.fill")
             .font(.system(size: 64))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(TubeTVTheme.accent.opacity(0.70))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
