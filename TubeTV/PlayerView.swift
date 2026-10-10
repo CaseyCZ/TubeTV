@@ -245,7 +245,7 @@ struct VideoDetailView: View {
                 )
 
             startupLogger.notice(
-                "STARTUP_RESOLVED video=\(videoID, privacy: .public) source=\(resolved.diagnosticSourceKind, privacy: .public) profile=\(resolved.clientProfile ?? "UNTAGGED", privacy: .public) ms=\(elapsedMs, privacy: .public)"
+                "STARTUP_RESOLVED video=\(videoID, privacy: .private) source=\(resolved.diagnosticSourceKind, privacy: .public) profile=\(resolved.clientProfile ?? "UNTAGGED", privacy: .public) ms=\(elapsedMs, privacy: .public)"
             )
 
             playbackSource = resolved
@@ -508,7 +508,7 @@ final class NativePlayerModel: ObservableObject {
         playerStartupStartedAt = Date()
 
         playbackLogger.notice(
-            "STARTUP_BEGIN video=\(self.youtubeVideoID ?? "none", privacy: .public)"
+            "STARTUP_BEGIN video=\(self.youtubeVideoID ?? "none", privacy: .private)"
         )
 
         await prepareWithFailover(
@@ -575,7 +575,7 @@ final class NativePlayerModel: ObservableObject {
                     ?? "none"
 
                 playbackLogger.notice(
-                    "PLAYBACK_DIAG videoID=\(videoID, privacy: .public) live=\(live, privacy: .public) source=\(sourceKind, privacy: .public) profile=\(profile, privacy: .public) ads=\(ads, privacy: .public)"
+                    "PLAYBACK_DIAG videoID=\(videoID, privacy: .private) live=\(live, privacy: .public) source=\(sourceKind, privacy: .public) profile=\(profile, privacy: .public) ads=\(ads, privacy: .public)"
                 )
 
                 let playerReadyMs =
@@ -1260,7 +1260,7 @@ final class NativePlayerModel: ObservableObject {
                     matchingPreloadedSource
 
                 playbackLogger.notice(
-                    "Using preloaded next video=\(videoID, privacy: .public)"
+                    "Using preloaded next video=\(videoID, privacy: .private)"
                 )
             } else {
                 source =
@@ -1291,7 +1291,7 @@ final class NativePlayerModel: ObservableObject {
                 error.localizedDescription
 
             playbackLogger.error(
-                "Video switch failed video=\(videoID, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
+                "Video switch failed video=\(videoID, privacy: .private) error=\(error.localizedDescription, privacy: .public)"
             )
         }
 
@@ -2587,7 +2587,7 @@ final class NativePlayerModel: ObservableObject {
 
         if position.isFinite {
             playbackLogger.notice(
-                "Saved local position video=\(videoID, privacy: .public) position=\(position, privacy: .public)"
+                "Saved local position video=\(videoID, privacy: .private) position=\(position, privacy: .private)"
             )
         }
     }
@@ -2659,7 +2659,7 @@ final class NativePlayerModel: ObservableObject {
         await seek(to: target)
 
         playbackLogger.notice(
-            "Restored local position video=\(videoID, privacy: .public) position=\(targetSeconds, privacy: .public)"
+            "Restored local position video=\(videoID, privacy: .private) position=\(targetSeconds, privacy: .private)"
         )
     }
 
