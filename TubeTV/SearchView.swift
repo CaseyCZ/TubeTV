@@ -16,8 +16,7 @@ struct SearchView: View {
     init(
         requestedQuery: String? = nil
     ) {
-        self.requestedQuery =
-            requestedQuery
+        self.requestedQuery = requestedQuery
     }
 
     private var directVideoID: String? {
@@ -30,11 +29,32 @@ struct SearchView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 28) {
-                Text(L10n.text("search", languageCode: appLanguage))
-                    .font(.largeTitle.bold())
+            VStack(alignment: .leading, spacing: 26) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("TUBETV · DISCOVER")
+                        .font(.caption.weight(.heavy))
+                        .tracking(1.2)
+                        .foregroundStyle(TubeTVTheme.accent)
+                        .padding(.horizontal, 13)
+                        .padding(.vertical, 7)
+                        .background(
+                            TubeTVTheme.accent.opacity(0.10),
+                            in: Capsule()
+                        )
+                        .overlay {
+                            Capsule()
+                                .strokeBorder(
+                                    TubeTVTheme.accent.opacity(0.34),
+                                    lineWidth: 1
+                                )
+                        }
 
-                HStack(spacing: 18) {
+                    Text(L10n.text("search", languageCode: appLanguage))
+                        .font(.system(size: 54, weight: .bold))
+                        .tracking(-1.8)
+                }
+
+                HStack(spacing: 16) {
                     TextField(
                         L10n.text(
                             "search_placeholder",
@@ -62,74 +82,149 @@ struct SearchView: View {
                         } label: {
                             if isSearching {
                                 ProgressView()
+                                    .tint(.white)
                             } else {
-                                Label(L10n.text("search", languageCode: appLanguage), systemImage: "magnifyingglass")
+                                Label(
+                                    L10n.text(
+                                        "search",
+                                        languageCode: appLanguage
+                                    ),
+                                    systemImage: "magnifyingglass"
+                                )
+                                .font(.headline.weight(.bold))
                             }
                         }
-                        .disabled(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSearching)
+                        .buttonStyle(.borderedProminent)
+                        .tint(TubeTVTheme.action)
+                        .disabled(
+                            query
+                                .trimmingCharacters(
+                                    in: .whitespacesAndNewlines
+                                )
+                                .isEmpty
+                                || isSearching
+                        )
                     }
+                }
+                .padding(14)
+                .background(
+                    TubeTVTheme.panel.opacity(0.84),
+                    in: RoundedRectangle(
+                        cornerRadius: 20,
+                        style: .continuous
+                    )
+                )
+                .overlay {
+                    RoundedRectangle(
+                        cornerRadius: 20,
+                        style: .continuous
+                    )
+                    .strokeBorder(
+                        TubeTVTheme.border.opacity(0.72),
+                        lineWidth: 1
+                    )
                 }
 
                 if let videoID = directVideoID {
-                    NavigationLink(value: VideoItem.youtube(videoID: videoID)) {
-                        Label(L10n.text("play_pasted_video", languageCode: appLanguage), systemImage: "play.rectangle.fill")
-                            .font(.title2.bold())
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                    NavigationLink(
+                        value: VideoItem.youtube(videoID: videoID)
+                    ) {
+                        Label(
+                            L10n.text(
+                                "play_pasted_video",
+                                languageCode: appLanguage
+                            ),
+                            systemImage: "play.rectangle.fill"
+                        )
+                        .font(.title2.bold())
+                        .frame(
+                            maxWidth: .infinity,
+                            alignment: .leading
+                        )
                     }
                     .buttonStyle(.borderedProminent)
+                    .tint(TubeTVTheme.action)
                 }
 
                 if let errorMessage {
-                    Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.red)
+                    Label(
+                        errorMessage,
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.headline)
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 14)
+                    .background(
+                        TubeTVTheme.panel.opacity(0.92),
+                        in: RoundedRectangle(
+                            cornerRadius: 16,
+                            style: .continuous
+                        )
+                    )
+                    .overlay {
+                        RoundedRectangle(
+                            cornerRadius: 16,
+                            style: .continuous
+                        )
+                        .strokeBorder(
+                            Color.red.opacity(0.30),
+                            lineWidth: 1
+                        )
+                    }
                 }
 
                 ScrollView {
                     LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: 420), spacing: 28)],
-                        spacing: 28
+                        columns: [
+                            GridItem(
+                                .adaptive(minimum: 420),
+                                spacing: 24
+                            )
+                        ],
+                        spacing: 24
                     ) {
                         ForEach(
                             visibleResults.indices,
                             id: \.self
                         ) { index in
-                            let item =
-                                visibleResults[index]
+                            let item = visibleResults[index]
 
                             searchResultView(item)
                                 .onAppear {
-                                guard !query.isEmpty,
-                                      index
-                                        >= max(
+                                    guard !query.isEmpty,
+                                          index >= max(
                                             0,
                                             results.count - 4
-                                        ) else {
-                                    return
-                                }
+                                          ) else {
+                                        return
+                                    }
 
-                                let generation =
-                                    searchGeneration
+                                    let generation = searchGeneration
 
-                                Task {
-                                    await loadMore(
-                                        generation:
-                                            generation
-                                    )
+                                    Task {
+                                        await loadMore(
+                                            generation: generation
+                                        )
+                                    }
                                 }
-                            }
                         }
 
                         if isLoadingMore {
                             ProgressView()
+                                .tint(TubeTVTheme.accent)
                                 .frame(
                                     width: 420,
                                     height: 236
                                 )
                         }
                     }
+                    .padding(.vertical, 12)
                 }
             }
-            .padding(48)
+            .padding(.horizontal, 52)
+            .padding(.top, 42)
+            .padding(.bottom, 48)
             .navigationDestination(for: VideoItem.self) { video in
                 VideoDetailView(video: video)
             }
@@ -138,8 +233,7 @@ struct SearchView: View {
                     let trimmed =
                         requestedQuery
                             .trimmingCharacters(
-                                in:
-                                    .whitespacesAndNewlines
+                                in: .whitespacesAndNewlines
                             )
 
                     guard !trimmed.isEmpty else {
@@ -177,68 +271,12 @@ struct SearchView: View {
             NavigationLink {
                 ChannelView(
                     channelID: channel.id,
-                    fallbackTitle:
-                        channel.title
+                    fallbackTitle: channel.title
                 )
             } label: {
-                VStack(spacing: 14) {
-                    Group {
-                        if let url =
-                                channel.thumbnailURL {
-                            AsyncImage(url: url) {
-                                phase in
-                                switch phase {
-                                case .success(
-                                    let image
-                                ):
-                                    image
-                                        .resizable()
-                                        .scaledToFill()
-                                case .empty:
-                                    ProgressView()
-                                default:
-                                    Image(
-                                        systemName:
-                                            "person.crop.circle.fill"
-                                    )
-                                    .resizable()
-                                    .scaledToFit()
-                                    .foregroundStyle(
-                                        .secondary
-                                    )
-                                }
-                            }
-                        } else {
-                            Image(
-                                systemName:
-                                    "person.crop.circle.fill"
-                            )
-                            .resizable()
-                            .scaledToFit()
-                            .foregroundStyle(
-                                .secondary
-                            )
-                        }
-                    }
-                    .frame(
-                        width: 210,
-                        height: 210
-                    )
-                    .clipShape(Circle())
-
-                    Text(channel.title)
-                        .font(.headline)
-                        .lineLimit(2)
-                        .multilineTextAlignment(
-                            .center
-                        )
-                }
-                .frame(
-                    minWidth: 300,
-                    minHeight: 280
-                )
+                SearchChannelCard(channel: channel)
             }
-            .buttonStyle(.card)
+            .buttonStyle(.plain)
 
         case .playlist(let playlist):
             NavigationLink {
@@ -285,14 +323,12 @@ struct SearchView: View {
             }
 
             results = page.items
-            continuationToken =
-                page.continuationToken
+            continuationToken = page.continuationToken
 
             if results.isEmpty {
                 errorMessage = L10n.text(
                     "youtube_no_videos",
-                    languageCode:
-                        appLanguage
+                    languageCode: appLanguage
                 )
             }
         } catch {
@@ -303,8 +339,7 @@ struct SearchView: View {
 
             results = []
             continuationToken = nil
-            errorMessage =
-                error.localizedDescription
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -312,12 +347,10 @@ struct SearchView: View {
     private func loadMore(
         generation: UUID
     ) async {
-        guard generation
-                == searchGeneration,
+        guard generation == searchGeneration,
               !isSearching,
               !isLoadingMore,
-              let token =
-                continuationToken,
+              let token = continuationToken,
               !token.isEmpty else {
             return
         }
@@ -332,31 +365,22 @@ struct SearchView: View {
         do {
             let page =
                 try await InnerTubeService.shared
-                    .continueSearch(
-                        token
-                    )
+                    .continueSearch(token)
 
             guard generation
                     == searchGeneration else {
                 return
             }
 
-            var seen = Set(
-                results.map(\.id)
-            )
+            var seen = Set(results.map(\.id))
             let newItems =
                 page.items.filter {
-                    seen.insert(
-                        $0.id
-                    ).inserted
+                    seen.insert($0.id).inserted
                 }
 
-            results.append(
-                contentsOf: newItems
-            )
+            results.append(contentsOf: newItems)
 
-            let nextToken =
-                page.continuationToken
+            let nextToken = page.continuationToken
 
             continuationToken =
                 nextToken == token
@@ -369,8 +393,97 @@ struct SearchView: View {
                 return
             }
 
-            errorMessage =
-                error.localizedDescription
+            errorMessage = error.localizedDescription
         }
+    }
+}
+
+private struct SearchChannelCard: View {
+    @Environment(\.isFocused) private var isFocused
+
+    let channel: YouTubeChannelSearchResult
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Group {
+                if let url = channel.thumbnailURL {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        case .empty:
+                            ProgressView()
+                                .tint(TubeTVTheme.accent)
+                        default:
+                            placeholder
+                        }
+                    }
+                } else {
+                    placeholder
+                }
+            }
+            .frame(width: 210, height: 210)
+            .clipShape(Circle())
+            .overlay {
+                Circle()
+                    .strokeBorder(
+                        isFocused
+                            ? TubeTVTheme.accent
+                            : TubeTVTheme.border.opacity(0.76),
+                        lineWidth: isFocused ? 5 : 2
+                    )
+            }
+
+            Text(channel.title)
+                .font(.headline)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.white)
+        }
+        .frame(minWidth: 300, minHeight: 280)
+        .padding(18)
+        .background(
+            TubeTVTheme.panel.opacity(
+                isFocused ? 0.95 : 0.78
+            ),
+            in: RoundedRectangle(
+                cornerRadius: 22,
+                style: .continuous
+            )
+        )
+        .overlay {
+            RoundedRectangle(
+                cornerRadius: 22,
+                style: .continuous
+            )
+            .strokeBorder(
+                isFocused
+                    ? TubeTVTheme.accent.opacity(0.88)
+                    : TubeTVTheme.border.opacity(0.55),
+                lineWidth: isFocused ? 3 : 1
+            )
+        }
+        .scaleEffect(isFocused ? 1.035 : 1.0)
+        .shadow(
+            color:
+                isFocused
+                ? TubeTVTheme.accent.opacity(0.20)
+                : Color.black.opacity(0.18),
+            radius: isFocused ? 22 : 12,
+            y: 8
+        )
+        .animation(
+            .easeOut(duration: 0.13),
+            value: isFocused
+        )
+    }
+
+    private var placeholder: some View {
+        Image(systemName: "person.crop.circle.fill")
+            .resizable()
+            .scaledToFit()
+            .foregroundStyle(TubeTVTheme.accent.opacity(0.68))
     }
 }
