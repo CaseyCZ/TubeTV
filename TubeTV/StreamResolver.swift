@@ -195,12 +195,11 @@ private actor StreamResolutionBudget {
     }
 
     private var windows: [String: Window] = [:]
-    // Keep recovery alive across multiple playback failures. Individual
-    // resolver waves still have their own timeout, so a single request cannot
-    // hang forever, but the whole video is not abandoned after a few seconds.
-    private let maximumWindow: TimeInterval = 120
-    private let maximumAttempts = 10
-    private let staleWindowAge: TimeInterval = 180
+    // Retry a failed AVPlayer source with other client identities, but never
+    // let one video turn into a minute-long startup loop.
+    private let maximumWindow: TimeInterval = 30
+    private let maximumAttempts = 6
+    private let staleWindowAge: TimeInterval = 120
 
     func beginAttempt(videoID: String, reset: Bool) -> Bool {
         let now = Date()
@@ -244,14 +243,15 @@ enum StreamResolver {
         )
         guard allowed else { throw StreamResolverError.noPlayableStream }
 
-        // Return immediately when any path succeeds, but keep searching much
-        // longer before reporting a terminal error. This mirrors SmartTube's
-        // preference for another playback path over an early error screen.
+        // SmartTube-style behaviour: start independent playback paths at the
+        // same time and use the first one that returns a usable source. A
+        // failure from one path is only diagnostic; it never ends the race
+        // while another path or warm retry is still running.
         return try await resolveCandidateRace(
             videoID: videoID,
             preferredQuality: preferredQuality,
             excludingProfiles: excludingProfiles,
-            timeoutSeconds: isInitialAttempt ? 35.0 : 25.0
+            timeoutSeconds: isInitialAttempt ? 11.0 : 8.0
         )
     }
 
@@ -264,15 +264,17 @@ enum StreamResolver {
         let signedIn = await SmartTubeAuthService.shared.signedIn()
         let canUseAuthenticatedTV = !excludingProfiles.contains("TV_AUTH") && signedIn
         let canUseYouTubeKit = !excludingProfiles.contains("YOUTUBE_KIT")
-        let retryDelays: [TimeInterval] = timeoutSeconds >= 30
-            ? [3.0, 8.0, 16.0, 24.0]
-            : [3.0, 8.0, 16.0]
+
+        // AlternativePlayerService currently performs short client waves. A
+        // second pass after the first wave has warmed visitorData/session and
+        // a third initial-only pass after STS/session warm-up let those clients
+        // finish without making every request wait longer.
+        let retryDelays: [TimeInterval] = timeoutSeconds >= 10
+            ? [2.6, 5.3]
+            : [2.6]
         let timeoutNanoseconds = UInt64(max(1.0, timeoutSeconds) * 1_000_000_000)
 
         return try await withThrowingTaskGroup(of: ResolverAttemptResult.self) { group in
-            // The immediate InnerTube pass is always present. Additional warm
-            // passes are intentionally staggered so visitor/session metadata
-            // can settle and a transient YouTube response does not end playback.
             var remainingCandidates = 1 + retryDelays.count
 
             if canUseAuthenticatedTV {
