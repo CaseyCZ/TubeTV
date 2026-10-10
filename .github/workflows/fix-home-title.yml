@@ -1,0 +1,134 @@
+name: Apply TV Home title parser fix
+
+on:
+  push:
+    branches:
+      - playback-faststart
+    paths:
+      - .github/workflows/fix-home-title.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: playback-faststart
+          fetch-depth: 0
+
+      - name: Patch InnerTube video title fallback
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("TubeTV/InnerTubeService.swift")
+          text = path.read_text()
+
+          old = '''            let title =
+                firstText(
+                    in: renderer,
+                    keys: ["title", "headline", "primaryText"]
+                )
+                ?? text(
+                    from: nested(
+                        renderer,
+                        path: [
+                            "metadata",
+                            "tileMetadataRenderer",
+                            "title"
+                        ]
+                    )
+                )
+                ?? text(
+                    from: nested(
+                        renderer,
+                        path: [
+                            "metadata",
+                            "lockupMetadataViewModel",
+                            "title"
+                        ]
+                    )
+                )
+                ?? "YouTube video"
+
+            let metadata = metadataTexts(from: renderer)
+                .filter {
+                    !$0.isEmpty
+                        && $0 != title
+                        && $0 != "•"
+                }
+'''
+
+          new = '''            let rendererMetadata =
+                metadataTexts(from: renderer)
+
+            let metadataTitle =
+                rendererMetadata.first(
+                    where: {
+                        let trimmed =
+                            $0.trimmingCharacters(
+                                in: .whitespacesAndNewlines
+                            )
+
+                        return !trimmed.isEmpty
+                            && trimmed != "•"
+                            && !looksLikeDuration(trimmed)
+                    }
+                )
+
+            let title =
+                firstText(
+                    in: renderer,
+                    keys: ["title", "headline", "primaryText"]
+                )
+                ?? text(
+                    from: nested(
+                        renderer,
+                        path: [
+                            "metadata",
+                            "tileMetadataRenderer",
+                            "title"
+                        ]
+                    )
+                )
+                ?? text(
+                    from: nested(
+                        renderer,
+                        path: [
+                            "metadata",
+                            "lockupMetadataViewModel",
+                            "title"
+                        ]
+                    )
+                )
+                ?? metadataTitle
+                ?? "YouTube video"
+
+            let metadata = rendererMetadata
+                .filter {
+                    !$0.isEmpty
+                        && $0 != title
+                        && $0 != "•"
+                }
+'''
+
+          if old not in text:
+              raise SystemExit("Expected title parser block not found; refusing blind patch")
+
+          if text.count(old) != 1:
+              raise SystemExit("Expected exactly one title parser block")
+
+          path.write_text(text.replace(old, new, 1))
+
+      - name: Commit parser fix and remove temporary workflow
+        shell: bash
+        run: |
+          rm .github/workflows/fix-home-title.yml
+          git config user.name "Lukáš"
+          git config user.email "kyselalukas@seznam.cz"
+          git add TubeTV/InnerTubeService.swift .github/workflows/fix-home-title.yml
+          git commit -m "Improve TV Home video title extraction"
+          git push origin HEAD:playback-faststart
