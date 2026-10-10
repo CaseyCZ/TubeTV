@@ -493,9 +493,11 @@ struct VideoRow: View {
             ) {
                 LazyHStack(spacing: 24) {
                     ForEach(
-                        Array(videos.enumerated()),
-                        id: \.element.id
-                    ) { index, video in
+                        videos.indices,
+                        id: \.self
+                    ) { index in
+                        let video = videos[index]
+
                         NavigationLink(
                             value: video
                         ) {
@@ -717,7 +719,7 @@ struct VideoCard: View {
                     .foregroundStyle(
                         isFocused
                             ? TubeTVTheme.accent
-                            : .secondary
+                            : Color.white.opacity(0.62)
                     )
                     .lineLimit(1)
 
