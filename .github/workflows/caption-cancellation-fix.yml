@@ -25,74 +25,74 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          path = Path('TubeTV/CaptionService.swift')
+          path = Path("TubeTV/CaptionService.swift")
           text = path.read_text()
 
-          old = '''            } catch {
-                // A forced translation is deliberately optimistic. If the
-                // endpoint really refuses that language, keep captions usable
-                // by falling back to the source track instead of showing none.
-                return try await loadTrack(
-'''
-          new = '''            } catch {
-                try Task.checkCancellation()
+          old_translation = (
+              "            } catch {\n"
+              "                // A forced translation is deliberately optimistic. If the\n"
+              "                // endpoint really refuses that language, keep captions usable\n"
+              "                // by falling back to the source track instead of showing none.\n"
+              "                return try await loadTrack(\n"
+          )
+          new_translation = (
+              "            } catch {\n"
+              "                try Task.checkCancellation()\n"
+              "\n"
+              "                // A forced translation is deliberately optimistic. If the\n"
+              "                // endpoint really refuses that language, keep captions usable\n"
+              "                // by falling back to the source track instead of showing none.\n"
+              "                return try await loadTrack(\n"
+          )
+          if text.count(old_translation) != 1:
+              raise SystemExit("translation catch block not found exactly once")
+          text = text.replace(old_translation, new_translation, 1)
 
-                // A forced translation is deliberately optimistic. If the
-                // endpoint really refuses that language, keep captions usable
-                // by falling back to the source track instead of showing none.
-                return try await loadTrack(
-'''
-          if text.count(old) != 1:
-              raise SystemExit('translation catch block not found exactly once')
-          text = text.replace(old, new, 1)
-
-          old = '''            // SmartTube supplements TV caption metadata from WEB when the
-            // TV response exposes only a reduced translation-language list.
-            if translations.count < 100,
-               let webRenderer =
-                    try? await watchPageCaptionRenderer(
-                        videoID: videoID
-                    ),
-               let webTranslations =
-                    webRenderer["translationLanguages"]
-                        as? [[String: Any]],
-               webTranslations.count
-                    > translations.count {
-                renderer["translationLanguages"] =
-                    webTranslations
-            }
-
-            return renderer
-'''
-          new = '''            // SmartTube supplements TV caption metadata from WEB when the
-            // TV response exposes only a reduced translation-language list.
-            if translations.count < 100 {
-                do {
-                    let webRenderer =
-                        try await watchPageCaptionRenderer(
-                            videoID: videoID
-                        )
-                    let webTranslations =
-                        webRenderer["translationLanguages"]
-                            as? [[String: Any]]
-                        ?? []
-
-                    if webTranslations.count > translations.count {
-                        renderer["translationLanguages"] =
-                            webTranslations
-                    }
-                } catch {
-                    try Task.checkCancellation()
-                    // WEB metadata is supplemental; keep the cached renderer
-                    // when the page request fails for a non-cancellation reason.
-                }
-            }
-
-            return renderer
-'''
-          if text.count(old) != 1:
-              raise SystemExit('supplemental WEB caption block not found exactly once')
-          text = text.replace(old, new, 1)
+          old_web = (
+              "            // SmartTube supplements TV caption metadata from WEB when the\n"
+              "            // TV response exposes only a reduced translation-language list.\n"
+              "            if translations.count < 100,\n"
+              "               let webRenderer =\n"
+              "                    try? await watchPageCaptionRenderer(\n"
+              "                        videoID: videoID\n"
+              "                    ),\n"
+              "               let webTranslations =\n"
+              "                    webRenderer[\"translationLanguages\"]\n"
+              "                        as? [[String: Any]],\n"
+              "               webTranslations.count\n"
+              "                    > translations.count {\n"
+              "                renderer[\"translationLanguages\"] =\n"
+              "                    webTranslations\n"
+              "            }\n"
+          )
+          new_web = (
+              "            // SmartTube supplements TV caption metadata from WEB when the\n"
+              "            // TV response exposes only a reduced translation-language list.\n"
+              "            if translations.count < 100 {\n"
+              "                do {\n"
+              "                    let webRenderer =\n"
+              "                        try await watchPageCaptionRenderer(\n"
+              "                            videoID: videoID\n"
+              "                        )\n"
+              "                    let webTranslations =\n"
+              "                        webRenderer[\"translationLanguages\"]\n"
+              "                            as? [[String: Any]]\n"
+              "                        ?? []\n"
+              "\n"
+              "                    if webTranslations.count > translations.count {\n"
+              "                        renderer[\"translationLanguages\"] =\n"
+              "                            webTranslations\n"
+              "                    }\n"
+              "                } catch {\n"
+              "                    try Task.checkCancellation()\n"
+              "                    // WEB metadata is supplemental; keep the cached renderer\n"
+              "                    // when the page request fails for a non-cancellation reason.\n"
+              "                }\n"
+              "            }\n"
+          )
+          if text.count(old_web) != 1:
+              raise SystemExit("supplemental WEB caption block not found exactly once")
+          text = text.replace(old_web, new_web, 1)
 
           path.write_text(text)
           PY
