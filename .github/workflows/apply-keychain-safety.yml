@@ -20,162 +20,161 @@ jobs:
           fetch-depth: 0
 
       - name: Harden Keychain writes
-        shell: python
         run: |
+          python3 <<'PY'
           from pathlib import Path
 
           path = Path("TubeTV/SmartTubeAuthService.swift")
           text = path.read_text(encoding="utf-8")
 
           old_keychain = '''enum TubeTVKeychain {
-    private static let service = "cz.caseycz.tubetv"
+              private static let service = "cz.caseycz.tubetv"
 
-    static func set(_ value: String, for key: String) {
-        guard let data = value.data(using: .utf8) else { return }
+              static func set(_ value: String, for key: String) {
+                  guard let data = value.data(using: .utf8) else { return }
 
-        let base: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: key
-        ]
+                  let base: [String: Any] = [
+                      kSecClass as String: kSecClassGenericPassword,
+                      kSecAttrService as String: service,
+                      kSecAttrAccount as String: key
+                  ]
 
-        SecItemDelete(base as CFDictionary)
+                  SecItemDelete(base as CFDictionary)
 
-        var add = base
-        add[kSecValueData as String] = data
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        SecItemAdd(add as CFDictionary, nil)
-    }
-'''
+                  var add = base
+                  add[kSecValueData as String] = data
+                  add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+                  SecItemAdd(add as CFDictionary, nil)
+              }
+          '''
 
           new_keychain = '''enum TubeTVKeychainError: LocalizedError {
-    case invalidEncoding
-    case operationFailed(OSStatus)
+              case invalidEncoding
+              case operationFailed(OSStatus)
 
-    var errorDescription: String? {
-        switch self {
-        case .invalidEncoding:
-            return "Unable to encode a Keychain value."
-        case .operationFailed(let status):
-            if let message = SecCopyErrorMessageString(status, nil) as String? {
-                return "Keychain: \\(message)"
-            }
+              var errorDescription: String? {
+                  switch self {
+                  case .invalidEncoding:
+                      return "Unable to encode a Keychain value."
+                  case .operationFailed(let status):
+                      if let message = SecCopyErrorMessageString(status, nil) as String? {
+                          return "Keychain: \\(message)"
+                      }
 
-            return "Keychain error \\(status)."
-        }
-    }
-}
+                      return "Keychain error \\(status)."
+                  }
+              }
+          }
 
-enum TubeTVKeychain {
-    private static let service = "cz.caseycz.tubetv"
+          enum TubeTVKeychain {
+              private static let service = "cz.caseycz.tubetv"
 
-    static func set(_ value: String, for key: String) throws {
-        guard let data = value.data(using: .utf8) else {
-            throw TubeTVKeychainError.invalidEncoding
-        }
+              static func set(_ value: String, for key: String) throws {
+                  guard let data = value.data(using: .utf8) else {
+                      throw TubeTVKeychainError.invalidEncoding
+                  }
 
-        let base: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: key
-        ]
+                  let base: [String: Any] = [
+                      kSecClass as String: kSecClassGenericPassword,
+                      kSecAttrService as String: service,
+                      kSecAttrAccount as String: key
+                  ]
 
-        let updateStatus = SecItemUpdate(
-            base as CFDictionary,
-            [kSecValueData as String: data] as CFDictionary
-        )
+                  let updateStatus = SecItemUpdate(
+                      base as CFDictionary,
+                      [kSecValueData as String: data] as CFDictionary
+                  )
 
-        if updateStatus == errSecSuccess {
-            return
-        }
+                  if updateStatus == errSecSuccess {
+                      return
+                  }
 
-        guard updateStatus == errSecItemNotFound else {
-            throw TubeTVKeychainError.operationFailed(updateStatus)
-        }
+                  guard updateStatus == errSecItemNotFound else {
+                      throw TubeTVKeychainError.operationFailed(updateStatus)
+                  }
 
-        var add = base
-        add[kSecValueData as String] = data
-        add[kSecAttrAccessible as String] =
-            kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+                  var add = base
+                  add[kSecValueData as String] = data
+                  add[kSecAttrAccessible as String] =
+                      kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
 
-        let addStatus = SecItemAdd(add as CFDictionary, nil)
+                  let addStatus = SecItemAdd(add as CFDictionary, nil)
 
-        guard addStatus == errSecSuccess else {
-            throw TubeTVKeychainError.operationFailed(addStatus)
-        }
-    }
-'''
+                  guard addStatus == errSecSuccess else {
+                      throw TubeTVKeychainError.operationFailed(addStatus)
+                  }
+              }
+          '''
 
           old_save = '''    private func saveTokenResponse(
-        _ token: TVTokenResponse,
-        refreshToken: String
-    ) {
-        TubeTVKeychain.set(refreshToken, for: refreshTokenKey)
+              _ token: TVTokenResponse,
+              refreshToken: String
+          ) {
+              TubeTVKeychain.set(refreshToken, for: refreshTokenKey)
 
-        if let accessToken = token.accessToken {
-            TubeTVKeychain.set(accessToken, for: accessTokenKey)
-        }
+              if let accessToken = token.accessToken {
+                  TubeTVKeychain.set(accessToken, for: accessTokenKey)
+              }
 
-        let expiry = Date()
-            .addingTimeInterval(TimeInterval(token.expiresIn ?? 3600))
-            .timeIntervalSince1970
+              let expiry = Date()
+                  .addingTimeInterval(TimeInterval(token.expiresIn ?? 3600))
+                  .timeIntervalSince1970
 
-        TubeTVKeychain.set(String(expiry), for: accessTokenExpiryKey)
-    }
-'''
+              TubeTVKeychain.set(String(expiry), for: accessTokenExpiryKey)
+          }
+          '''
 
           new_save = '''    private func saveTokenResponse(
-        _ token: TVTokenResponse,
-        refreshToken: String
-    ) throws {
-        try TubeTVKeychain.set(
-            refreshToken,
-            for: refreshTokenKey
-        )
+              _ token: TVTokenResponse,
+              refreshToken: String
+          ) throws {
+              try TubeTVKeychain.set(
+                  refreshToken,
+                  for: refreshTokenKey
+              )
 
-        if let accessToken = token.accessToken {
-            try TubeTVKeychain.set(
-                accessToken,
-                for: accessTokenKey
-            )
-        }
+              if let accessToken = token.accessToken {
+                  try TubeTVKeychain.set(
+                      accessToken,
+                      for: accessTokenKey
+                  )
+              }
 
-        let expiry = Date()
-            .addingTimeInterval(TimeInterval(token.expiresIn ?? 3600))
-            .timeIntervalSince1970
+              let expiry = Date()
+                  .addingTimeInterval(TimeInterval(token.expiresIn ?? 3600))
+                  .timeIntervalSince1970
 
-        try TubeTVKeychain.set(
-            String(expiry),
-            for: accessTokenExpiryKey
-        )
-    }
-'''
+              try TubeTVKeychain.set(
+                  String(expiry),
+                  for: accessTokenExpiryKey
+              )
+          }
+          '''
 
           replacements = [
               (old_keychain, new_keychain),
               (old_save, new_save),
               ('''                saveTokenResponse(
-                    token,
-                    refreshToken: refreshToken
-                )''', '''                try saveTokenResponse(
-                    token,
-                    refreshToken: refreshToken
-                )'''),
+                      token,
+                      refreshToken: refreshToken
+                  )''', '''                try saveTokenResponse(
+                      token,
+                      refreshToken: refreshToken
+                  )'''),
               ('''        saveTokenResponse(token, refreshToken: refreshToken)
-        return accessToken''', '''        try saveTokenResponse(token, refreshToken: refreshToken)
-        return accessToken'''),
+          return accessToken''', '''        try saveTokenResponse(token, refreshToken: refreshToken)
+          return accessToken'''),
           ]
 
           for old, new in replacements:
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"Expected exactly one match, found {count}: {old[:80]!r}")
+              if text.count(old) != 1:
+                  raise SystemExit(f"Expected one match, found {text.count(old)}: {old[:60]!r}")
               text = text.replace(old, new, 1)
 
           path.write_text(text, encoding="utf-8")
+          PY
 
       - name: Commit Keychain patch and remove temporary workflow
-        shell: bash
         run: |
           rm .github/workflows/apply-keychain-safety.yml
           git config user.name "Lukáš"
