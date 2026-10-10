@@ -1,0 +1,108 @@
+name: Caption cancellation fix
+
+on:
+  push:
+    branches:
+      - playback-faststart
+    paths:
+      - .github/workflows/caption-cancellation-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: playback-faststart
+          fetch-depth: 0
+
+      - name: Propagate caption task cancellation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('TubeTV/CaptionService.swift')
+          text = path.read_text()
+
+          old = '''            } catch {
+                // A forced translation is deliberately optimistic. If the
+                // endpoint really refuses that language, keep captions usable
+                // by falling back to the source track instead of showing none.
+                return try await loadTrack(
+'''
+          new = '''            } catch {
+                try Task.checkCancellation()
+
+                // A forced translation is deliberately optimistic. If the
+                // endpoint really refuses that language, keep captions usable
+                // by falling back to the source track instead of showing none.
+                return try await loadTrack(
+'''
+          if text.count(old) != 1:
+              raise SystemExit('translation catch block not found exactly once')
+          text = text.replace(old, new, 1)
+
+          old = '''            // SmartTube supplements TV caption metadata from WEB when the
+            // TV response exposes only a reduced translation-language list.
+            if translations.count < 100,
+               let webRenderer =
+                    try? await watchPageCaptionRenderer(
+                        videoID: videoID
+                    ),
+               let webTranslations =
+                    webRenderer["translationLanguages"]
+                        as? [[String: Any]],
+               webTranslations.count
+                    > translations.count {
+                renderer["translationLanguages"] =
+                    webTranslations
+            }
+
+            return renderer
+'''
+          new = '''            // SmartTube supplements TV caption metadata from WEB when the
+            // TV response exposes only a reduced translation-language list.
+            if translations.count < 100 {
+                do {
+                    let webRenderer =
+                        try await watchPageCaptionRenderer(
+                            videoID: videoID
+                        )
+                    let webTranslations =
+                        webRenderer["translationLanguages"]
+                            as? [[String: Any]]
+                        ?? []
+
+                    if webTranslations.count > translations.count {
+                        renderer["translationLanguages"] =
+                            webTranslations
+                    }
+                } catch {
+                    try Task.checkCancellation()
+                    // WEB metadata is supplemental; keep the cached renderer
+                    // when the page request fails for a non-cancellation reason.
+                }
+            }
+
+            return renderer
+'''
+          if text.count(old) != 1:
+              raise SystemExit('supplemental WEB caption block not found exactly once')
+          text = text.replace(old, new, 1)
+
+          path.write_text(text)
+          PY
+
+      - name: Commit fix and remove helper
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/caption-cancellation-fix.yml
+          git add TubeTV/CaptionService.swift
+          git commit -m "Propagate caption task cancellation"
+          git push origin HEAD:playback-faststart
