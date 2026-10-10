@@ -2408,6 +2408,20 @@ actor InnerTubeService {
             return title
         }
 
+        // Final SmartTube TileItem title fallback. Current YouTube TV Home
+        // payloads can keep the visible video title only on the long-press
+        // show-menu command even when tile metadata itself is sparse.
+        if let value = nested(
+            renderer,
+            path: [
+                "onLongPressCommand",
+                "showMenuCommand",
+                "title"
+            ]
+        ), let title = text(from: value), !title.isEmpty {
+            return title
+        }
+
         return nil
     }
 
