@@ -5,6 +5,7 @@ on:
     branches:
       - Master
       - ui-ioshub-refresh
+      - playback-faststart
   workflow_dispatch:
 
 concurrency:
