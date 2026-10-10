@@ -125,11 +125,31 @@ enum SmartTubeAuthError: LocalizedError {
     }
 }
 
+enum TubeTVKeychainError: LocalizedError {
+    case invalidEncoding
+    case operationFailed(OSStatus)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidEncoding:
+            return "Unable to encode a Keychain value."
+        case .operationFailed(let status):
+            if let message = SecCopyErrorMessageString(status, nil) as String? {
+                return "Keychain: \(message)"
+            }
+
+            return "Keychain error \(status)."
+        }
+    }
+}
+
 enum TubeTVKeychain {
     private static let service = "cz.caseycz.tubetv"
 
-    static func set(_ value: String, for key: String) {
-        guard let data = value.data(using: .utf8) else { return }
+    static func set(_ value: String, for key: String) throws {
+        guard let data = value.data(using: .utf8) else {
+            throw TubeTVKeychainError.invalidEncoding
+        }
 
         let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -137,12 +157,29 @@ enum TubeTVKeychain {
             kSecAttrAccount as String: key
         ]
 
-        SecItemDelete(base as CFDictionary)
+        let updateStatus = SecItemUpdate(
+            base as CFDictionary,
+            [kSecValueData as String: data] as CFDictionary
+        )
+
+        if updateStatus == errSecSuccess {
+            return
+        }
+
+        guard updateStatus == errSecItemNotFound else {
+            throw TubeTVKeychainError.operationFailed(updateStatus)
+        }
 
         var add = base
         add[kSecValueData as String] = data
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        SecItemAdd(add as CFDictionary, nil)
+        add[kSecAttrAccessible as String] =
+            kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+
+        let addStatus = SecItemAdd(add as CFDictionary, nil)
+
+        guard addStatus == errSecSuccess else {
+            throw TubeTVKeychainError.operationFailed(addStatus)
+        }
     }
 
     static func string(for key: String) -> String? {
@@ -331,7 +368,7 @@ actor SmartTubeAuthService {
             let token = try JSONDecoder().decode(TVTokenResponse.self, from: response)
 
             if let refreshToken = token.refreshToken {
-                saveTokenResponse(
+                try saveTokenResponse(
                     token,
                     refreshToken: refreshToken
                 )
@@ -589,25 +626,25 @@ actor SmartTubeAuthService {
             )
         }
 
-        saveTokenResponse(token, refreshToken: refreshToken)
+        try saveTokenResponse(token, refreshToken: refreshToken)
         return accessToken
     }
 
     private func saveTokenResponse(
         _ token: TVTokenResponse,
         refreshToken: String
-    ) {
-        TubeTVKeychain.set(refreshToken, for: refreshTokenKey)
+    ) throws {
+        try TubeTVKeychain.set(refreshToken, for: refreshTokenKey)
 
         if let accessToken = token.accessToken {
-            TubeTVKeychain.set(accessToken, for: accessTokenKey)
+            try TubeTVKeychain.set(accessToken, for: accessTokenKey)
         }
 
         let expiry = Date()
             .addingTimeInterval(TimeInterval(token.expiresIn ?? 3600))
             .timeIntervalSince1970
 
-        TubeTVKeychain.set(String(expiry), for: accessTokenExpiryKey)
+        try TubeTVKeychain.set(String(expiry), for: accessTokenExpiryKey)
     }
 
     private func persistentDeviceID() -> String {
