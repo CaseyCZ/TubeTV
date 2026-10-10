@@ -349,6 +349,8 @@ actor AlternativePlayerService {
             visitorData = bootstrapVisitor
         }
 
+        try Task.checkCancellation()
+
         if let lastSuccessfulProfile,
            let preferred =
                 availableClients.first(
@@ -370,6 +372,8 @@ actor AlternativePlayerService {
         let resolveStartedAt = Date()
 
         for client in orderedClients {
+            try Task.checkCancellation()
+
             let clientStartedAt = Date()
 
             do {
@@ -381,6 +385,7 @@ actor AlternativePlayerService {
                     await seedWebSession(
                         videoID: videoID
                     )
+                    try Task.checkCancellation()
                 }
 
                 if let source = try await resolve(
@@ -409,6 +414,8 @@ actor AlternativePlayerService {
                     return source
                 }
             } catch let error as StreamResolverError {
+                try Task.checkCancellation()
+
                 if case .ipBlocked = error {
                     logger.error(
                         "IP blocked client=\(client.profile, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
@@ -421,6 +428,8 @@ actor AlternativePlayerService {
                     "Client failed client=\(client.profile, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
                 )
             } catch {
+                try Task.checkCancellation()
+
                 lastError = error
                 logger.error(
                     "Client failed client=\(client.profile, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
@@ -555,6 +564,8 @@ actor AlternativePlayerService {
         let bootstrap =
             try? await SmartTubeAuthService
                 .shared.bootstrap()
+        try Task.checkCancellation()
+
         let bootstrapVisitor =
             bootstrap?.visitorData
 

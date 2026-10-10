@@ -4113,10 +4113,6 @@ actor InnerTubeService {
                 }
             }
 
-            if let content = dictionary["content"] as? String {
-                return content
-            }
-
             for nestedKey in [
                 "text",
                 "title",

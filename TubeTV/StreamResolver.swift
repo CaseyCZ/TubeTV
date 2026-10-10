@@ -524,12 +524,15 @@ enum StreamResolver {
                     preferredQuality: preferredQuality
                 )
             } catch let error as StreamResolverError {
+                try Task.checkCancellation()
+
                 if case .ipBlocked = error {
                     throw error
                 }
 
                 meaningfulError = error
             } catch {
+                try Task.checkCancellation()
                 // Continue to the SmartTube-compatible fallback chain.
             }
         }
@@ -541,6 +544,8 @@ enum StreamResolver {
                 excludingProfiles: excludingProfiles
             )
         } catch let error as StreamResolverError {
+            try Task.checkCancellation()
+
             if case .ipBlocked = error {
                 throw error
             }
@@ -551,6 +556,7 @@ enum StreamResolver {
 
             meaningfulError = error
         } catch {
+            try Task.checkCancellation()
             // Continue to the final direct-stream fallback.
         }
 
@@ -614,6 +620,8 @@ enum StreamResolver {
 
             return .direct(fallbackURL)
         } catch {
+            try Task.checkCancellation()
+
             if let meaningfulError {
                 throw meaningfulError
             }
