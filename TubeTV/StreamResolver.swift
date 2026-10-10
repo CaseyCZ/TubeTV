@@ -229,6 +229,14 @@ private enum ResolverAttemptResult: @unchecked Sendable {
 }
 
 enum StreamResolver {
+    private static let androidClientVersion = "21.26.364"
+    private static let androidUserAgent =
+        "com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip"
+    // Public InnerTube key embedded in YouTube's own clients; already used by
+    // TubeTV's other unauthenticated player paths.
+    private static let androidAPIKey =
+        "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
+
     static func resolveYouTubeVideo(
         videoID: String,
         preferredQuality: String = "Auto",
@@ -264,6 +272,7 @@ enum StreamResolver {
         let signedIn = await SmartTubeAuthService.shared.signedIn()
         let canUseAuthenticatedTV = !excludingProfiles.contains("TV_AUTH") && signedIn
         let canUseYouTubeKit = !excludingProfiles.contains("YOUTUBE_KIT")
+        let canUseAndroidMuxed = !excludingProfiles.contains("ANDROID")
 
         // AlternativePlayerService currently performs short client waves. A
         // second pass after the first wave has warmed visitorData/session and
@@ -299,6 +308,26 @@ enum StreamResolver {
                 remainingCandidates += 1
                 group.addTask {
                     await youtubeKitCandidate(
+                        videoID: videoID,
+                        preferredQuality: preferredQuality
+                    )
+                }
+            }
+
+            // SmartTubeIOS uses standard Android muxed video as its final
+            // direct-stream last resort. Delay it slightly so VisionOS/HLS or
+            // a higher-quality path wins when available, but do not wait until
+            // after the user has already seen an error screen.
+            if canUseAndroidMuxed {
+                remainingCandidates += 1
+                group.addTask {
+                    do {
+                        try await Task.sleep(nanoseconds: 3_400_000_000)
+                        try Task.checkCancellation()
+                    } catch {
+                        return .failure(nil)
+                    }
+                    return await androidMuxedCandidate(
                         videoID: videoID,
                         preferredQuality: preferredQuality
                     )
@@ -431,6 +460,26 @@ enum StreamResolver {
         }
     }
 
+    private static func androidMuxedCandidate(
+        videoID: String,
+        preferredQuality: String
+    ) async -> ResolverAttemptResult {
+        do {
+            return .source(
+                try await resolveAndroidMuxed(
+                    videoID: videoID,
+                    preferredQuality: preferredQuality
+                )
+            )
+        } catch let error as StreamResolverError {
+            return .failure(error)
+        } catch is CancellationError {
+            return .failure(nil)
+        } catch {
+            return .failure(nil)
+        }
+    }
+
     private static func resolveAuthenticatedWithTimeout(
         videoID: String,
         preferredQuality: String,
@@ -456,6 +505,132 @@ enum StreamResolver {
             }
             return first
         }
+    }
+
+    private static func resolveAndroidMuxed(
+        videoID: String,
+        preferredQuality: String
+    ) async throws -> PlaybackSource {
+        try Task.checkCancellation()
+
+        guard var components = URLComponents(
+            string: "https://youtubei.googleapis.com/youtubei/v1/player"
+        ) else {
+            throw StreamResolverError.noPlayableStream
+        }
+        components.queryItems = [
+            URLQueryItem(name: "key", value: androidAPIKey),
+            URLQueryItem(name: "prettyPrint", value: "false")
+        ]
+        guard let url = components.url else {
+            throw StreamResolverError.noPlayableStream
+        }
+
+        let client: [String: Any] = [
+            "hl": "en",
+            "gl": "US",
+            "clientName": "ANDROID",
+            "clientVersion": androidClientVersion,
+            "androidSdkVersion": 30,
+            "osName": "Android",
+            "osVersion": "11"
+        ]
+        let payload: [String: Any] = [
+            "context": ["client": client],
+            "videoId": videoID,
+            "racyCheckOk": true,
+            "contentCheckOk": true
+        ]
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 2.5
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(androidUserAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("3", forHTTPHeaderField: "X-YouTube-Client-Name")
+        request.setValue(androidClientVersion, forHTTPHeaderField: "X-YouTube-Client-Version")
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try Task.checkCancellation()
+
+        guard let http = response as? HTTPURLResponse,
+              (200..<300).contains(http.statusCode),
+              let root = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            throw StreamResolverError.noPlayableStream
+        }
+
+        let playability = root["playabilityStatus"] as? [String: Any]
+        let status = playability?["status"] as? String ?? "UNKNOWN"
+        let reason = playability?["reason"] as? String ?? ""
+
+        guard let streaming = AdFilteringPolicy.contentStreamingData(from: root) else {
+            if let error = StreamResolverError.playabilityError(
+                status: status,
+                reason: reason
+            ) {
+                throw error
+            }
+            throw StreamResolverError.noPlayableStream
+        }
+
+        let adMetadata = AdFilteringPolicy.inspectPlayerResponse(root)
+        let rawFormats = streaming["formats"] as? [[String: Any]] ?? []
+        let muxed: [(url: URL, height: Int, bitrate: Int)] = rawFormats.compactMap { item in
+            guard let rawURL = item["url"] as? String,
+                  let streamURL = URL(string: rawURL),
+                  !rawURL.contains("/rqh/1/"),
+                  let mimeType = item["mimeType"] as? String,
+                  mimeType.hasPrefix("video/mp4"),
+                  item["audioQuality"] != nil || item["audioChannels"] != nil
+            else {
+                return nil
+            }
+
+            return (
+                streamURL,
+                item["height"] as? Int ?? 0,
+                item["bitrate"] as? Int ?? 0
+            )
+        }
+
+        guard !muxed.isEmpty else {
+            throw StreamResolverError.noPlayableStream
+        }
+
+        let requested = requestedHeight(for: preferredQuality)
+        let preferredPool: [(url: URL, height: Int, bitrate: Int)]
+        if let requested {
+            let exact = muxed.filter { $0.height == requested }
+            if !exact.isEmpty {
+                preferredPool = exact
+            } else {
+                let atOrBelow = muxed.filter { $0.height <= requested }
+                preferredPool = atOrBelow.isEmpty ? muxed : atOrBelow
+            }
+        } else {
+            preferredPool = muxed
+        }
+
+        guard let chosen = preferredPool.max(by: { lhs, rhs in
+            if lhs.height != rhs.height {
+                return lhs.height < rhs.height
+            }
+            return lhs.bitrate < rhs.bitrate
+        }) else {
+            throw StreamResolverError.noPlayableStream
+        }
+
+        let heights = Array(Set(muxed.map(\.height).filter { $0 > 0 })).sorted(by: >)
+        let headers = PlaybackRequestHeaders(
+            userAgent: androidUserAgent,
+            clientProfile: "ANDROID",
+            availableHeights: heights,
+            advertisingMetadataDetected: adMetadata.containsAdvertisingMetadata
+        )
+
+        return .directWithHeaders(chosen.url, headers)
     }
 
     private static func resolveWithYouTubeKit(
