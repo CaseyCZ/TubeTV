@@ -55,9 +55,15 @@ actor YouTubeService {
     }
 
     func channel(_ channelID: String) async throws -> YouTubeChannelPage {
-        guard let url = URL(
-            string: "https://www.youtube.com/channel/\(channelID)/videos?hl=cs&gl=CZ"
-        ) else {
+        var components = URLComponents(
+            string: "https://www.youtube.com/channel/\(channelID)/videos"
+        )
+        components?.queryItems = [
+            URLQueryItem(name: "hl", value: L10n.currentLanguageCode),
+            URLQueryItem(name: "gl", value: "CZ")
+        ]
+
+        guard let url = components?.url else {
             throw YouTubeServiceError.invalidURL
         }
 

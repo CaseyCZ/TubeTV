@@ -312,7 +312,6 @@ struct SettingsView: View {
                 )
             }
         }
-        .id(appLanguage)
     }
 
     @MainActor
