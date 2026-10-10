@@ -1,0 +1,127 @@
+name: Apply resolver race and focus style fix v2
+
+"on":
+  push:
+    branches:
+      - playback-faststart
+    paths:
+      - .github/workflows/race-resolver-focus-fix-2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: playback-faststart
+
+      - name: Apply resolver and focus patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # --- Focus appearance: own the whole button style, not only the label. ---
+          home = Path('TubeTV/HomeView.swift')
+          h = home.read_text()
+          style_marker = 'struct VideoRow: View {\n'
+          style = '''struct TubeTVVideoButtonStyle: ButtonStyle {\n    func makeBody(configuration: Configuration) -> some View {\n        configuration.label\n            .contentShape(Rectangle())\n            .opacity(configuration.isPressed ? 0.88 : 1.0)\n            .focusEffectDisabled()\n    }\n}\n\n'''
+          if 'struct TubeTVVideoButtonStyle: ButtonStyle' not in h:
+              if style_marker not in h:
+                  raise SystemExit('VideoRow marker missing')
+              h = h.replace(style_marker, style + style_marker, 1)
+          old = '''                        .buttonStyle(.plain)\n                        .focusEffectDisabled()\n                        .onAppear {\n'''
+          new = '''                        .buttonStyle(TubeTVVideoButtonStyle())\n                        .focusEffectDisabled()\n                        .onAppear {\n'''
+          if old not in h:
+              raise SystemExit('Home NavigationLink style marker missing')
+          h = h.replace(old, new, 1)
+          home.write_text(h)
+
+          search = Path('TubeTV/SearchView.swift')
+          q = search.read_text()
+          old = '''            .buttonStyle(.plain)\n            .focusEffectDisabled()\n\n        case .channel(let channel):\n'''
+          new = '''            .buttonStyle(TubeTVVideoButtonStyle())\n            .focusEffectDisabled()\n\n        case .channel(let channel):\n'''
+          if old not in q:
+              raise SystemExit('Search video style marker missing')
+          search.write_text(q.replace(old, new, 1))
+
+          # --- Outer resolver: each video starts fresh; try all fallbacks before reporting failure. ---
+          stream = Path('TubeTV/StreamResolver.swift')
+          s = stream.read_text()
+          start = s.index('    static func resolveYouTubeVideo(\n')
+          end = s.index('    private static func resolveAuthenticatedWithTimeout(\n', start)
+          replacement = '''    static func resolveYouTubeVideo(\n        videoID: String,\n        preferredQuality: String = "Auto",\n        excludingProfiles: Set<String> = []\n    ) async throws -> PlaybackSource {\n        guard !videoID.isEmpty else {\n            throw StreamResolverError.invalidVideoID\n        }\n\n        let isInitialAttempt = excludingProfiles.isEmpty\n        let allowed =\n            await StreamResolutionBudget.shared.beginAttempt(\n                videoID: videoID,\n                reset: isInitialAttempt\n            )\n\n        guard allowed else {\n            throw StreamResolverError.noPlayableStream\n        }\n\n        // Resolve every video independently. Different YouTube videos can\n        // require different client identities; no cross-video preferred\n        // profile is allowed to starve the working client for this video.\n        return try await resolveWithTimeout(\n            videoID: videoID,\n            preferredQuality: preferredQuality,\n            excludingProfiles: excludingProfiles,\n            timeoutSeconds: isInitialAttempt ? 9 : 5\n        )\n    }\n\n'''
+          s = s[:start] + replacement + s[end:]
+
+          # Signed-in TV is still useful, but it must fail fast and then let every
+          # anonymous/compatibility path try as well.
+          s = s.replace('timeoutSeconds: 3\n                )', 'timeoutSeconds: 1.5\n                )', 1)
+
+          auth_ip = '''                if case .ipBlocked = error {\n                    throw error\n                }\n\n                meaningfulError = error\n'''
+          if auth_ip in s:
+              s = s.replace(auth_ip, '                meaningfulError = error\n', 1)
+
+          alt_stop = '''            if case .ipBlocked = error {\n                throw error\n            }\n\n            if case .signInRequired = error {\n                throw error\n            }\n\n            meaningfulError = error\n'''
+          if alt_stop not in s:
+              raise SystemExit('Alternative early-stop marker missing')
+          s = s.replace(
+              alt_stop,
+              '''            // One client can be blocked/login-only while another\n            // client still has a valid Apple TV stream. Keep the diagnostic\n            // error, but continue through every remaining fallback.\n            meaningfulError = error\n''',
+              1
+          )
+          stream.write_text(s)
+
+          # --- Alternative resolver: two short parallel waves, first playable source wins. ---
+          alt = Path('TubeTV/AlternativePlayerService.swift')
+          a = alt.read_text()
+          a = a.replace(
+              'private struct AlternativePlayerClient {',
+              'private struct AlternativePlayerClient: @unchecked Sendable {',
+              1
+          )
+
+          actor_marker = 'actor AlternativePlayerService {\n'
+          outcome = '''private enum AlternativeProbeOutcome: @unchecked Sendable {\n    case source(PlaybackSource, String)\n    case signInRequired\n    case ipBlocked(String)\n    case failed\n    case timeout\n}\n\nprivate struct AlternativeRaceResult: @unchecked Sendable {\n    let source: PlaybackSource?\n    let sawSignInRequired: Bool\n    let ipBlockReason: String?\n}\n\n'''
+          if 'private enum AlternativeProbeOutcome' not in a:
+              if actor_marker not in a:
+                  raise SystemExit('Alternative actor marker missing')
+              a = a.replace(actor_marker, outcome + actor_marker, 1)
+
+          func_start = a.index('    func resolve(\n        videoID: String,\n        preferredQuality: String,\n        excludingProfiles: Set<String> = []\n    ) async throws -> PlaybackSource {\n')
+          func_end = a.index('    func markPlaybackSuccessful(\n', func_start)
+          new_func = '''    func resolve(\n        videoID: String,\n        preferredQuality: String,\n        excludingProfiles: Set<String> = []\n    ) async throws -> PlaybackSource {\n        let availableClients =\n            clients.filter {\n                !excludingProfiles.contains($0.profile)\n            }\n\n        if visitorData == nil,\n           let bootstrapVisitor =\n                await SmartTubeAuthService\n                    .shared.cachedVisitorData(),\n           !bootstrapVisitor.isEmpty {\n            visitorData = bootstrapVisitor\n        }\n\n        try Task.checkCancellation()\n\n        // SmartTube-like strategy: clients suitable for native Apple playback\n        // race first. If none wins quickly, compatibility/web clients race next.\n        // A slow profile can never consume the whole startup budget by itself.\n        let fastProfiles: Set<String> = [\n            "VISIONOS",\n            "TV_DOWNGRADED",\n            "IOS",\n            "ANDROID_VR"\n        ]\n        let fastClients = availableClients.filter {\n            fastProfiles.contains($0.profile)\n        }\n        let compatibilityClients = availableClients.filter {\n            !fastProfiles.contains($0.profile)\n        }\n\n        var sawSignInRequired = false\n        var ipBlockReason: String?\n\n        let fast = await raceClients(\n            fastClients,\n            videoID: videoID,\n            preferredQuality: preferredQuality,\n            timeoutSeconds: 2.6\n        )\n        if let source = fast.source {\n            return source\n        }\n        sawSignInRequired = fast.sawSignInRequired\n        ipBlockReason = fast.ipBlockReason\n\n        try Task.checkCancellation()\n\n        let compatibility = await raceClients(\n            compatibilityClients,\n            videoID: videoID,\n            preferredQuality: preferredQuality,\n            timeoutSeconds: 2.6\n        )\n        if let source = compatibility.source {\n            return source\n        }\n        sawSignInRequired =\n            sawSignInRequired\n            || compatibility.sawSignInRequired\n        if ipBlockReason == nil {\n            ipBlockReason = compatibility.ipBlockReason\n        }\n\n        if let ipBlockReason {\n            throw StreamResolverError.ipBlocked(ipBlockReason)\n        }\n        if sawSignInRequired {\n            throw StreamResolverError.signInRequired\n        }\n        throw StreamResolverError.noPlayableStream\n    }\n\n    private func raceClients(\n        _ clients: [AlternativePlayerClient],\n        videoID: String,\n        preferredQuality: String,\n        timeoutSeconds: TimeInterval\n    ) async -> AlternativeRaceResult {\n        guard !clients.isEmpty else {\n            return AlternativeRaceResult(\n                source: nil,\n                sawSignInRequired: false,\n                ipBlockReason: nil\n            )\n        }\n\n        let timeoutNanoseconds = UInt64(\n            max(0.5, timeoutSeconds) * 1_000_000_000\n        )\n\n        return await withTaskGroup(\n            of: AlternativeProbeOutcome.self\n        ) { group in\n            for client in clients {\n                group.addTask { [self] in\n                    await self.probeClient(\n                        client,\n                        videoID: videoID,\n                        preferredQuality: preferredQuality\n                    )\n                }\n            }\n\n            group.addTask {\n                do {\n                    try await Task.sleep(\n                        nanoseconds: timeoutNanoseconds\n                    )\n                } catch {\n                    return .failed\n                }\n                return .timeout\n            }\n\n            var remainingClients = clients.count\n            var sawSignInRequired = false\n            var ipBlockReason: String?\n\n            while let outcome = await group.next() {\n                switch outcome {\n                case .source(let source, let profile):\n                    group.cancelAll()\n                    logger.notice(\n                        "Race winner client=\\(profile, privacy: .public)"\n                    )\n                    return AlternativeRaceResult(\n                        source: source,\n                        sawSignInRequired: sawSignInRequired,\n                        ipBlockReason: ipBlockReason\n                    )\n\n                case .signInRequired:\n                    sawSignInRequired = true\n                    remainingClients -= 1\n\n                case .ipBlocked(let reason):\n                    if ipBlockReason == nil {\n                        ipBlockReason = reason\n                    }\n                    remainingClients -= 1\n\n                case .failed:\n                    remainingClients -= 1\n\n                case .timeout:\n                    group.cancelAll()\n                    return AlternativeRaceResult(\n                        source: nil,\n                        sawSignInRequired: sawSignInRequired,\n                        ipBlockReason: ipBlockReason\n                    )\n                }\n\n                if remainingClients <= 0 {\n                    group.cancelAll()\n                    return AlternativeRaceResult(\n                        source: nil,\n                        sawSignInRequired: sawSignInRequired,\n                        ipBlockReason: ipBlockReason\n                    )\n                }\n            }\n\n            return AlternativeRaceResult(\n                source: nil,\n                sawSignInRequired: sawSignInRequired,\n                ipBlockReason: ipBlockReason\n            )\n        }\n    }\n\n    private func probeClient(\n        _ client: AlternativePlayerClient,\n        videoID: String,\n        preferredQuality: String\n    ) async -> AlternativeProbeOutcome {\n        let startedAt = Date()\n\n        do {\n            try Task.checkCancellation()\n\n            if client.seedWebSession,\n               visitorData == nil {\n                await seedWebSession(videoID: videoID)\n                try Task.checkCancellation()\n            }\n\n            if let source = try await resolve(\n                videoID: videoID,\n                preferredQuality: preferredQuality,\n                client: client\n            ) {\n                let elapsedMs = Int(\n                    Date().timeIntervalSince(startedAt) * 1_000\n                )\n                logger.notice(\n                    "Probe playable client=\\(client.profile, privacy: .public) ms=\\(elapsedMs, privacy: .public)"\n                )\n                return .source(source, client.profile)\n            }\n        } catch let error as StreamResolverError {\n            if case .ipBlocked(let reason) = error {\n                return .ipBlocked(reason)\n            }\n            if case .signInRequired = error {\n                return .signInRequired\n            }\n        } catch {\n            if error is CancellationError {\n                return .failed\n            }\n        }\n\n        return .failed\n    }\n\n'''
+          a = a[:func_start] + new_func + a[func_end:]
+
+          # Verification can log winners/failures, but it must not bias another video.
+          mark_start = a.index('    func markPlaybackSuccessful(\n')
+          mark_end = a.index('    private func seedWebSession(\n', mark_start)
+          new_marks = '''    func markPlaybackSuccessful(\n        profile: String\n    ) {\n        logger.notice(\n            "Playback profile confirmed=\\(profile, privacy: .public)"\n        )\n    }\n\n    func markPlaybackFailed(\n        profile: String\n    ) {\n        logger.notice(\n            "Playback profile rejected=\\(profile, privacy: .public)"\n        )\n    }\n\n'''
+          a = a[:mark_start] + new_marks + a[mark_end:]
+          a = a.replace('    private var lastSuccessfulProfile: String?\n', '', 1)
+
+          # Web-session seeding is optional. Never let it dominate a race wave.
+          seed_marker = '''            timeoutInterval: 8\n        )\n        request.setValue(\n            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.5 Safari/605.1.15,gzip(gfe)",\n'''
+          if seed_marker in a:
+              a = a.replace(
+                  seed_marker,
+                  '''            timeoutInterval: 1.5\n        )\n        request.setValue(\n            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.5 Safari/605.1.15,gzip(gfe)",\n''',
+                  1
+              )
+          alt.write_text(a)
+          PY
+
+      - name: Commit patch and remove helpers
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Lukáš"
+          git config user.email "kyselalukas@seznam.cz"
+          git rm .github/workflows/race-resolver-focus-fix.yml
+          git rm .github/workflows/race-resolver-focus-fix-2.yml
+          git add TubeTV/HomeView.swift TubeTV/SearchView.swift TubeTV/StreamResolver.swift TubeTV/AlternativePlayerService.swift
+          git commit -m "Race playback clients and remove tvOS focus frame"
+          git push origin HEAD:playback-faststart
