@@ -129,6 +129,37 @@ struct HomeView: View {
                             )
                         }
                     }
+
+                    if let token = homeContinuationToken,
+                       !token.isEmpty {
+                        HStack {
+                            Spacer()
+
+                            ProgressView()
+                                .tint(TubeTVTheme.accent)
+                                .padding(16)
+                                .background(
+                                    TubeTVTheme.panel.opacity(0.76),
+                                    in: RoundedRectangle(
+                                        cornerRadius: 16,
+                                        style: .continuous
+                                    )
+                                )
+
+                            Spacer()
+                        }
+                        .frame(height: 84)
+                        .id(token)
+                        .onAppear {
+                            let generation = homeLoadGeneration
+
+                            Task {
+                                await loadRemainingHomeSections(
+                                    generation: generation
+                                )
+                            }
+                        }
+                    }
                 }
                 .padding(.horizontal, 52)
                 .padding(.top, 42)
@@ -257,18 +288,12 @@ struct HomeView: View {
                     languageCode: appLanguage
                 )
             } else {
-                // Once usable Home content is visible, any earlier primary
-                // request/fallback failure is no longer a user-facing error.
+                // The first usable Home page is enough to render immediately.
+                // Remaining global continuations now load only when the user
+                // reaches the end of the currently visible Home feed so they
+                // do not compete with playback startup in the background.
                 errorMessage = nil
                 lastLoadedAt = Date()
-
-                if homeContinuationToken != nil {
-                    Task {
-                        await loadRemainingHomeSections(
-                            generation: generation
-                        )
-                    }
-                }
             }
         } catch {
             errorMessage = error.localizedDescription
@@ -280,7 +305,9 @@ struct HomeView: View {
         generation: UUID
     ) async {
         guard generation == homeLoadGeneration,
-              !isLoadingMoreHomeSections else {
+              !isLoadingMoreHomeSections,
+              let token = homeContinuationToken,
+              !token.isEmpty else {
             return
         }
 
@@ -289,63 +316,47 @@ struct HomeView: View {
             isLoadingMoreHomeSections = false
         }
 
-        while let token = homeContinuationToken,
-              !token.isEmpty {
-            do {
-                let result =
-                    try await InnerTubeService.shared
-                        .continueHomePage(
-                            token
-                        )
+        do {
+            let result =
+                try await InnerTubeService.shared
+                    .continueHomePage(token)
 
-                guard generation
-                        == homeLoadGeneration else {
-                    break
+            guard generation == homeLoadGeneration else {
+                return
+            }
+
+            var seen = Set(sections.map(\.id))
+            let newSections =
+                result.sections.filter {
+                    seen.insert($0.id).inserted
                 }
 
-                var seen = Set(
-                    sections.map(\.id)
-                )
-                let newSections =
-                    result.sections.filter {
-                        seen.insert($0.id).inserted
-                    }
+            sections.append(contentsOf: newSections)
 
-                sections.append(
-                    contentsOf: newSections
-                )
+            let nextToken = result.continuationToken
 
-                let nextToken =
-                    result.continuationToken
-
-                if nextToken == token
-                    && newSections.isEmpty {
-                    homeContinuationToken = nil
-                    break
-                }
-
-                homeContinuationToken =
-                    nextToken
-            } catch {
-                // The first Home page is already usable. SmartTube treats a
-                // failed continuation as the end of the feed instead of
-                // replacing visible content with a fatal account error.
+            if nextToken == token
+                && newSections.isEmpty {
                 homeContinuationToken = nil
+            } else {
+                homeContinuationToken = nextToken
+            }
+        } catch {
+            // The first Home page is already usable. A failed lazy
+            // continuation simply ends the feed instead of replacing visible
+            // content with a fatal account error.
+            homeContinuationToken = nil
 
-                let hasVisibleContent =
-                    sections.contains {
-                        !$0.videos.isEmpty
-                            || !$0.searchTiles.isEmpty
-                    }
-
-                if !hasVisibleContent {
-                    errorMessage =
-                        error.localizedDescription
-                } else {
-                    errorMessage = nil
+            let hasVisibleContent =
+                sections.contains {
+                    !$0.videos.isEmpty
+                        || !$0.searchTiles.isEmpty
                 }
 
-                break
+            if !hasVisibleContent {
+                errorMessage = error.localizedDescription
+            } else {
+                errorMessage = nil
             }
         }
     }
