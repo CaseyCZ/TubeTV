@@ -1,0 +1,41 @@
+name: Apply TV TextItem content fix
+
+on:
+  push:
+    branches:
+      - playback-faststart
+    paths:
+      - .github/workflows/apply-tv-text-content-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: playback-faststart
+          fetch-depth: 0
+
+      - name: Apply TextItem content support
+        run: python3 tools/apply-tv-text-content-fix.py
+
+      - name: Validate patch
+        run: |
+          set -euo pipefail
+          grep -q 'dictionary\["content"\] as? String' TubeTV/InnerTubeService.swift
+          git diff --check
+          git diff -- TubeTV/InnerTubeService.swift
+
+      - name: Commit product fix and remove helpers
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/apply-tv-text-content-fix.yml tools/apply-tv-text-content-fix.py
+          git add TubeTV/InnerTubeService.swift
+          git commit -m 'Read TV TextItem content values'
+          git push origin HEAD:playback-faststart
