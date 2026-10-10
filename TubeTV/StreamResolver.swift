@@ -362,8 +362,11 @@ private actor StreamResolutionBudget {
     }
 
     private var windows: [String: Window] = [:]
-    private let maximumWindow: TimeInterval = 20
-    private let maximumAttempts = 3
+    // SmartTube-style recovery: allow several independent resolver passes
+    // before we ever surface a terminal playback error. Per-request timeouts
+    // still protect against a single hung client.
+    private let maximumWindow: TimeInterval = 60
+    private let maximumAttempts = 8
     private let staleWindowAge: TimeInterval = 120
 
     func beginAttempt(
@@ -421,14 +424,14 @@ enum StreamResolver {
             throw StreamResolverError.noPlayableStream
         }
 
-        // Resolve every video independently. Different YouTube videos can
-        // require different client identities; no cross-video preferred
-        // profile is allowed to starve the working client for this video.
+        // Prefer a longer search over an early error. The first playable
+        // source still returns immediately, but slow fallbacks now have enough
+        // time to run before the whole resolver is considered exhausted.
         return try await resolveWithTimeout(
             videoID: videoID,
             preferredQuality: preferredQuality,
             excludingProfiles: excludingProfiles,
-            timeoutSeconds: isInitialAttempt ? 9 : 5
+            timeoutSeconds: isInitialAttempt ? 30 : 20
         )
     }
 
@@ -529,7 +532,7 @@ enum StreamResolver {
                 return try await resolveAuthenticatedWithTimeout(
                     videoID: videoID,
                     preferredQuality: preferredQuality,
-                    timeoutSeconds: 1.5
+                    timeoutSeconds: 3
                 )
             } catch let error as StreamResolverError {
                 try Task.checkCancellation()
