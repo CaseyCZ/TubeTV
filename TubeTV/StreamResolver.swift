@@ -320,6 +320,39 @@ enum StreamResolverError: LocalizedError {
     }
 }
 
+private enum PlaybackProfilePreferenceStore {
+    private static let key =
+        "tubetv.playback.lastWorkingProfile"
+
+    static func load() -> String? {
+        guard let value =
+                UserDefaults.standard
+                    .string(forKey: key),
+              !value.isEmpty else {
+            return nil
+        }
+
+        return value
+    }
+
+    static func save(_ profile: String) {
+        guard !profile.isEmpty,
+              profile != "TV_AUTH" else {
+            return
+        }
+
+        UserDefaults.standard.set(
+            profile,
+            forKey: key
+        )
+    }
+
+    static func clear() {
+        UserDefaults.standard
+            .removeObject(forKey: key)
+    }
+}
+
 private actor StreamResolutionBudget {
     static let shared = StreamResolutionBudget()
 
@@ -378,6 +411,26 @@ enum StreamResolver {
         }
 
         let isInitialAttempt = excludingProfiles.isEmpty
+        let storedProfile =
+            PlaybackProfilePreferenceStore.load()
+
+        if let storedProfile,
+           excludingProfiles.contains(
+            storedProfile
+           ) {
+            PlaybackProfilePreferenceStore.clear()
+        } else if isInitialAttempt,
+                  let storedProfile {
+            // Rehydrate AlternativePlayerService's in-memory preference after
+            // an app restart. If this profile fails AVPlayer verification,
+            // PlayerView will exclude it on the next resolver pass and the
+            // persisted preference is cleared above.
+            await AlternativePlayerService.shared
+                .markPlaybackSuccessful(
+                    profile: storedProfile
+                )
+        }
+
         let allowed =
             await StreamResolutionBudget.shared.beginAttempt(
                 videoID: videoID,
@@ -388,12 +441,25 @@ enum StreamResolver {
             throw StreamResolverError.noPlayableStream
         }
 
-        return try await resolveWithTimeout(
+        let resolved = try await resolveWithTimeout(
             videoID: videoID,
             preferredQuality: preferredQuality,
             excludingProfiles: excludingProfiles,
             timeoutSeconds: isInitialAttempt ? 15 : 10
         )
+
+        if let profile = resolved.clientProfile {
+            PlaybackProfilePreferenceStore.save(
+                profile
+            )
+        } else if isInitialAttempt {
+            // A direct YouTubeKit fallback means the previous Alternative
+            // profile was not useful for this startup. Do not keep preferring
+            // a stale profile on future launches.
+            PlaybackProfilePreferenceStore.clear()
+        }
+
+        return resolved
     }
 
     private static func resolveWithTimeout(
