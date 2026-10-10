@@ -63,7 +63,10 @@ enum PlaybackSource: Hashable {
         case .directWithHeaders(_, let headers), .adaptiveWithHeaders(_, _, _, let headers):
             return headers.clientProfile
         case .direct, .adaptive:
-            return nil
+            // Unheadered YouTube playback sources are produced by the
+            // YouTubeKit fallback. Giving them a profile keeps PlayerView's
+            // failover alive if AVPlayer rejects a URL after resolution.
+            return "YOUTUBE_KIT"
         }
     }
 
@@ -254,12 +257,15 @@ enum StreamResolver {
     ) async throws -> PlaybackSource {
         let signedIn = await SmartTubeAuthService.shared.signedIn()
         let canUseAuthenticatedTV = !excludingProfiles.contains("TV_AUTH") && signedIn
+        let canUseYouTubeKit = !excludingProfiles.contains("YOUTUBE_KIT")
         let retryDelay = min(2.7, max(1.2, timeoutSeconds * 0.30))
         let timeoutNanoseconds = UInt64(max(1.0, timeoutSeconds) * 1_000_000_000)
         let retryDelayNanoseconds = UInt64(retryDelay * 1_000_000_000)
 
         return try await withThrowingTaskGroup(of: ResolverAttemptResult.self) { group in
-            var remainingCandidates = 3
+            // The two InnerTube passes are always present. Authenticated TV and
+            // YouTubeKit are added only while they have not already failed.
+            var remainingCandidates = 2
 
             if canUseAuthenticatedTV {
                 remainingCandidates += 1
@@ -279,11 +285,14 @@ enum StreamResolver {
                 )
             }
 
-            group.addTask {
-                await youtubeKitCandidate(
-                    videoID: videoID,
-                    preferredQuality: preferredQuality
-                )
+            if canUseYouTubeKit {
+                remainingCandidates += 1
+                group.addTask {
+                    await youtubeKitCandidate(
+                        videoID: videoID,
+                        preferredQuality: preferredQuality
+                    )
+                }
             }
 
             group.addTask {
