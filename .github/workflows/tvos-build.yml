@@ -152,6 +152,20 @@ jobs:
             --predicate 'process == "TubeTV"' \
             > tubetv-simulator.log 2>&1 || true
 
+      - name: Capture Home screenshot
+        run: |
+          set -euo pipefail
+          UDID='${{ steps.simulator.outputs.udid }}'
+          xcrun simctl io "$UDID" screenshot tubetv-home.png
+          test -s tubetv-home.png
+
+      - name: Upload UI screenshot
+        uses: actions/upload-artifact@v7
+        with:
+          name: TubeTV-ui-screenshot
+          path: tubetv-home.png
+          if-no-files-found: error
+
       - name: Verify ad filtering policy
         run: |
           set -euo pipefail
