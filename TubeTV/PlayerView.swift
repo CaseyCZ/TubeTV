@@ -3660,16 +3660,17 @@ struct NativePlayerView: View {
             LinearGradient(
                 colors: [
                     .clear,
-                    .black.opacity(0.88)
+                    TubeTVTheme.background.opacity(0.72),
+                    TubeTVTheme.page.opacity(0.98)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .frame(height: 320)
+            .frame(height: 390)
             .overlay(alignment: .bottom) {
                 VStack(
                     alignment: .leading,
-                    spacing: 18
+                    spacing: 16
                 ) {
                     if !model.currentVideoTitle
                         .isEmpty {
@@ -3687,7 +3688,7 @@ struct NativePlayerView: View {
                         )
                         .font(.headline)
                         .foregroundStyle(
-                            .secondary
+                            .white.opacity(0.68)
                         )
                         .lineLimit(1)
                     }
@@ -3722,7 +3723,7 @@ struct NativePlayerView: View {
                             : 1
 
                         VStack(
-                            spacing: 10
+                            spacing: 12
                         ) {
                             ProgressView(
                                 value:
@@ -3736,8 +3737,9 @@ struct NativePlayerView: View {
                             .progressViewStyle(
                                 .linear
                             )
+                            .tint(TubeTVTheme.accent)
 
-                            HStack {
+                            HStack(spacing: 20) {
                                 Text(
                                     formatTransportTime(
                                         safeCurrent
@@ -3754,7 +3756,23 @@ struct NativePlayerView: View {
                                         ? "pause.fill"
                                         : "play.fill"
                                 )
-                                .font(.title2)
+                                .font(.title2.bold())
+                                .foregroundStyle(.white)
+                                .frame(
+                                    width: 58,
+                                    height: 42
+                                )
+                                .background(
+                                    TubeTVTheme.panelRaised.opacity(0.92),
+                                    in: Capsule()
+                                )
+                                .overlay {
+                                    Capsule()
+                                        .strokeBorder(
+                                            TubeTVTheme.accent.opacity(0.28),
+                                            lineWidth: 1
+                                        )
+                                }
 
                                 Spacer()
 
@@ -3771,30 +3789,81 @@ struct NativePlayerView: View {
                                 .headline
                                     .monospacedDigit()
                             )
+                            .foregroundStyle(.white)
                         }
                     }
 
-                    Text(
-                        "←/→ 10 s   •   ▲ " +
-                        L10n.text(
-                            "settings",
-                            languageCode:
-                                appLanguage
+                    HStack(spacing: 10) {
+                        Image(
+                            systemName:
+                                "arrow.left.and.right"
                         )
-                    )
-                    .font(.caption)
+                        Text("10 s")
+
+                        Circle()
+                            .fill(
+                                TubeTVTheme.border
+                            )
+                            .frame(
+                                width: 4,
+                                height: 4
+                            )
+
+                        Image(
+                            systemName:
+                                "chevron.up"
+                        )
+                        Text(
+                            L10n.text(
+                                "settings",
+                                languageCode:
+                                    appLanguage
+                            )
+                        )
+                    }
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(
-                        .secondary
+                        .white.opacity(0.78)
+                    )
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(
+                        TubeTVTheme.panelRaised.opacity(0.82),
+                        in: Capsule()
+                    )
+                    .overlay {
+                        Capsule()
+                            .strokeBorder(
+                                TubeTVTheme.border.opacity(0.72),
+                                lineWidth: 1
+                            )
+                    }
+                }
+                .padding(24)
+                .background(
+                    TubeTVTheme.panel.opacity(0.84),
+                    in: RoundedRectangle(
+                        cornerRadius: 24,
+                        style: .continuous
+                    )
+                )
+                .overlay {
+                    RoundedRectangle(
+                        cornerRadius: 24,
+                        style: .continuous
+                    )
+                    .strokeBorder(
+                        TubeTVTheme.border.opacity(0.78),
+                        lineWidth: 1
                     )
                 }
-                .padding(
-                    .horizontal,
-                    70
+                .shadow(
+                    color: .black.opacity(0.28),
+                    radius: 24,
+                    y: 12
                 )
-                .padding(
-                    .bottom,
-                    54
-                )
+                .padding(.horizontal, 60)
+                .padding(.bottom, 42)
             }
         }
         .allowsHitTesting(false)
@@ -3916,7 +3985,32 @@ private struct PlayerSettingsOverlay: View {
             .frame(width: 620)
             .frame(maxHeight: .infinity)
             .focusSection()
-            .background(.ultraThinMaterial)
+            .background {
+                ZStack {
+                    TubeTVTheme.panel.opacity(0.98)
+
+                    LinearGradient(
+                        colors: [
+                            TubeTVTheme.hero.opacity(0.48),
+                            Color.clear
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .center
+                    )
+                }
+                .overlay(alignment: .leading) {
+                    Rectangle()
+                        .fill(
+                            TubeTVTheme.accent.opacity(0.30)
+                        )
+                        .frame(width: 1)
+                }
+            }
+            .shadow(
+                color: .black.opacity(0.36),
+                radius: 28,
+                x: -10
+            )
         }
         .ignoresSafeArea()
         .task {
