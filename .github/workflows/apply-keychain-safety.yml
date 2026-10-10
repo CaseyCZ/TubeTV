@@ -106,70 +106,38 @@ jobs:
               }
           '''
 
-          old_save = '''    private func saveTokenResponse(
-              _ token: TVTokenResponse,
-              refreshToken: String
-          ) {
-              TubeTVKeychain.set(refreshToken, for: refreshTokenKey)
-
-              if let accessToken = token.accessToken {
-                  TubeTVKeychain.set(accessToken, for: accessTokenKey)
-              }
-
-              let expiry = Date()
-                  .addingTimeInterval(TimeInterval(token.expiresIn ?? 3600))
-                  .timeIntervalSince1970
-
-              TubeTVKeychain.set(String(expiry), for: accessTokenExpiryKey)
-          }
-          '''
-
-          new_save = '''    private func saveTokenResponse(
-              _ token: TVTokenResponse,
-              refreshToken: String
-          ) throws {
-              try TubeTVKeychain.set(
-                  refreshToken,
-                  for: refreshTokenKey
-              )
-
-              if let accessToken = token.accessToken {
-                  try TubeTVKeychain.set(
-                      accessToken,
-                      for: accessTokenKey
-                  )
-              }
-
-              let expiry = Date()
-                  .addingTimeInterval(TimeInterval(token.expiresIn ?? 3600))
-                  .timeIntervalSince1970
-
-              try TubeTVKeychain.set(
-                  String(expiry),
-                  for: accessTokenExpiryKey
-              )
-          }
-          '''
-
-          replacements = [
-              (old_keychain, new_keychain),
-              (old_save, new_save),
-              ('''                saveTokenResponse(
-                      token,
-                      refreshToken: refreshToken
-                  )''', '''                try saveTokenResponse(
-                      token,
-                      refreshToken: refreshToken
-                  )'''),
-              ('''        saveTokenResponse(token, refreshToken: refreshToken)
-          return accessToken''', '''        try saveTokenResponse(token, refreshToken: refreshToken)
-          return accessToken'''),
-          ]
-
-          for old, new in replacements:
-              if text.count(old) != 1:
-                  raise SystemExit(f"Expected one match, found {text.count(old)}: {old[:60]!r}")
+          def replace_once(old: str, new: str) -> None:
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"Expected one match, found {count}: {old!r}")
               text = text.replace(old, new, 1)
+
+          replace_once(old_keychain, new_keychain)
+          replace_once(
+              "    private func saveTokenResponse(\n        _ token: TVTokenResponse,\n        refreshToken: String\n    ) {",
+              "    private func saveTokenResponse(\n        _ token: TVTokenResponse,\n        refreshToken: String\n    ) throws {"
+          )
+          replace_once(
+              "        TubeTVKeychain.set(refreshToken, for: refreshTokenKey)",
+              "        try TubeTVKeychain.set(refreshToken, for: refreshTokenKey)"
+          )
+          replace_once(
+              "            TubeTVKeychain.set(accessToken, for: accessTokenKey)",
+              "            try TubeTVKeychain.set(accessToken, for: accessTokenKey)"
+          )
+          replace_once(
+              "        TubeTVKeychain.set(String(expiry), for: accessTokenExpiryKey)",
+              "        try TubeTVKeychain.set(String(expiry), for: accessTokenExpiryKey)"
+          )
+          replace_once(
+              "                saveTokenResponse(\n                    token,\n                    refreshToken: refreshToken\n                )",
+              "                try saveTokenResponse(\n                    token,\n                    refreshToken: refreshToken\n                )"
+          )
+          replace_once(
+              "        saveTokenResponse(token, refreshToken: refreshToken)",
+              "        try saveTokenResponse(token, refreshToken: refreshToken)"
+          )
 
           path.write_text(text, encoding="utf-8")
           PY
