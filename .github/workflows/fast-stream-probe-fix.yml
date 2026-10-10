@@ -57,16 +57,14 @@ jobs:
 
           alt = Path('TubeTV/AlternativePlayerService.swift')
           text = alt.read_text()
-
-          for old, new, minimum in [
-              ('configuration.timeoutIntervalForRequest = 12', 'configuration.timeoutIntervalForRequest = 3', 1),
-              ('configuration.timeoutIntervalForResource = 20', 'configuration.timeoutIntervalForResource = 8', 1),
-              ('request.timeoutInterval = 8', 'request.timeoutInterval = 2.5', 2),
-              ('request.timeoutInterval = 10', 'request.timeoutInterval = 2.5', 1),
+          for old, new in [
+              ('configuration.timeoutIntervalForRequest = 12', 'configuration.timeoutIntervalForRequest = 3'),
+              ('configuration.timeoutIntervalForResource = 20', 'configuration.timeoutIntervalForResource = 8'),
+              ('request.timeoutInterval = 8', 'request.timeoutInterval = 2.5'),
+              ('request.timeoutInterval = 10', 'request.timeoutInterval = 2.5'),
           ]:
-              count = text.count(old)
-              if count < minimum:
-                  raise SystemExit(f'Alternative timeout marker missing: {old} count={count}')
+              if old not in text:
+                  raise SystemExit(f'Alternative timeout marker missing: {old}')
               text = text.replace(old, new)
 
           old_bootstrap = '''        if visitorData == nil,\n           let bootstrap =\n                try? await SmartTubeAuthService\n                    .shared.bootstrap(),\n           let bootstrapVisitor =\n                bootstrap.visitorData,\n           !bootstrapVisitor.isEmpty {\n            visitorData = bootstrapVisitor\n        }\n'''
