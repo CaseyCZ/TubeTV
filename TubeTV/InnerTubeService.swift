@@ -2425,6 +2425,103 @@ actor InnerTubeService {
         return nil
     }
 
+    private static func modernTVChannelName(
+        from renderer: [String: Any]
+    ) -> String? {
+        // Current YouTube TV tiles keep the creator in dedicated tile
+        // metadata rather than legacy byline fields. Read only those
+        // known locations so menu actions such as "Play" can never be
+        // mistaken for a channel name.
+        let subtitlePaths = [
+            [
+                "onLongPressCommand",
+                "showMenuCommand",
+                "subtitle"
+            ],
+            [
+                "metadata",
+                "tileMetadataRenderer",
+                "subtitle"
+            ]
+        ]
+
+        for path in subtitlePaths {
+            if let value = nested(renderer, path: path),
+               let raw = text(from: value) {
+                let candidate =
+                    raw.components(separatedBy: " • ")
+                        .first?
+                        .trimmingCharacters(
+                            in: .whitespacesAndNewlines
+                        )
+                        ?? ""
+
+                if isUsefulChannelName(candidate) {
+                    return candidate
+                }
+            }
+        }
+
+        // TV tileMetadataRenderer lines normally expose the channel in
+        // the first line, with views/date on the following line.
+        if let lines = nested(
+            renderer,
+            path: [
+                "metadata",
+                "tileMetadataRenderer",
+                "lines"
+            ]
+        ) as? [Any],
+           let firstLine = lines.first as? [String: Any],
+           let items = nested(
+            firstLine,
+            path: ["lineRenderer", "items"]
+           ) as? [Any] {
+            for item in items {
+                guard let itemDictionary = item as? [String: Any],
+                      let value = nested(
+                        itemDictionary,
+                        path: ["lineItemRenderer", "text"]
+                      ),
+                      let candidate = text(from: value)?
+                        .trimmingCharacters(
+                            in: .whitespacesAndNewlines
+                        ),
+                      isUsefulChannelName(candidate) else {
+                    continue
+                }
+
+                return candidate
+            }
+        }
+
+        return nil
+    }
+
+    private static func isUsefulChannelName(
+        _ value: String
+    ) -> Bool {
+        let trimmed = value.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+
+        guard !trimmed.isEmpty,
+              trimmed != "•",
+              !looksLikeDuration(trimmed) else {
+            return false
+        }
+
+        let rejected = Set([
+            "play",
+            "save to watch later",
+            "save to playlist",
+            "not interested",
+            "don't recommend channel"
+        ])
+
+        return !rejected.contains(trimmed.lowercased())
+    }
+
     private static func isModernTVVideoRenderer(
         _ renderer: [String: Any]
     ) -> Bool {
@@ -2499,7 +2596,10 @@ actor InnerTubeService {
                 ?? firstBadgeText(in: renderer)
 
             let channel =
-                [rawChannel]
+                [
+                    rawChannel,
+                    modernTVChannelName(from: renderer)
+                ]
                     .compactMap { $0 }
                     .first(where: {
                         !looksLikeDuration($0)

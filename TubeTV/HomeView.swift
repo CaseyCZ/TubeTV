@@ -731,7 +731,7 @@ struct VideoCard: View {
                 if !video.subtitle.isEmpty {
                     Text(video.subtitle)
                         .font(.caption)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color.white.opacity(0.70))
                         .lineLimit(1)
                 }
             }
