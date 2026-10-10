@@ -19,158 +19,17 @@ jobs:
           fetch-depth: 0
 
       - name: Apply parser fix
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
+        run: python3 tools/apply-tv-title-parser-fix.py
 
-          path = Path("TubeTV/InnerTubeService.swift")
-          text = path.read_text()
+      - name: Validate patch
+        run: git diff --check
 
-          start = text.index("    private static func videoTitle(\n")
-          end = text.index("\n    private static func extractVideos", start)
-          replacement = '''    private static func videoTitle(
-              from renderer: [String: Any]
-          ) -> String? {
-              if let direct = firstText(
-                  in: renderer,
-                  keys: ["title", "headline", "primaryText"]
-              ), !direct.isEmpty {
-                  return direct
-              }
-
-              // Keep current TV tile parsing aligned with SmartTube's
-              // MediaServiceCore. YouTube can place the title either in
-              // tile metadata or inside the thumbnail overlay.
-              if let value = nested(
-                  renderer,
-                  path: [
-                      "metadata",
-                      "tileMetadataRenderer",
-                      "title"
-                  ]
-              ), let title = text(from: value), !title.isEmpty {
-                  return title
-              }
-
-              if let overlays = nested(
-                  renderer,
-                  path: [
-                      "header",
-                      "tileHeaderRenderer",
-                      "thumbnailOverlays"
-                  ]
-              ) as? [Any] {
-                  for overlay in overlays {
-                      guard let dictionary = overlay as? [String: Any],
-                            let value = nested(
-                              dictionary,
-                              path: [
-                                  "tileMetadataRenderer",
-                                  "title"
-                              ]
-                            ),
-                            let title = text(from: value),
-                            !title.isEmpty else {
-                          continue
-                      }
-
-                      return title
-                  }
-              }
-
-              if let value = nested(
-                  renderer,
-                  path: [
-                      "header",
-                      "trackTileHeaderRenderer",
-                      "title"
-                  ]
-              ), let title = text(from: value), !title.isEmpty {
-                  return title
-              }
-
-              if let value = nested(
-                  renderer,
-                  path: [
-                      "metadata",
-                      "lockupMetadataViewModel",
-                      "title"
-                  ]
-              ), let title = text(from: value), !title.isEmpty {
-                  return title
-              }
-
-              return nil
-          }
-
-          private static func isModernTVVideoRenderer(
-              _ renderer: [String: Any]
-          ) -> Bool {
-              if let contentType = renderer["contentType"] as? String,
-                 contentType.hasPrefix("TILE_")
-                    || contentType.hasPrefix("LOCKUP_") {
-                  return true
-              }
-
-              return nested(
-                  renderer,
-                  path: ["metadata", "tileMetadataRenderer"]
-              ) != nil
-                  || nested(
-                      renderer,
-                      path: ["metadata", "lockupMetadataViewModel"]
-                  ) != nil
-          }
-'''
-          text = text[:start] + replacement + text[end:]
-
-          old = '''            let channel =
-                [rawChannel]
-                    .compactMap { $0 }
-                    .first(where: {
-                        !looksLikeDuration($0)
-                    })
-                ?? metadata.first(
-                    where: {
-                        !looksLikeDuration($0)
-                    }
-                )
-                ?? "YouTube"
-'''
-          new = '''            let channel =
-                [rawChannel]
-                    .compactMap { $0 }
-                    .first(where: {
-                        !looksLikeDuration($0)
-                    })
-                ?? (
-                    isModernTVVideoRenderer(renderer)
-                    ? nil
-                    : metadata.first(
-                        where: {
-                            !looksLikeDuration($0)
-                        }
-                    )
-                )
-                ?? "YouTube"
-'''
-          if old not in text:
-              raise SystemExit("channel fallback block not found")
-          text = text.replace(old, new, 1)
-
-          path.write_text(text)
-          PY
-
-          git diff --check
-          git diff -- TubeTV/InnerTubeService.swift
-
-      - name: Commit product fix and remove helper
+      - name: Commit product fix and remove helpers
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm .github/workflows/apply-tv-title-parser-fix.yml
+          git rm .github/workflows/apply-tv-title-parser-fix.yml tools/apply-tv-title-parser-fix.py
           git add TubeTV/InnerTubeService.swift
           git commit -m "Parse TV video titles like SmartTube"
           git push origin HEAD:playback-faststart
