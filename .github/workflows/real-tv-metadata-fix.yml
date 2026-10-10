@@ -1,0 +1,188 @@
+name: Apply real Apple TV metadata fix
+
+on:
+  push:
+    branches:
+      - playback-faststart
+    paths:
+      - .github/workflows/real-tv-metadata-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: playback-faststart
+
+      - name: Patch TV channel metadata and card contrast
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          inner_path = Path('TubeTV/InnerTubeService.swift')
+          text = inner_path.read_text()
+
+          marker = '''    private static func isModernTVVideoRenderer(
+              _ renderer: [String: Any]
+          ) -> Bool {
+          '''
+
+          helper = '''    private static func modernTVChannelName(
+              from renderer: [String: Any]
+          ) -> String? {
+              // Current YouTube TV tiles keep the creator in dedicated tile
+              // metadata rather than legacy byline fields. Read only those
+              // known locations so menu actions such as "Play" can never be
+              // mistaken for a channel name.
+              let subtitlePaths = [
+                  [
+                      "onLongPressCommand",
+                      "showMenuCommand",
+                      "subtitle"
+                  ],
+                  [
+                      "metadata",
+                      "tileMetadataRenderer",
+                      "subtitle"
+                  ]
+              ]
+
+              for path in subtitlePaths {
+                  if let value = nested(renderer, path: path),
+                     let raw = text(from: value) {
+                      let candidate =
+                          raw.components(separatedBy: " • ")
+                              .first?
+                              .trimmingCharacters(
+                                  in: .whitespacesAndNewlines
+                              )
+                              ?? ""
+
+                      if isUsefulChannelName(candidate) {
+                          return candidate
+                      }
+                  }
+              }
+
+              // TV tileMetadataRenderer lines normally expose the channel in
+              // the first line, with views/date on the following line.
+              if let lines = nested(
+                  renderer,
+                  path: [
+                      "metadata",
+                      "tileMetadataRenderer",
+                      "lines"
+                  ]
+              ) as? [Any],
+                 let firstLine = lines.first as? [String: Any],
+                 let items = nested(
+                  firstLine,
+                  path: ["lineRenderer", "items"]
+                 ) as? [Any] {
+                  for item in items {
+                      guard let itemDictionary = item as? [String: Any],
+                            let value = nested(
+                              itemDictionary,
+                              path: ["lineItemRenderer", "text"]
+                            ),
+                            let candidate = text(from: value)?
+                              .trimmingCharacters(
+                                  in: .whitespacesAndNewlines
+                              ),
+                            isUsefulChannelName(candidate) else {
+                          continue
+                      }
+
+                      return candidate
+                  }
+              }
+
+              return nil
+          }
+
+          private static func isUsefulChannelName(
+              _ value: String
+          ) -> Bool {
+              let trimmed = value.trimmingCharacters(
+                  in: .whitespacesAndNewlines
+              )
+
+              guard !trimmed.isEmpty,
+                    trimmed != "•",
+                    !looksLikeDuration(trimmed) else {
+                  return false
+              }
+
+              let rejected = Set([
+                  "play",
+                  "save to watch later",
+                  "save to playlist",
+                  "not interested",
+                  "don't recommend channel"
+              ])
+
+              return !rejected.contains(trimmed.lowercased())
+          }
+
+'''
+
+          if marker not in text:
+              raise SystemExit('InnerTube insertion marker not found')
+          if 'private static func modernTVChannelName(' not in text:
+              text = text.replace(marker, helper + marker, 1)
+
+          old = '''            let channel =
+                  [rawChannel]
+                      .compactMap { $0 }
+          '''
+          new = '''            let channel =
+                  [
+                      rawChannel,
+                      modernTVChannelName(from: renderer)
+                  ]
+                      .compactMap { $0 }
+          '''
+          if old not in text:
+              raise SystemExit('Channel candidate block not found')
+          text = text.replace(old, new, 1)
+          inner_path.write_text(text)
+
+          home_path = Path('TubeTV/HomeView.swift')
+          home = home_path.read_text()
+          old_home = '''                if !video.subtitle.isEmpty {
+                      Text(video.subtitle)
+                          .font(.caption)
+                          .foregroundStyle(.tertiary)
+                          .lineLimit(1)
+                  }
+          '''
+          new_home = '''                if !video.subtitle.isEmpty {
+                      Text(video.subtitle)
+                          .font(.caption)
+                          .foregroundStyle(Color.white.opacity(0.70))
+                          .lineLimit(1)
+                  }
+          '''
+          if old_home not in home:
+              raise SystemExit('Video subtitle style block not found')
+          home = home.replace(old_home, new_home, 1)
+          home_path.write_text(home)
+          PY
+
+      - name: Commit patch and remove helper workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Lukáš"
+          git config user.email "kyselalukas@seznam.cz"
+          git rm .github/workflows/real-tv-metadata-fix.yml
+          git add TubeTV/InnerTubeService.swift TubeTV/HomeView.swift
+          git commit -m "Parse TV channel names and improve metadata contrast"
+          git push origin HEAD:playback-faststart
