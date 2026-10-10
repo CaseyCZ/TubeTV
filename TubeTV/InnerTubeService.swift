@@ -2336,6 +2336,35 @@ actor InnerTubeService {
         ) != nil
     }
 
+    private static func videoTitle(
+        from renderer: [String: Any]
+    ) -> String? {
+        firstText(
+            in: renderer,
+            keys: ["title", "headline", "primaryText"]
+        )
+        ?? text(
+            from: nested(
+                renderer,
+                path: [
+                    "metadata",
+                    "tileMetadataRenderer",
+                    "title"
+                ]
+            )
+        )
+        ?? text(
+            from: nested(
+                renderer,
+                path: [
+                    "metadata",
+                    "lockupMetadataViewModel",
+                    "title"
+                ]
+            )
+        )
+    }
+
     private static func extractVideos(from root: Any) -> [VideoItem] {
         var renderers: [[String: Any]] = []
         collectVideoRenderers(from: root, into: &renderers)
@@ -2343,38 +2372,25 @@ actor InnerTubeService {
         var seen = Set<String>()
         var result: [VideoItem] = []
 
-        for renderer in renderers {
-            guard let videoID = videoID(from: renderer),
+        for candidate in renderers {
+            guard let videoID = Self.videoID(from: candidate),
                   videoID.count == 11,
                   seen.insert(videoID).inserted else {
                 continue
             }
 
+            // TV Home can expose the same video through both a sparse wrapper
+            // and a richer lockupViewModel. Prefer the duplicate renderer that
+            // actually carries a title before falling back to generic text.
+            let renderer =
+                renderers.first(where: {
+                    Self.videoID(from: $0) == videoID
+                        && videoTitle(from: $0) != nil
+                })
+                ?? candidate
+
             let title =
-                firstText(
-                    in: renderer,
-                    keys: ["title", "headline", "primaryText"]
-                )
-                ?? text(
-                    from: nested(
-                        renderer,
-                        path: [
-                            "metadata",
-                            "tileMetadataRenderer",
-                            "title"
-                        ]
-                    )
-                )
-                ?? text(
-                    from: nested(
-                        renderer,
-                        path: [
-                            "metadata",
-                            "lockupMetadataViewModel",
-                            "title"
-                        ]
-                    )
-                )
+                videoTitle(from: renderer)
                 ?? "YouTube video"
 
             let metadata = metadataTexts(from: renderer)

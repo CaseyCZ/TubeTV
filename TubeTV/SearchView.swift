@@ -184,19 +184,17 @@ struct SearchView: View {
                         ],
                         spacing: 24
                     ) {
-                        ForEach(
-                            visibleResults.indices,
-                            id: \.self
-                        ) { index in
-                            let item = visibleResults[index]
-
+                        ForEach(visibleResults) { item in
                             searchResultView(item)
                                 .onAppear {
+                                    let nearEndIDs =
+                                        visibleResults
+                                            .suffix(4)
+                                            .map(\.id)
+
                                     guard !query.isEmpty,
-                                          index >= max(
-                                            0,
-                                            results.count - 4
-                                          ) else {
+                                          nearEndIDs
+                                            .contains(item.id) else {
                                         return
                                     }
 

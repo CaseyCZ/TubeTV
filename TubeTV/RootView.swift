@@ -194,7 +194,6 @@ struct RootView: View {
             }
         }
         .preferredColorScheme(.dark)
-        .id(appLanguage)
     }
 
     private var sidebar: some View {

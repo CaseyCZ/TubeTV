@@ -503,12 +503,7 @@ struct VideoRow: View {
                 showsIndicators: false
             ) {
                 LazyHStack(spacing: 24) {
-                    ForEach(
-                        videos.indices,
-                        id: \.self
-                    ) { index in
-                        let video = videos[index]
-
+                    ForEach(videos) { video in
                         NavigationLink(
                             value: video
                         ) {
@@ -516,13 +511,12 @@ struct VideoRow: View {
                         }
                         .buttonStyle(.plain)
                         .onAppear {
-                            let threshold =
-                                max(
-                                    0,
-                                    videos.count - 4
-                                )
+                            let nearEndIDs =
+                                videos
+                                    .suffix(4)
+                                    .map(\.id)
 
-                            if index >= threshold {
+                            if nearEndIDs.contains(video.id) {
                                 onLoadMore?()
                             }
                         }
