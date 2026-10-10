@@ -166,6 +166,47 @@ jobs:
           path: tubetv-home.png
           if-no-files-found: error
 
+      - name: Verify direct HLS playback
+        env:
+          TUBETV_TEST_HLS: https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8
+        run: |
+          set -euo pipefail
+
+          UDID='${{ steps.simulator.outputs.udid }}'
+          xcrun simctl terminate "$UDID" cz.caseycz.tubetv || true
+
+          SIMCTL_CHILD_TUBETV_CI_VIDEO_SMOKE=1 \
+          SIMCTL_CHILD_TUBETV_CI_DIRECT_URL="$TUBETV_TEST_HLS" \
+            xcrun simctl launch "$UDID" cz.caseycz.tubetv \
+            | tee direct-playback-launch.txt
+
+          sleep 2
+          xcrun simctl io "$UDID" screenshot tubetv-player.png
+          test -s tubetv-player.png
+
+          sleep 16
+
+          xcrun simctl spawn "$UDID" log show \
+            --style compact \
+            --last 2m \
+            --predicate 'process == "TubeTV"' \
+            > direct-playback-smoke.log 2>&1
+
+          grep -q 'TUBETV_DIRECT_VIDEO_STARTED' direct-playback-smoke.log
+          grep -q 'TUBETV_VIDEO_PLAYBACK_OK' direct-playback-smoke.log
+          if grep -q 'TUBETV_VIDEO_PLAYBACK_FAILED' direct-playback-smoke.log; then
+            cat direct-playback-smoke.log
+            exit 1
+          fi
+
+      - name: Upload player screenshot
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: TubeTV-player-screenshot
+          path: tubetv-player.png
+          if-no-files-found: warn
+
       - name: Verify ad filtering policy
         run: |
           set -euo pipefail
