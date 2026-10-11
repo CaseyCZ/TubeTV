@@ -1,0 +1,55 @@
+{
+  "youtube_tvos_version": "4.54.01",
+  "reference_package_name": "Tube.tipa",
+  "reference_package_size": 43830825,
+  "reference_package_sha256": "48f65a92c87a36775ed8294a77994f0ad0f2c44a9fbf92bf2f4ca3a2acd3b514",
+  "base_bundle_identifier": "com.google.ios.youtube",
+  "base_executable_sha256": "2a1747008e4e9585bfd6b80fa180263395817415af1681c9090f12ba64f016da",
+  "stable_executable_sha256": "377c21b1620de9248574d008832dff1c7b25ad30ce48047ac3323f66f409b22c",
+  "stable_js_sha256": "40bbab9489c2bc4b9d65d8985d8f14d9df459eb7524a544fc38475c8e4d7bef9",
+  "cave": {
+    "start": "0x1BD0",
+    "js_start": "0x1BD8",
+    "js_capacity": 2040,
+    "native_start": "0x23D0",
+    "native_end": "0x286C"
+  },
+  "patches": [
+    {
+      "offset": "0xEBD848",
+      "old": "08c05239",
+      "new": "0213c597",
+      "name": "HTML userscript hook"
+    },
+    {
+      "offset": "0x1142BE4",
+      "old": "40090034",
+      "new": "1f2003d5",
+      "name": "HDR gate 1"
+    },
+    {
+      "offset": "0x114F840",
+      "old": "a0010034",
+      "new": "1f2003d5",
+      "name": "HDR gate 2"
+    },
+    {
+      "offset": "0x114F870",
+      "old": "b0ffff17",
+      "new": "09000014",
+      "name": "HDR branch"
+    },
+    {
+      "offset": "0x11808AC",
+      "old": "f40301aa",
+      "new": "6207ba97",
+      "name": "VP9 profile hook"
+    },
+    {
+      "offset": "0x1515AE0",
+      "old": "f50302aa",
+      "new": "a2b2ab97",
+      "name": "CSP hook"
+    }
+  ]
+}

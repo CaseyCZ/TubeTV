@@ -1,0 +1,14 @@
+# Proprietary/local application packages
+*.ipa
+*.tipa
+Payload/
+
+# Local patching/build artifacts
+work/
+build/
+DerivedData/
+*.xcarchive
+
+# macOS/editor noise
+.DS_Store
+*.swp
