@@ -2,6 +2,19 @@
 
 TubeTV is an independent Apple TV customization project built around the stable YouTube tvOS playback runtime with a separate TV-focused feature layer.
 
+## Latest stable release
+
+**TubeTV 1.0.0 Stable** is the current release baseline.
+
+- Release notes: [RELEASE_v1.0.0.md](RELEASE_v1.0.0.md)
+- Validated base: YouTube tvOS **4.54.01**
+- Bundle identifier: `cz.caseycz.tubetv`
+- Tested target: Apple TV HD (`AppleTV5,3`)
+- TizenTube integration with AdBlock and user-configurable SponsorBlock
+- Original YouTube/Cobalt appearance retained
+
+The public repository does not redistribute proprietary YouTube application binaries. A compatible user-provided YouTube tvOS 4.54.01 build is required for local patching/testing.
+
 ## Current stable direction
 
 The current stable TubeTV build uses:
