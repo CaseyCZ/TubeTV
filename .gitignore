@@ -1,18 +1,14 @@
-# Xcode
-DerivedData/
+# Proprietary/local application packages
+*.ipa
+*.tipa
+Payload/
+
+# Local patching/build artifacts
+work/
 build/
-*.xcuserstate
-xcuserdata/
-*.xccheckout
-*.moved-aside
+DerivedData/
+*.xcarchive
 
-# SwiftPM
-.build/
-.swiftpm/
-
-# Secrets / signing
-Secrets.xcconfig
-*.p12
-*.mobileprovision
-*.cer
-.env
+# macOS/editor noise
+.DS_Store
+*.swp

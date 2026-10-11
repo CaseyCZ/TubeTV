@@ -1,160 +1,54 @@
 # TubeTV
 
-![tvOS Build](https://github.com/CaseyCZ/TubeTV/actions/workflows/tvos-build.yml/badge.svg?branch=Master)
+TubeTV is an independent Apple TV customization project built around the stable YouTube tvOS playback runtime with a separate TV-focused feature layer.
 
-### A clean YouTube experience made for Apple TV.
+## Current stable direction
 
-TubeTV is a native tvOS app designed for comfortable YouTube watching from the couch.  
-It combines a TV-first interface, Apple TV Remote navigation, high-quality playback, multilingual subtitles and YouTube account features in one simple app.
+The current stable TubeTV build uses:
 
-> **TubeTV is currently in active development.**
+- **YouTube tvOS 4.54.01 runtime/player** for playback, sign-in, codecs, seeking, captions and Apple TV Remote behavior.
+- **TizenTube** for ad blocking and optional enhancements such as SponsorBlock, playback speed controls and other TV-focused settings.
+- **TubeTV identity** with bundle identifier `cz.caseycz.tubetv`.
+- **Apple TV compatibility adjustments** including support for `AppleTV5,3`, `AppleTV6,2` and `AppleTV11,1`.
+- **μTube-inspired Cobalt injection/patching approach** for loading the enhancement layer into the YouTube tvOS runtime.
 
----
+The current stable build keeps the original YouTube/Cobalt visual appearance. Experimental TubeTV Blue UI work is **not** part of the stable release.
 
-## ✨ Highlights
+## Stable behavior
 
-### Native Apple TV experience
-TubeTV is designed specifically for tvOS with a large-screen interface, focus-based navigation and full Apple TV Remote support.
+The stable baseline is intentionally conservative: playback-related code is left as close as possible to the proven YouTube tvOS runtime while TubeTV adds only the required identity, compatibility and TizenTube integration around it.
 
-### Clean playback
-TubeTV is built around direct content playback and does not intentionally create playback items from YouTube ad placements.
+SponsorBlock is **not forced on or off by TubeTV**. It remains configurable from TizenTube settings, together with the other optional TizenTube features.
 
-### High-quality video
-Choose the quality that fits your setup:
+## Supported baseline
 
-- Automatic
-- 1080p
-- 1440p
-- 4K / 2160p
-- 60 fps when available
-- HDR when supported by the video, Apple TV and connected display
+The currently validated base is:
 
-During playback, TubeTV can show the actual resolution, frame rate, dynamic range and codec currently in use.
+- YouTube tvOS: **4.54.01**
+- TubeTV bundle identifier: **`cz.caseycz.tubetv`**
+- Tested target: Apple TV HD (`AppleTV5,3`)
 
-### Subtitles & translation
-TubeTV supports YouTube subtitle tracks directly inside the player.
+Binary patch locations are version-specific. Other YouTube versions must be validated before use.
 
-- Native subtitle tracks
-- Auto-generated subtitles
-- Automatic translation when available
-- Quick subtitle switching while watching
-- Independent app and subtitle languages
+## Repository contents
 
-Czech subtitles can remain preferred even when the whole TubeTV interface is set to English.
+`Master` documents and tracks the current stable architecture only. The earlier standalone SwiftUI/native TubeTV client remains available in Git history and older branches but is no longer the primary implementation.
 
-### YouTube account
-Sign in using the familiar TV device-code flow.
+This repository does **not** include or redistribute proprietary YouTube application binaries. A compatible user-provided YouTube tvOS build is required for local patching/testing.
 
-After signing in, TubeTV can provide:
+See [PATCHING.md](PATCHING.md) for the stable patching model and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for upstream credits.
 
-- Personalized Home
-- Subscriptions
-- YouTube History
-- Playlists
-- Multiple YouTube / Brand Account profiles
-- Watch progress synchronization
+## Third-party projects
 
-Account tokens are stored securely in the Apple Keychain.
+TubeTV uses or is informed by open-source work maintained by other developers:
 
-### Search, channels & playlists
-Browse YouTube without leaving the TV interface.
+- **TizenTube** — https://github.com/reisxd/TizenTube — GPL-3.0-only
+- **μTube** — https://github.com/Exaphis/mutube — reference for the Apple TV / Cobalt patching approach
 
-- Search videos
-- Paste a YouTube URL or video ID
-- Open channels
-- Browse channel videos
-- Open playlists
-- View thumbnails and video metadata
-
----
-
-## 🎬 Player
-
-The TubeTV player keeps the most useful controls available while the video is playing.
-
-You can change:
-
-- Video quality
-- Subtitle track
-- Subtitle translation
-- Playback speed from 0.5× to 2×
-- Active YouTube profile through app settings
-
-Changing quality keeps your current playback position whenever possible.
-
----
-
-## 🌍 Languages
-
-**English is the default TubeTV language.**
-
-Current interface languages:
-
-- English
-- Čeština
-- Deutsch
-- Polski
-- Slovenčina
-
-The interface language and preferred subtitle language are separate settings, so every user can combine them however they want.
-
-More languages can be added over time.
-
----
-
-## 📺 Designed for
-
-TubeTV is focused on:
-
-- Apple TV
-- tvOS
-- Large-screen viewing
-- Apple TV Remote navigation
-
-Playback capabilities depend on the Apple TV model, tvOS version, connected display and formats available for each YouTube video.
-
----
-
-## 🚧 Development status
-
-TubeTV is still under active development and is being tested feature by feature.
-
-The current focus is:
-
-- Stable playback on real Apple TV hardware
-- Reliable account sign-in and sync
-- 1080p / 1440p / 4K playback
-- 60 fps and HDR compatibility
-- Subtitle reliability
-- Ad-free playback path stability
-- UI polish and TV usability
-
-The badge at the top of this page shows the current automated tvOS build status.
-
----
-
-## 🧪 Development build
-
-TubeTV is not yet distributed as a finished public release.
-
-Developers can open:
-
-`TubeTV.xcodeproj`
-
-and build the tvOS target using Xcode.
-
----
-
-## ❤️ Inspired by the TV experience
-
-TubeTV takes inspiration from the usability and feature set of SmartTube while using its own native Swift / SwiftUI implementation for Apple TV.
-
-Third-party attribution and licensing information is available in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-
----
+These projects are credited as upstream work and are not presented as TubeTV's own code.
 
 ## Disclaimer
 
-TubeTV is an independent project and is not affiliated with, endorsed by, or sponsored by YouTube, Google, Apple or SmartTube.
+TubeTV is an independent project and is not affiliated with, endorsed by, or sponsored by YouTube, Google, Apple, TizenTube or μTube.
 
-YouTube availability, account features and playback formats may change over time because they depend on external services.
+YouTube is a trademark of Google LLC. Users are responsible for obtaining and using any required application files in accordance with applicable licenses, terms and laws.

@@ -1,36 +1,35 @@
 # Third-party notices
 
-TubeTV is an independent tvOS project.
+TubeTV is an independent project. The current stable architecture relies on or is informed by the following third-party software and proprietary runtime components.
 
-## SmartTube
+## TizenTube
 
-Parts of TubeTV's YouTube TV / InnerTube architecture and behavior are informed by:
+Project: https://github.com/reisxd/TizenTube
 
-- SmartTube — https://github.com/yuliskov/SmartTube
-- MediaServiceCore — https://github.com/yuliskov/MediaServiceCore
+License: GPL-3.0-only
 
-SmartTube is distributed under the MIT License.
+TizenTube provides the TV-focused enhancement layer used by the current TubeTV direction, including ad blocking and optional features such as SponsorBlock and playback-related settings.
 
-Copyright (c) 2020-present yuliskov
+TubeTV does not claim TizenTube as its own work. Any TizenTube-derived code distributed by TubeTV must remain compliant with the applicable GPL terms.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+## μTube
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+Project: https://github.com/Exaphis/mutube
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+μTube is credited as an important reference for the Apple TV / Cobalt injection and patching approach used to integrate a userscript layer with the YouTube tvOS runtime.
 
-TubeTV does not use SmartTube's Android UI or ExoPlayer implementation. The
-tvOS UI, AVFoundation player integration, and Swift services are implemented
-for TubeTV.
+TubeTV does not claim μTube's work as its own. Before redistributing code copied from μTube, its current licensing terms must be reviewed and followed.
+
+## YouTube / Google
+
+The YouTube tvOS application, runtime, media services, trademarks and related proprietary components belong to Google and their respective rights holders.
+
+TubeTV does not include or redistribute the proprietary YouTube IPA in this source repository. Users must provide any compatible application binary themselves and are responsible for using it in accordance with applicable licenses, terms and laws.
+
+## Apple
+
+Apple, Apple TV and tvOS are trademarks of Apple Inc. TubeTV is not affiliated with or endorsed by Apple.
+
+## Historical native client work
+
+Earlier TubeTV history contains a standalone SwiftUI/native client and experiments informed by other open-source TV clients, including SmartTube. That implementation is retained in Git history for reference but is not the current stable architecture.
